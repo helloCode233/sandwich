@@ -84,34 +84,34 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FFMPEG-01 | — | Pending |
-| FFMPEG-02 | — | Pending |
-| FFMPEG-03 | — | Pending |
-| SEED-01 | — | Pending |
-| SEED-02 | — | Pending |
-| SEED-03 | — | Pending |
-| SEED-04 | — | Pending |
-| SEED-05 | — | Pending |
-| SEED-06 | — | Pending |
-| IMPORT-01 | — | Pending |
-| IMPORT-02 | — | Pending |
-| QUEUE-01 | — | Pending |
-| QUEUE-02 | — | Pending |
-| BATCH-01 | — | Pending |
-| BATCH-02 | — | Pending |
-| BATCH-03 | — | Pending |
-| BATCH-04 | — | Pending |
-| BATCH-05 | — | Pending |
-| OUTPUT-01 | — | Pending |
-| OUTPUT-02 | — | Pending |
-| UI-01 | — | Pending |
-| UI-02 | — | Pending |
+| FFMPEG-01 | Phase 1 | Pending |
+| FFMPEG-02 | Phase 1 | Pending |
+| FFMPEG-03 | Phase 1 | Pending |
+| SEED-01 | Phase 2 | Pending |
+| SEED-02 | Phase 2 | Pending |
+| SEED-03 | Phase 2 | Pending |
+| SEED-04 | Phase 2 | Pending |
+| SEED-05 | Phase 2 | Pending |
+| SEED-06 | Phase 2 | Pending |
+| IMPORT-01 | Phase 2 | Pending |
+| IMPORT-02 | Phase 2 | Pending |
+| QUEUE-01 | Phase 2 | Pending |
+| QUEUE-02 | Phase 2 | Pending |
+| BATCH-01 | Phase 2 | Pending |
+| BATCH-02 | Phase 4 | Pending |
+| BATCH-03 | Phase 2 | Pending |
+| BATCH-04 | Phase 2 | Pending |
+| BATCH-05 | Phase 4 | Pending |
+| OUTPUT-01 | Phase 2 | Pending |
+| OUTPUT-02 | Phase 2 | Pending |
+| UI-01 | Phase 3 | Pending |
+| UI-02 | Phase 3 | Pending |
 
 **Coverage:**
 - v1 requirements: 22 total
-- Mapped to phases: 0
-- Unmapped: 22 ⚠️
+- Mapped to phases: 22
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-05-12*
-*Last updated: 2026-05-12 after initial definition*
+*Last updated: 2026-05-12 after roadmap creation*

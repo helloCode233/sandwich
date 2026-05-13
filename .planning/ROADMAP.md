@@ -71,7 +71,7 @@ Plans:
 
 Plans:
 **Wave 1**
-- [ ] 03-01-PLAN.md — TypeScript type definitions (Seed, VideoEntry, BatchProgress) + i18n key extensions for both locales
+- [x] 03-01-PLAN.md — TypeScript type definitions (Seed, VideoEntry, BatchProgress) + i18n key extensions for both locales
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 03-02-PLAN.md — Pinia Composition API stores (useSeedStore, useQueueStore, useBatchStore)
@@ -108,5 +108,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | ----------------------- | -------------- | ----------- | --------- |
 | 1. Foundation           | 4/4            | Complete    | 2026-05-13 |
 | 2. Rust Backend         | 0/4            | Planned     | -         |
-| 3. Vue Frontend         | 0/7            | Planned     | -         |
+| 3. Vue Frontend         | 1/7 | In Progress|  |
 | 4. Integration & Polish | 0/TBD          | Not started | -         |

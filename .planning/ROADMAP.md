@@ -74,7 +74,7 @@ Plans:
 - [x] 03-01-PLAN.md — TypeScript type definitions (Seed, VideoEntry, BatchProgress) + i18n key extensions for both locales
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 03-02-PLAN.md — Pinia Composition API stores (useSeedStore, useQueueStore, useBatchStore)
+- [x] 03-02-PLAN.md — Pinia Composition API stores (useSeedStore, useQueueStore, useBatchStore)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 03-03-PLAN.md — Composables wrapping Tauri IPC (useSeed, useQueue, useBatch) with event subscriptions
@@ -108,5 +108,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | ----------------------- | -------------- | ----------- | --------- |
 | 1. Foundation           | 4/4            | Complete    | 2026-05-13 |
 | 2. Rust Backend         | 0/4            | Planned     | -         |
-| 3. Vue Frontend         | 1/7 | In Progress|  |
+| 3. Vue Frontend         | 2/7 | In Progress|  |
 | 4. Integration & Polish | 0/TBD          | Not started | -         |

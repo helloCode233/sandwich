@@ -44,7 +44,13 @@ Plans:
 3. User can manage the video queue through commands (remove individual, clear all) and view full metadata for each entry
 4. User can initiate batch processing through a command: select a seed, set an output directory, and process all queued videos -- output files appear with the `{original}_{seed_alias}.{ext}` naming convention in the specified directory
 5. During batch processing, single-file failures are isolated (remaining files continue), and processing can be canceled via a command with graceful FFmpeg process termination
-   **Plans**: TBD
+   **Plans**: 4 plans
+
+Plans:
+- [ ] 02-01-PLAN.md — Foundation: model types (Seed, VideoEntry, BatchConfig), AppState, module scaffolding, Cargo dependencies
+- [ ] 02-02-PLAN.md — FFmpeg utilities: ffprobe metadata extraction, filter chain builders for all 7 operation types, executor with progress streaming and cancel support
+- [ ] 02-03-PLAN.md — Seed generation and CRUD commands + video queue management commands
+- [ ] 02-04-PLAN.md — Video import with ffprobe validation and disk space check + batch processing with global static cancel flag and failure isolation + final lib.rs command wiring and state initialization
 
 ### Phase 3: Vue Frontend
 
@@ -79,7 +85,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 
 | Phase                   | Plans Complete | Status      | Completed |
 | ----------------------- | -------------- | ----------- | --------- |
-| 1. Foundation           | 4/4 | Complete    | 2026-05-13 |
-| 2. Rust Backend         | 0/TBD          | Not started | -         |
+| 1. Foundation           | 4/4            | Complete    | 2026-05-13 |
+| 2. Rust Backend         | 0/4            | Planned     | -         |
 | 3. Vue Frontend         | 0/TBD          | Not started | -         |
 | 4. Integration & Polish | 0/TBD          | Not started | -         |

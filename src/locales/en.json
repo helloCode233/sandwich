@@ -1,0 +1,30 @@
+{
+  "common": {
+    "retry": "Retry",
+    "back": "Back",
+    "tagline": "One-Click Batch Video Fingerprint Modification",
+    "ready": "Ready",
+    "awaitingFutureFeatures": "Awaiting future features..."
+  },
+  "ffmpeg": {
+    "detecting": "Detecting FFmpeg...",
+    "found": "FFmpeg Found",
+    "notFound": "FFmpeg Not Found",
+    "outdated": "FFmpeg version too old ({version}), requires ≥ 4.0",
+    "autoTransit": "Redirecting...",
+    "download": "Download FFmpeg",
+    "errorDetecting": "Error detecting FFmpeg"
+  },
+  "download": {
+    "selectDir": "Choose FFmpeg Storage Directory",
+    "chooseDir": "Choose Directory",
+    "progress": "Download Progress",
+    "downloading": "Downloading...",
+    "verifying": "Verifying...",
+    "cancel": "Cancel Download",
+    "complete": "Download Complete",
+    "retry": "Retry ({count}/{max})",
+    "errorDefault": "Download failed",
+    "manualDownload": "Automatic download failed. Please download FFmpeg manually:\nhttps://ffmpeg.org/download.html\n\nExtract ffmpeg and ffprobe to:\n{dir}"
+  }
+}

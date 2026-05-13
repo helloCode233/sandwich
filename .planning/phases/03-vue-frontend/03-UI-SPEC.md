@@ -1,7 +1,7 @@
 ---
 phase: 03
 phase_name: "Vue Frontend"
-status: draft
+status: approved
 design_system: "Naive UI 2.44.1"
 tool: "naive-ui"
 created: "2026-05-13"
@@ -28,13 +28,11 @@ created: "2026-05-13"
 | Token | Value | Usage |
 |-------|-------|-------|
 | xs | 4 | Inline icon gap, tag padding inner |
-| sm | 8 | Compact list item gap, badge offset |
-| md | 12 | Card internal padding (default NSpace), form label gap |
-| lg | 16 | Panel section gap, modal body padding |
-| xl | 20 | Card-to-card gap in list |
-| 2xl | 24 | Panel edge padding, section separator margin |
-| 3xl | 32 | Major section division, modal title-to-body |
-| 4xl | 48 | Page-level section gap |
+| sm | 8 | Compact element gap, badge offset, form label gap |
+| md | 16 | Card internal padding, modal body padding |
+| lg | 24 | Card-to-card gap in list, panel section gap |
+| xl | 32 | Major section division, modal title-to-body |
+| 2xl | 48 | Page-level section gap |
 
 ### Touch Targets
 
@@ -125,7 +123,7 @@ All icons from lucide-vue-next, wrapped in Naive UI `NIcon`. Concrete icon assig
 Icon sizing:
 - Inline (within buttons, tags): 16px
 - Standalone (empty state illustrations): 48px
-- Card action buttons (hover): 18px
+- Card action buttons (hover): 16px
 
 ## Component Inventory
 
@@ -183,6 +181,13 @@ src/
 | `NScrollbar` | Queue list scrolling |
 | `useMessage()` | Lightweight success/error toasts |
 | `useNotification()` | Persistent notifications (low disk space warning) |
+
+### Focal Point
+
+The primary visual anchor of the main screen depends on state:
+- **No seeds present**: SeedPanel empty state CTA ("生成第一个种子") is the focal point — centered in left panel, primary accent button
+- **Seeds present, no videos**: DropZone in right panel is the focal point — largest interactive region with animated border on dragover
+- **Both present, idle**: The "开始处理" / "Start Processing" CTA button in BatchControls is the focal point — largest primary button, full-width, at the natural end of the user's left-to-right scan path
 
 ## Layout Contract
 
@@ -353,7 +358,7 @@ When batch is active, BatchControls transforms:
 | Queue empty state button | 添加视频 | Add Videos |
 | Batch start button | 开始处理 | Start Processing |
 | Batch cancel button | 取消处理 | Cancel Processing |
-| Output dir change button | 更改 | Change |
+| Output dir change button | 更改目录 | Change Directory |
 
 ### Empty States
 
@@ -436,6 +441,19 @@ Composables subscribe to Rust-emitted events using Tauri `listen()`. Events this
 | `batch-complete` | useBatch | useMessage() success + reset batch state |
 | `batch-cancelled` | useBatch | useMessage() info + reset batch state |
 | `low-disk-space` | useQueue | useNotification() warning |
+
+### Icon-Only Button Labels
+
+All icon-only action buttons MUST have a text label via Naive UI `NTooltip` using the corresponding i18n key:
+
+| Location | Buttons | Tooltip i18n Key |
+|----------|---------|-----------------|
+| SeedCard hover actions | Rename (Pencil) | `seed.rename` |
+| SeedCard hover actions | Copy (Copy) | `seed.copy` |
+| SeedCard hover actions | Delete (Trash2) | `seed.delete` |
+| VideoListItem remove | Remove (Trash2) | `queue.remove` |
+
+`NTooltip` placement: `trigger="hover"` with `placement="top"`. Tooltip text shows on 500ms hover delay.
 
 ### Seed Selection
 
@@ -580,7 +598,7 @@ batch:
   selectSeed: "选择种子" / "Select Seed"
   concurrency: "并发数" / "Concurrency"
   outputDir: "输出目录" / "Output Directory"
-  changeDir: "更改" / "Change"
+  changeDir: "更改目录" / "Change Dir"
   start: "开始处理" / "Start Processing"
   cancel: "取消处理" / "Cancel Processing"
   cancelConfirm: "确定取消批处理？已完成处理的文件将保留。" / "Cancel batch processing? Completed files will be preserved."

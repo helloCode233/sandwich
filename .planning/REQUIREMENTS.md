@@ -104,8 +104,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | BATCH-05    | Phase 4 | Pending |
 | OUTPUT-01   | Phase 2 | Pending |
 | OUTPUT-02   | Phase 2 | Pending |
-| UI-01       | Phase 3 | Pending |
-| UI-02       | Phase 3 | Pending |
+| UI-01       | Phase 3 | Implemented |
+| UI-02       | Phase 3 | Implemented |
 
 **Coverage:**
 

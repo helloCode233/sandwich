@@ -1,4 +1,7 @@
 mod commands;
+mod ffmpeg;
+mod models;
+mod state;
 
 use commands::download::{cancel_download, start_download};
 use commands::ffmpeg::{

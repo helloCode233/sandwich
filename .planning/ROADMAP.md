@@ -67,7 +67,23 @@ Plans:
 1. User sees a dual-panel layout: left panel for seed management (list, generate, rename, delete, duplicate), right panel for video queue (drag-drop import zone, queue list, per-video actions)
 2. The entire application renders in a consistent Naive UI dark theme across all components, dialogs, and empty states
 3. User can perform the complete static workflow through the UI: generate seeds, import videos via drag-and-drop and file picker, manage the queue, select a seed and output directory, and initiate processing
-   **Plans**: TBD
+   **Plans**: 7 plans
+
+Plans:
+**Wave 1**
+- [ ] 03-01-PLAN.md — TypeScript type definitions (Seed, VideoEntry, BatchProgress) + i18n key extensions for both locales
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 03-02-PLAN.md — Pinia Composition API stores (useSeedStore, useQueueStore, useBatchStore)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 03-03-PLAN.md — Composables wrapping Tauri IPC (useSeed, useQueue, useBatch) with event subscriptions
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 03-04-PLAN.md — App.vue provider wrappers + MainLayout.vue dual-panel resizable layout
+- [ ] 03-05-PLAN.md — Seed components (SeedCard.vue, SeedList.vue) with hover actions and empty state
+- [ ] 03-06-PLAN.md — Queue components (ImportZone.vue drag-drop, QueueList.vue with metadata and clear confirmation)
+- [ ] 03-07-PLAN.md — Batch components (BatchControls.vue with seed/concurrency/output dir, BatchBanner.vue progress)
    **UI hint**: yes
 
 ### Phase 4: Integration & Polish
@@ -92,5 +108,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | ----------------------- | -------------- | ----------- | --------- |
 | 1. Foundation           | 4/4            | Complete    | 2026-05-13 |
 | 2. Rust Backend         | 0/4            | Planned     | -         |
-| 3. Vue Frontend         | 0/TBD          | Not started | -         |
+| 3. Vue Frontend         | 0/7            | Planned     | -         |
 | 4. Integration & Polish | 0/TBD          | Not started | -         |

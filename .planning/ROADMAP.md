@@ -47,9 +47,14 @@ Plans:
    **Plans**: 4 plans
 
 Plans:
+**Wave 1**
 - [ ] 02-01-PLAN.md — Foundation: model types (Seed, VideoEntry, BatchConfig), AppState, module scaffolding, Cargo dependencies
+
+**Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 02-02-PLAN.md — FFmpeg utilities: ffprobe metadata extraction, filter chain builders for all 7 operation types, executor with progress streaming and cancel support
 - [ ] 02-03-PLAN.md — Seed generation and CRUD commands + video queue management commands
+
+**Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 02-04-PLAN.md — Video import with ffprobe validation and disk space check + batch processing with global static cancel flag and failure isolation + final lib.rs command wiring and state initialization
 
 ### Phase 3: Vue Frontend

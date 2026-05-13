@@ -1,0 +1,48 @@
+{
+  "name": "sandwich",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc -b && vite build",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "vue-tsc -b",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepare": "husky"
+  },
+  "dependencies": {
+    "vue": "3.5.34",
+    "@tauri-apps/api": "2.11.0",
+    "naive-ui": "2.44.1",
+    "pinia": "3.0.4",
+    "vue-i18n": "11.4.2",
+    "@tauri-apps/plugin-store": "2.4.3",
+    "@tauri-apps/plugin-shell": "2.3.5",
+    "@tauri-apps/plugin-dialog": "2.7.1",
+    "@tauri-apps/plugin-fs": "2.5.1"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.11.1",
+    "typescript": "6.0.3",
+    "vite": "8.0.12",
+    "@vitejs/plugin-vue": "6.0.6",
+    "unocss": "66.6.8",
+    "@unocss/vite": "66.6.8",
+    "eslint": "9.39.4",
+    "typescript-eslint": "8.59.3",
+    "eslint-plugin-vue": "10.9.1",
+    "vue-eslint-parser": "10.4.0",
+    "@eslint/js": "9.39.4",
+    "prettier": "3.8.3",
+    "vitest": "4.1.6",
+    "@vue/test-utils": "2.4.10",
+    "vue-tsc": "3.2.8",
+    "husky": "9.1.7",
+    "lint-staged": "17.0.4"
+  }
+}

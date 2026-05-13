@@ -766,22 +766,22 @@ async function confirmClearQueue() {
 | A2 | `open()` from `@tauri-apps/plugin-dialog` returns `string | string[] | null` for multiple:true. TypeScript types confirm this but actual runtime behavior needs verification. | File Dialog Usage | If return type differs, import loop may fail. LOW risk -- plugin-dialog v2.7.1 is well-tested. |
 | A3 | The output directory preference stored in `sandwich-config.json` under key `output_dir` is readable from the frontend via `@tauri-apps/plugin-store` `store.get('output_dir')`. Rust uses the same store for persistence. | Batch Controls | Output dir display shows wrong value; need to fetch via Rust command instead. LOW risk -- StoreExt and plugin-store share the same JSON files. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **HTML5 drag path reliability on macOS**
    - What we know: Tauri v2 docs reference `onDragDropEvent` from `@tauri-apps/api/window` as the official drag-drop API. HTML5 drag-and-drop with `file.path` works on some platforms but may produce `file://` URLs on macOS.
    - What's unclear: Does `(file as any).path` work consistently across macOS, Windows, and Linux in Tauri v2 webview?
-   - Recommendation: Implement HTML5 drag-and-drop first (simpler, matches D-03 spec). If macOS path issues arise, provide a fallback using Tauri's `onDragDropEvent` API, or simply document that the "Add File" button is the primary macOS import path.
+   - RESOLVED: Implement HTML5 drag-and-drop first (simpler, matches D-03 spec). If macOS path issues arise, provide a fallback using Tauri's `onDragDropEvent` API, or simply document that the "Add File" button is the primary macOS import path.
 
 2. **Tauri plugin-store concurrency key update from frontend**
    - What we know: D-11 specifies concurrency preference is persisted via tauri-plugin-store. Rust reads from `sandwich-config.json` key `concurrency` in `get_concurrency_preference()`.
    - What's unclear: Should the frontend write the concurrency value directly to the store (`store.set('concurrency', n)`) or call a Rust command to persist it?
-   - Recommendation: Have the frontend write directly to the store using `@tauri-apps/plugin-store` (this is how Phase 1 stores FFmpeg path). The Rust side already reads from the same store key. This avoids creating a dedicated Rust command for a simple preference write.
+   - RESOLVED: Frontend write directly to the store using `@tauri-apps/plugin-store` (this is how Phase 1 stores FFmpeg path). The Rust side already reads from the same store key. This avoids creating a dedicated Rust command for a simple preference write.
 
 3. **Vitest configuration for component tests**
    - What we know: `vitest` v4.1.6 is in devDependencies but no `vitest.config.ts` exists. Phase 1 D-37 mandated test infrastructure setup but test files are absent.
    - What's unclear: Was testing infrastructure deferred, or should Phase 3 create the Vitest config?
-   - Recommendation: Create a minimal `vitest.config.ts` in Phase 3 (happy-dom environment, `@` path alias, `.vue` file support via `@vitejs/plugin-vue`). Write basic smoke tests for the three Pinia stores. Component tests with `@vue/test-utils` can be deferred if time-constrained.
+   - RESOLVED: Create a minimal `vitest.config.ts` in Phase 3 (happy-dom environment, `@` path alias, `.vue` file support via `@vitejs/plugin-vue`). Write basic smoke tests for the three Pinia stores. Component tests with `@vue/test-utils` can be deferred if time-constrained.
 
 ## Environment Availability
 

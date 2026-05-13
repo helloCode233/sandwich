@@ -20,6 +20,7 @@ pub struct FfmpegInfo {
 /// Persisted FFmpeg configuration stored in tauri-plugin-store.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
 pub struct FfmpegConfig {
     pub ffmpeg_path: String,
     pub version: String,
@@ -86,7 +87,7 @@ pub async fn detect_ffmpeg_internal() -> FfmpegInfo {
 fn extract_major_version(version: &str) -> u32 {
     version
         .split_whitespace()
-        .find(|s| s.chars().next().map_or(false, |c| c.is_ascii_digit()))
+        .find(|s| s.chars().next().is_some_and(|c| c.is_ascii_digit()))
         .and_then(|s| s.split('.').next())
         .and_then(|s| s.parse().ok())
         .unwrap_or(0)
@@ -99,26 +100,25 @@ fn extract_major_version(version: &str) -> u32 {
 #[tauri::command]
 pub async fn detect_ffmpeg(app: AppHandle) -> Result<FfmpegInfo, String> {
     // Check store for previously downloaded FFmpeg path
-    if let Ok(store) = app.store("ffmpeg-config.json") {
-        if let Some(cached_path) = store.get("ffmpeg_path") {
-            if let Some(path_str) = cached_path.as_str() {
-                let cached_path = PathBuf::from(path_str);
-                if cached_path.join("ffmpeg").exists() || cached_path.join("ffmpeg.exe").exists() {
-                    match ffmpeg_version_with_path(path_str) {
-                        Ok(version_str) => {
-                            let major = extract_major_version(&version_str);
-                            return Ok(FfmpegInfo {
-                                found: true,
-                                path: Some(path_str.to_string()),
-                                version: Some(version_str),
-                                outdated: major < 4,
-                                needs_download: major < 4,
-                            });
-                        }
-                        Err(_) => {
-                            // Cached binary is broken, fall through to PATH check
-                        }
-                    }
+    if let Ok(store) = app.store("ffmpeg-config.json")
+        && let Some(cached_path) = store.get("ffmpeg_path")
+        && let Some(path_str) = cached_path.as_str()
+    {
+        let cached_path = PathBuf::from(path_str);
+        if cached_path.join("ffmpeg").exists() || cached_path.join("ffmpeg.exe").exists() {
+            match ffmpeg_version_with_path(path_str) {
+                Ok(version_str) => {
+                    let major = extract_major_version(&version_str);
+                    return Ok(FfmpegInfo {
+                        found: true,
+                        path: Some(path_str.to_string()),
+                        version: Some(version_str),
+                        outdated: major < 4,
+                        needs_download: major < 4,
+                    });
+                }
+                Err(_) => {
+                    // Cached binary is broken, fall through to PATH check
                 }
             }
         }
@@ -132,37 +132,36 @@ pub async fn detect_ffmpeg(app: AppHandle) -> Result<FfmpegInfo, String> {
 /// Used by frontend to check if FFmpeg is configured without re-running detection.
 #[tauri::command]
 pub async fn get_ffmpeg_status(app: AppHandle) -> Result<FfmpegInfo, String> {
-    if let Ok(store) = app.store("ffmpeg-config.json") {
-        if let Some(cached_path) = store.get("ffmpeg_path") {
-            if let Some(path_str) = cached_path.as_str() {
-                let cached_path = PathBuf::from(path_str);
-                let ffmpeg_bin = if cfg!(target_os = "windows") {
-                    cached_path.join("ffmpeg.exe")
-                } else {
-                    cached_path.join("ffmpeg")
-                };
-                if ffmpeg_bin.exists() {
-                    match ffmpeg_version_with_path(path_str) {
-                        Ok(version_str) => {
-                            let major = extract_major_version(&version_str);
-                            return Ok(FfmpegInfo {
-                                found: true,
-                                path: Some(path_str.to_string()),
-                                version: Some(version_str),
-                                outdated: major < 4,
-                                needs_download: major < 4,
-                            });
-                        }
-                        Err(_e) => {
-                            return Ok(FfmpegInfo {
-                                found: false,
-                                path: Some(path_str.to_string()),
-                                version: None,
-                                outdated: false,
-                                needs_download: true,
-                            });
-                        }
-                    }
+    if let Ok(store) = app.store("ffmpeg-config.json")
+        && let Some(cached_path) = store.get("ffmpeg_path")
+        && let Some(path_str) = cached_path.as_str()
+    {
+        let cached_path = PathBuf::from(path_str);
+        let ffmpeg_bin = if cfg!(target_os = "windows") {
+            cached_path.join("ffmpeg.exe")
+        } else {
+            cached_path.join("ffmpeg")
+        };
+        if ffmpeg_bin.exists() {
+            match ffmpeg_version_with_path(path_str) {
+                Ok(version_str) => {
+                    let major = extract_major_version(&version_str);
+                    return Ok(FfmpegInfo {
+                        found: true,
+                        path: Some(path_str.to_string()),
+                        version: Some(version_str),
+                        outdated: major < 4,
+                        needs_download: major < 4,
+                    });
+                }
+                Err(_e) => {
+                    return Ok(FfmpegInfo {
+                        found: false,
+                        path: Some(path_str.to_string()),
+                        version: None,
+                        outdated: false,
+                        needs_download: true,
+                    });
                 }
             }
         }
@@ -184,24 +183,12 @@ pub async fn verify_ffmpeg(app: AppHandle, path: String) -> Result<FfmpegInfo, S
     let now = chrono::Utc::now().to_rfc3339();
 
     // Persist to store
-    let store = app
-        .store("ffmpeg-config.json")
-        .map_err(|e| format!("Failed to open store: {}", e))?;
-    store.set(
-        "ffmpeg_path",
-        serde_json::Value::String(path.clone()),
-    );
-    store.set(
-        "version",
-        serde_json::Value::String(version_str.clone()),
-    );
-    store.set(
-        "download_time",
-        serde_json::Value::String(now),
-    );
-    store
-        .save()
-        .map_err(|e| format!("Failed to save store: {}", e))?;
+    let store =
+        app.store("ffmpeg-config.json").map_err(|e| format!("Failed to open store: {}", e))?;
+    store.set("ffmpeg_path", serde_json::Value::String(path.clone()));
+    store.set("version", serde_json::Value::String(version_str.clone()));
+    store.set("download_time", serde_json::Value::String(now));
+    store.save().map_err(|e| format!("Failed to save store: {}", e))?;
 
     // Emit event that FFmpeg is ready
     let info = FfmpegInfo {
@@ -262,16 +249,11 @@ pub async fn check_latest_version() -> Result<Option<FfmpegUpdateInfo>, String> 
         html_url: String,
     }
 
-    let release: GitHubRelease = response
-        .json()
-        .await
-        .map_err(|e| format!("Failed to parse GitHub response: {}", e))?;
+    let release: GitHubRelease =
+        response.json().await.map_err(|e| format!("Failed to parse GitHub response: {}", e))?;
 
     // Extract version from tag (e.g., "ffmpeg-7.1.1" -> "7.1.1")
-    let latest_version_str = release
-        .tag_name
-        .trim_start_matches("ffmpeg-")
-        .trim_start_matches("v");
+    let latest_version_str = release.tag_name.trim_start_matches("ffmpeg-").trim_start_matches("v");
     let latest_ver = extract_major_version(latest_version_str);
 
     if latest_ver > current_ver {

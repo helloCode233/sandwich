@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 /// Maps to the `DownloadProgress` TypeScript interface in src/types/ffmpeg.ts.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
 pub struct DownloadProgress {
     pub percent: f64,
     pub downloaded_bytes: u64,
@@ -14,6 +15,7 @@ pub struct DownloadProgress {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
 pub enum DownloadStage {
     Connecting,
     Downloading,
@@ -25,10 +27,7 @@ pub enum DownloadStage {
 
 /// Stub — full implementation in Task 2.
 #[tauri::command]
-pub async fn start_download(
-    _app: tauri::AppHandle,
-    _target_dir: String,
-) -> Result<(), String> {
+pub async fn start_download(_app: tauri::AppHandle, _target_dir: String) -> Result<(), String> {
     Err("Download not yet implemented".to_string())
 }
 

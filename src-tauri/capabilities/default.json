@@ -29,24 +29,15 @@
     "fs:default",
     {
       "identifier": "fs:allow-read",
-      "allow": [
-        { "path": "$APPDATA/**" },
-        { "path": "$HOME/**" }
-      ]
+      "allow": [{ "path": "$APPDATA/**" }, { "path": "$HOME/**" }]
     },
     {
       "identifier": "fs:allow-write",
-      "allow": [
-        { "path": "$APPDATA/**" },
-        { "path": "$HOME/**" }
-      ]
+      "allow": [{ "path": "$APPDATA/**" }, { "path": "$HOME/**" }]
     },
     {
       "identifier": "fs:scope",
-      "allow": [
-        { "path": "$APPDATA/**" },
-        { "path": "$HOME/**" }
-      ]
+      "allow": [{ "path": "$APPDATA/**" }, { "path": "$HOME/**" }]
     }
   ]
 }

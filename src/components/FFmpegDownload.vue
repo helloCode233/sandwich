@@ -1,0 +1,172 @@
+<script setup lang="ts">
+import { onMounted, onUnmounted } from 'vue';
+import { NCard, NButton, NProgress, NText, NSpace, NIcon } from 'naive-ui';
+import { XCircle, RefreshCw, FolderOpen } from 'lucide-vue-next';
+import { useFfmpegStore } from '@/stores/ffmpeg';
+import { useFfmpeg } from '@/composables/useFfmpeg';
+import { useI18n } from 'vue-i18n';
+
+const emit = defineEmits<{
+  (e: 'done'): void;
+  (e: 'back'): void;
+}>();
+
+const store = useFfmpegStore();
+const { subscribeProgress, selectDirectory, startDownload, cancelDownload, unsubscribeAll } =
+  useFfmpeg();
+const { t } = useI18n();
+
+/** Format bytes to human-readable string. */
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return '--';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let i = 0;
+  let size = bytes;
+  while (size >= 1024 && i < units.length - 1) {
+    size /= 1024;
+    i++;
+  }
+  return `${size.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+}
+
+/** Format bytes/sec to human-readable speed. */
+function formatSpeed(bytesPerSec: number): string {
+  if (bytesPerSec === 0) return '--';
+  return `${formatBytes(bytesPerSec)}/s`;
+}
+
+/** User clicks to choose a directory then start download. */
+async function onSelectAndDownload() {
+  const dir = await selectDirectory();
+  if (dir) {
+    await startDownload(dir);
+    // On success, 'ffmpeg-ready' event will update store to 'verified'
+    if (store.status === 'verified') {
+      emit('done');
+    }
+  }
+}
+
+/** Retry download with the same directory. */
+async function onRetry() {
+  if (store.targetDir) {
+    await startDownload(store.targetDir);
+    if (store.status === 'verified') {
+      emit('done');
+    }
+  } else {
+    await onSelectAndDownload();
+  }
+}
+
+/** Cancel active download and go back to status page. */
+async function onCancel() {
+  await cancelDownload();
+  emit('back');
+}
+
+onMounted(async () => {
+  await subscribeProgress();
+
+  // If we already have a targetDir (resume), auto-start
+  if (store.targetDir && store.status === 'selecting-dir') {
+    await startDownload(store.targetDir);
+  }
+});
+
+onUnmounted(() => {
+  unsubscribeAll();
+});
+</script>
+
+<template>
+  <div class="h-screen flex items-center justify-center bg-[#101014]">
+    <NCard :bordered="true" class="w-[500px] max-w-[95vw]">
+      <NSpace vertical :size="16">
+        <!-- Step 1: Choose directory -->
+        <template v-if="store.status === 'selecting-dir' || store.status === 'missing'">
+          <NText strong>{{ t('download.selectDir') }}</NText>
+          <NButton type="primary" size="large" block @click="onSelectAndDownload">
+            <template #icon>
+              <NIcon><FolderOpen /></NIcon>
+            </template>
+            {{ t('download.chooseDir') }}
+          </NButton>
+        </template>
+
+        <!-- Step 2: Downloading / Verifying -->
+        <template v-else-if="store.status === 'downloading' || store.status === 'verifying'">
+          <NText strong>{{ t('download.progress') }}</NText>
+          <NProgress
+            type="line"
+            :percentage="Math.round(store.downloadProgress.percent)"
+            :indicator-placement="'inside'"
+            :height="28"
+            :status="store.status === 'verifying' ? 'success' : 'default'"
+            :processing="store.status === 'downloading'"
+          />
+          <NSpace justify="space-between" class="w-full">
+            <NText depth="3">
+              {{ formatBytes(store.downloadProgress.downloadedBytes) }}
+              /
+              {{
+                store.downloadProgress.totalBytes > 0
+                  ? formatBytes(store.downloadProgress.totalBytes)
+                  : '--'
+              }}
+            </NText>
+            <NText depth="3">
+              {{ formatSpeed(store.downloadProgress.speedBytesPerSec) }}
+            </NText>
+          </NSpace>
+          <NText depth="3" class="text-xs text-center">
+            {{ store.status === 'verifying' ? t('download.verifying') : t('download.downloading') }}
+          </NText>
+          <NButton v-if="store.status === 'downloading'" type="warning" block @click="onCancel">
+            <template #icon>
+              <NIcon><XCircle /></NIcon>
+            </template>
+            {{ t('download.cancel') }}
+          </NButton>
+        </template>
+
+        <!-- Step 3: Complete (brief flash before auto-transition) -->
+        <template v-else-if="store.status === 'verified'">
+          <NText type="success" strong>{{ t('download.complete') }}</NText>
+          <NProgress type="line" :percentage="100" :height="28" status="success" />
+        </template>
+
+        <!-- Step 4: Error -->
+        <template v-else-if="store.status === 'error'">
+          <NIcon :size="48" color="#d03050">
+            <XCircle />
+          </NIcon>
+          <NText type="error">{{ store.downloadError || t('download.errorDefault') }}</NText>
+
+          <!-- Show retry if under 3 attempts, otherwise show manual instructions -->
+          <template v-if="store.retryCount < 3">
+            <NButton type="primary" @click="onRetry">
+              <template #icon>
+                <NIcon><RefreshCw /></NIcon>
+              </template>
+              {{ t('download.retry', { count: store.retryCount, max: 3 }) }}
+            </NButton>
+          </template>
+          <template v-else>
+            <NText depth="3" class="text-xs text-center whitespace-pre-wrap">
+              {{ t('download.manualDownload', { dir: store.targetDir || '' }) }}
+            </NText>
+            <NButton @click="emit('back')">{{ t('common.back') }}</NButton>
+          </template>
+        </template>
+      </NSpace>
+    </NCard>
+  </div>
+</template>
+
+<style scoped>
+.h-screen {
+  height: 100vh;
+  height: 100dvh;
+}
+</style>

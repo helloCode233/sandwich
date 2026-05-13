@@ -1,1 +1,29 @@
-{"default":{"identifier":"default","description":"Default capability for Sandwich app","local":true,"windows":["main"],"permissions":["core:default","store:default","shell:default",{"identifier":"shell:allow-execute","allow":[{"args":true,"cmd":"/usr/bin/xattr","name":"xattr"}]},"dialog:default",{"identifier":"dialog:allow-open","allow":[{"directory":true}]},"fs:default",{"identifier":"fs:allow-read","allow":[{"path":"$APPDATA/**"},{"path":"$HOME/**"}]},{"identifier":"fs:allow-write","allow":[{"path":"$APPDATA/**"},{"path":"$HOME/**"}]},{"identifier":"fs:scope","allow":[{"path":"$APPDATA/**"},{"path":"$HOME/**"}]}]}}
+{
+  "default": {
+    "identifier": "default",
+    "description": "Default capability for Sandwich app",
+    "local": true,
+    "windows": ["main"],
+    "permissions": [
+      "core:default",
+      "store:default",
+      "shell:default",
+      {
+        "identifier": "shell:allow-execute",
+        "allow": [{ "args": true, "cmd": "/usr/bin/xattr", "name": "xattr" }]
+      },
+      "dialog:default",
+      { "identifier": "dialog:allow-open", "allow": [{ "directory": true }] },
+      "fs:default",
+      {
+        "identifier": "fs:allow-read",
+        "allow": [{ "path": "$APPDATA/**" }, { "path": "$HOME/**" }]
+      },
+      {
+        "identifier": "fs:allow-write",
+        "allow": [{ "path": "$APPDATA/**" }, { "path": "$HOME/**" }]
+      },
+      { "identifier": "fs:scope", "allow": [{ "path": "$APPDATA/**" }, { "path": "$HOME/**" }] }
+    ]
+  }
+}

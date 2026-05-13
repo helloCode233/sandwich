@@ -1,7 +1,9 @@
 mod commands;
 
-use commands::ffmpeg::{check_latest_version, detect_ffmpeg, detect_ffmpeg_internal, get_ffmpeg_status, verify_ffmpeg};
 use commands::download::{cancel_download, start_download};
+use commands::ffmpeg::{
+    check_latest_version, detect_ffmpeg, detect_ffmpeg_internal, get_ffmpeg_status, verify_ffmpeg,
+};
 use tauri::Emitter;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -30,12 +32,10 @@ pub fn run() {
             // Runs independently of detection; failures are silent (network errors ignored).
             let update_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
-                match check_latest_version().await {
-                    Ok(Some(update_info)) => {
-                        let _ = update_handle.emit("ffmpeg-update-available", update_info);
-                    }
-                    _ => {} // Network errors are silently ignored (non-blocking per D-25)
+                if let Ok(Some(update_info)) = check_latest_version().await {
+                    let _ = update_handle.emit("ffmpeg-update-available", update_info);
                 }
+                // Network errors are silently ignored (non-blocking per D-25)
             });
 
             Ok(())

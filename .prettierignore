@@ -1,0 +1,5 @@
+.planning/
+.claude/
+src-tauri/
+dist/
+node_modules/

@@ -25,12 +25,9 @@ export function useFfmpeg() {
 
   /** Subscribe to download progress events from Rust. */
   async function subscribeProgress(): Promise<void> {
-    progressUnlisten = await listen<DownloadProgress>(
-      'ffmpeg-download-progress',
-      (event) => {
-        store.setDownloadProgress(event.payload);
-      },
-    );
+    progressUnlisten = await listen<DownloadProgress>('ffmpeg-download-progress', (event) => {
+      store.setDownloadProgress(event.payload);
+    });
   }
 
   /** Subscribe to initial status event (emitted from Rust setup hook). */

@@ -18,9 +18,7 @@ export const useFfmpegStore = defineStore('ffmpeg', () => {
   const targetDir = ref<string | null>(null);
 
   const isReady = computed(() => status.value === 'found' || status.value === 'verified');
-  const needsDownload = computed(
-    () => status.value === 'missing' || status.value === 'outdated',
-  );
+  const needsDownload = computed(() => status.value === 'missing' || status.value === 'outdated');
   const isDownloading = computed(
     () => status.value === 'downloading' || status.value === 'verifying',
   );

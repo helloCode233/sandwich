@@ -8,7 +8,7 @@ A four-phase horizontal-layers build: Foundation (FFmpeg lifecycle + scaffold) e
 
 - [x] **Phase 1: Foundation** - FFmpeg detection, one-click download, project scaffold, Tauri plugins (completed 2026-05-13)
 - [ ] **Phase 2: Rust Backend** - Domain services, FFmpeg command builder, processing pipeline, IPC commands
-- [ ] **Phase 3: Vue Frontend** - Pinia stores, typed API wrappers, dual-panel UI, Naive UI dark theme
+- [x] **Phase 3: Vue Frontend** - Pinia stores, typed API wrappers, dual-panel UI, Naive UI dark theme (completed 2026-05-13)
 - [ ] **Phase 4: Integration & Polish** - Progress streaming, batch summary, cancel flow wiring, E2E validation
 
 ## Phase Details
@@ -80,10 +80,10 @@ Plans:
 - [x] 03-03-PLAN.md — Composables wrapping Tauri IPC (useSeed, useQueue, useBatch) with event subscriptions
 
 **Wave 4** *(blocked on Wave 3 completion)*
-- [ ] 03-04-PLAN.md — App.vue provider wrappers + MainLayout.vue dual-panel resizable layout
-- [ ] 03-05-PLAN.md — Seed components (SeedCard.vue, SeedList.vue) with hover actions and empty state
-- [ ] 03-06-PLAN.md — Queue components (ImportZone.vue drag-drop, QueueList.vue with metadata and clear confirmation)
-- [ ] 03-07-PLAN.md — Batch components (BatchControls.vue with seed/concurrency/output dir, BatchBanner.vue progress)
+- [x] 03-04-PLAN.md — App.vue provider wrappers + MainLayout.vue dual-panel resizable layout
+- [x] 03-05-PLAN.md — Seed components (SeedCard.vue, SeedList.vue) with hover actions and empty state
+- [x] 03-06-PLAN.md — Queue components (ImportZone.vue drag-drop, QueueList.vue with metadata and clear confirmation)
+- [x] 03-07-PLAN.md — Batch components (BatchControls.vue with seed/concurrency/output dir, BatchBanner.vue progress)
    **UI hint**: yes
 
 ### Phase 4: Integration & Polish
@@ -108,5 +108,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | ----------------------- | -------------- | ----------- | --------- |
 | 1. Foundation           | 4/4            | Complete    | 2026-05-13 |
 | 2. Rust Backend         | 0/4            | Planned     | -         |
-| 3. Vue Frontend         | 3/7 | In Progress|  |
+| 3. Vue Frontend         | 7/7 | Complete   | 2026-05-13 |
 | 4. Integration & Polish | 0/TBD          | Not started | -         |

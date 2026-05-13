@@ -44,6 +44,8 @@ Declared values (multiples of 4, matching UnoCSS presetUno defaults):
 | 3xl | 48px | Empty state icon size, large section breaks |
 | 4xl | 64px | Page-level spacing |
 
+Standard set for this project: `(4, 8, 12, 16, 24, 32, 48, 64)`. The value 12px is a first-class standard unit in UnoCSS `presetUno()` and Tailwind CSS, where it maps to `3 * 4px = 12px` (utility class `3` / `px-3`). It is included because the UnoCSS preset treats it as part of the default spacing scale, and BatchControls uses `py-3` and `space-y-3` internally.
+
 Note: UnoCSS `presetUno()` defaults to a 4px base unit (`1 = 4px`). The values above are the physical pixel equivalents for the utility classes used in this phase.
 
 Exceptions:
@@ -143,7 +145,7 @@ New keys: `batch.fileProgress`, `batch.fileEta`
 - Failed section heading: "Failed ({count})"
 - Per-file output path: "{filename} -> {outputPath}"
 - Per-file error: "{filename}: {errorMessage}"
-- Dismiss button: "Done"
+- Dismiss button: "Clear Results"
 **ZH:**
 - Title: "批处理完成"
 - Summary line: "共 {total} 个文件，成功 {succeeded} 个，失败 {failed} 个"
@@ -151,8 +153,8 @@ New keys: `batch.fileProgress`, `batch.fileEta`
 - Failed section heading: "失败（{count}）"
 - Per-file output path: "{filename} → {outputPath}"
 - Per-file error: "{filename}：{errorMessage}"
-- Dismiss button: "完成"
-New keys under `batch.summary.*` namespace.
+- Dismiss button: "清除结果"
+New keys under `batch.summary.*` namespace. The dismiss button label "Clear Results" / "清除结果" communicates the state change (calls `resetBatch()`) rather than just acknowledgment.
 
 ### Completion Summary — Cancelled State
 **EN:**
@@ -230,7 +232,7 @@ Note: Clear queue (already implemented in Phase 3) already uses NModal confirmat
 2. Summary line (e.g., "3 succeeded, 1 failed out of 4 files")
 3. Succeeded section: heading + scrollable list of `{filename} -> {outputPath}` rows
 4. Failed section (only if `failed.length > 0`): heading + scrollable list of `{filename}: {errorMessage}` rows
-5. "Done" button (NButton, right-aligned) — calls `batchStore.resetBatch()` to return to idle state
+5. "Clear Results" button (NButton, right-aligned) — calls `batchStore.resetBatch()` to return to idle state
 
 **States:**
 - Success only (all files succeeded): green checkmark, no failed section, green progress bar at 100%
@@ -267,18 +269,21 @@ Note: Clear queue (already implemented in Phase 3) already uses NModal confirmat
 - BatchBanner: hidden (`v-if="false"`)
 - QueueList: normal interactive mode (remove, add, clear enabled)
 - BatchControls: Start button visible and enabled (if seed selected + queue not empty)
+- **Focal point:** The "Start Processing" button in BatchControls. It is the primary CTA and the largest colored element in the idle right panel. Uses accent `#2080f0` on NButton `type="primary"`.
 
 ### Processing State
 - BatchBanner: visible, shows "Processing {completed}/{total}", NProgress bar active
 - BatchControls: Cancel button visible (replaces Start), all other controls disabled
 - QueueList: per-file progress bars active, remove buttons disabled, ImportZone hidden
 - Store: `isProcessing === true`, `progress` streamed via events
+- **Focal point:** The BatchBanner NProgress bar (accent `#2080f0`, largest animated element on screen). The bar pulses/animates, drawing the eye to overall progress. Secondary focal point: the current file's per-file progress bar in QueueList.
 
 ### Cancelling State (transitional, between cancel click and batch-cancelled event)
 - BatchBanner: NProgress shows current progress, label changes to "Cancelling..."
 - BatchControls: Cancel button disabled (shows loading/processing state)
 - QueueList: current file progress freezes, remaining files show "Pending" or fade
 - This state lasts until `batch-cancelled` event arrives (typically < 2 seconds)
+- **Focal point:** The BatchBanner NProgress bar (freezes at current progress, accent `#2080f0`), reinforcing that the batch is winding down.
 
 ### Complete State
 - BatchBanner: NProgress at 100% (green), shows "Batch Complete" or "Batch Cancelled"
@@ -286,6 +291,7 @@ Note: Clear queue (already implemented in Phase 3) already uses NModal confirmat
 - BatchControls: Start button returns, all controls re-enabled
 - QueueList: interactive mode restored, per-file progress bars removed
 - Store: `isProcessing === false`, `isComplete === true`, `lastResult` populated
+- **Focal point:** The BatchSummary status header and icon. The green CheckCircle icon (`#18a058`, 24px) paired with the "Batch Complete" heading (16px semibold) draws primary attention to the outcome. The BatchBanner's green 100% NProgress bar provides secondary confirmation above.
 
 ### Error During Processing (file-level, not batch-level)
 - Toast notification appears for each file error (via `batch-file-error` event)
@@ -384,6 +390,19 @@ fileProgressUnlisten = await listen<PerFileProgress>('batch-file-progress', (eve
 | `batch-file-error` | `FileResult` | Toast notification, failed file indicator |
 | `batch-complete` | `BatchResult` | BatchSummary display, return to complete state |
 | `batch-cancelled` | `BatchResult` | BatchSummary with cancellation notice |
+
+---
+
+## Focal Points by Screen State
+
+Explicit visual hierarchy declarations for each screen state:
+
+| State | Focal Point | Element | Visual Dominance Cues |
+|-------|-------------|---------|----------------------|
+| Idle | Start Processing button | BatchControls NButton `type="primary"` | Accent `#2080f0` fill, largest colored element in right panel, positioned at bottom of controls area. Empty-state icons in left panel (seed/queue) are secondary. |
+| Processing | BatchBanner NProgress bar | NProgress `:color="#2080f0"` | Largest animated element on screen. Bar width grows left-to-right, pulsing `indicator-placement="inside"`. Counter text (`{completed}/{total}`) reinforces focus. Secondary: current file's per-file progress bar in QueueList. |
+| Cancelling | BatchBanner NProgress bar (frozen) | NProgress `:color="#2080f0"`, frozen at last known value | Same size/position as processing state. Frozen bar + "Cancelling..." label signal transition. Contrast between frozen bar and still-visible queue items creates tension that resolves on `batch-cancelled` event. |
+| Complete | BatchSummary status header + icon | CheckCircle/AlertCircle icon (24px) + summary heading (16px semibold) | Icon color (`#18a058` green or `#f0a020` warning) draws eye to outcome. Heading is the largest text in the panel. Secondary: BatchBanner NProgress at 100% (green) provides top-of-panel confirmation. |
 
 ---
 

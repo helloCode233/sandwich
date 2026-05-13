@@ -97,7 +97,21 @@ Plans:
 2. After processing finishes, user sees a completion summary panel showing how many files succeeded, how many failed, and per-file output paths
 3. User can cancel an in-progress batch from the UI; FFmpeg processes terminate gracefully and the app returns to a clean, ready-to-process state
 4. The full end-to-end workflow operates without breaking: generate seed -> drag in videos -> select seed -> click process -> watch live progress per file -> review completion summary
-   **Plans**: TBD
+   **Plans:** 5 plans
+
+Plans:
+**Wave 1**
+- [ ] 04-01-PLAN.md — Rust: PerFileProgress struct + enriched executor emitting batch-file-progress event
+
+**Wave 2**
+- [ ] 04-02-PLAN.md — Frontend contracts: PerFileProgress TypeScript type + 17 new i18n keys in both locales
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 04-03-PLAN.md — Store + composable: perFileProgress map, cancelling state, 6 event listeners
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 04-04-PLAN.md — UI: BatchBanner multi-state + BatchControls cancel confirmation + ImportZone disabled during processing
+- [ ] 04-05-PLAN.md — UI: QueueList per-file progress bars + BatchSummary completion summary + MainLayout conditional rendering
 
 ## Progress
 
@@ -108,5 +122,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | ----------------------- | -------------- | ----------- | --------- |
 | 1. Foundation           | 4/4            | Complete    | 2026-05-13 |
 | 2. Rust Backend         | 0/4            | Planned     | -         |
-| 3. Vue Frontend         | 7/7 | Complete   | 2026-05-13 |
-| 4. Integration & Polish | 0/TBD          | Not started | -         |
+| 3. Vue Frontend         | 7/7            | Complete    | 2026-05-13 |
+| 4. Integration & Polish | 0/5            | Planned     | -         |

@@ -9,9 +9,9 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### FFmpeg Lifecycle
 
-- [ ] **FFMPEG-01**: App 启动时自动检测 FFmpeg 是否在 PATH 中
-- [ ] **FFMPEG-02**: FFmpeg 缺失时提供一键下载（下载进度显示，平台自适应）
-- [ ] **FFMPEG-03**: 下载完成后自动验证 FFmpeg 可执行
+- [x] **FFMPEG-01**: App 启动时自动检测 FFmpeg 是否在 PATH 中
+- [x] **FFMPEG-02**: FFmpeg 缺失时提供一键下载（下载进度显示，平台自适应）
+- [x] **FFMPEG-03**: 下载完成后自动验证 FFmpeg 可执行
 
 ### Seed Management
 
@@ -40,7 +40,7 @@ Requirements for initial release. Each maps to roadmap phases.
 ### Output Management
 
 - [ ] **OUTPUT-01**: 支持选择输出目录（默认 ~/Videos/sandwich-output/）
-- [ ] **OUTPUT-02**: 输出文件命名：{原文件名}_{种子别名}.{扩展名}
+- [ ] **OUTPUT-02**: 输出文件命名：{原文件名}\_{种子别名}.{扩展名}
 
 ### UI
 
@@ -65,53 +65,55 @@ Deferred to future release. Tracked but not in current roadmap.
 
 ## Out of Scope
 
-| Feature | Reason |
-|---------|--------|
-| 实时处理预览 | FFmpeg 不支持中间帧流式输出，复杂度极高，对 v1 价值近乎为零 |
-| 手动滤镜链编辑器 | 与自动种子生成的核心价值相悖，建设可视化编辑器的工程量巨大 |
-| 视频剪辑功能（时间轴、裁剪、转场） | 完整视频编辑是另一个产品品类，严重超出范围 |
-| 云端编码 | 需认证、计费、上传基础设施，将桌面应用变成 SaaS |
-| 纯音频处理模式 | 音频指纹与视频指纹是不同领域，分散核心关注点 |
-| 插件系统 | 安全沙箱插件 API 需数月开发，7 种内置操作已覆盖足够指纹修改面 |
-| AI 去重评分 | 平台算法是黑箱且持续变化，评分会误导用户，且逆向工程有法律风险 |
-| 项目文件/工作区持久化 | 增加文件格式设计、脏状态追踪、向后兼容等大量工作量 |
-| macOS / Windows 打包 | 开发验证完成后单独处理 |
-| 系统托盘/后台处理 | 增加托盘集成、后台进程管理复杂度 |
+| Feature                            | Reason                                                         |
+| ---------------------------------- | -------------------------------------------------------------- |
+| 实时处理预览                       | FFmpeg 不支持中间帧流式输出，复杂度极高，对 v1 价值近乎为零    |
+| 手动滤镜链编辑器                   | 与自动种子生成的核心价值相悖，建设可视化编辑器的工程量巨大     |
+| 视频剪辑功能（时间轴、裁剪、转场） | 完整视频编辑是另一个产品品类，严重超出范围                     |
+| 云端编码                           | 需认证、计费、上传基础设施，将桌面应用变成 SaaS                |
+| 纯音频处理模式                     | 音频指纹与视频指纹是不同领域，分散核心关注点                   |
+| 插件系统                           | 安全沙箱插件 API 需数月开发，7 种内置操作已覆盖足够指纹修改面  |
+| AI 去重评分                        | 平台算法是黑箱且持续变化，评分会误导用户，且逆向工程有法律风险 |
+| 项目文件/工作区持久化              | 增加文件格式设计、脏状态追踪、向后兼容等大量工作量             |
+| macOS / Windows 打包               | 开发验证完成后单独处理                                         |
+| 系统托盘/后台处理                  | 增加托盘集成、后台进程管理复杂度                               |
 
 ## Traceability
 
 Which phases cover which requirements. Updated during roadmap creation.
 
-| Requirement | Phase | Status |
-|-------------|-------|--------|
-| FFMPEG-01 | Phase 1 | Pending |
-| FFMPEG-02 | Phase 1 | Pending |
-| FFMPEG-03 | Phase 1 | Pending |
-| SEED-01 | Phase 2 | Pending |
-| SEED-02 | Phase 2 | Pending |
-| SEED-03 | Phase 2 | Pending |
-| SEED-04 | Phase 2 | Pending |
-| SEED-05 | Phase 2 | Pending |
-| SEED-06 | Phase 2 | Pending |
-| IMPORT-01 | Phase 2 | Pending |
-| IMPORT-02 | Phase 2 | Pending |
-| QUEUE-01 | Phase 2 | Pending |
-| QUEUE-02 | Phase 2 | Pending |
-| BATCH-01 | Phase 2 | Pending |
-| BATCH-02 | Phase 4 | Pending |
-| BATCH-03 | Phase 2 | Pending |
-| BATCH-04 | Phase 2 | Pending |
-| BATCH-05 | Phase 4 | Pending |
-| OUTPUT-01 | Phase 2 | Pending |
-| OUTPUT-02 | Phase 2 | Pending |
-| UI-01 | Phase 3 | Pending |
-| UI-02 | Phase 3 | Pending |
+| Requirement | Phase   | Status  |
+| ----------- | ------- | ------- |
+| FFMPEG-01   | Phase 1 | Complete |
+| FFMPEG-02   | Phase 1 | Complete |
+| FFMPEG-03   | Phase 1 | Complete |
+| SEED-01     | Phase 2 | Pending |
+| SEED-02     | Phase 2 | Pending |
+| SEED-03     | Phase 2 | Pending |
+| SEED-04     | Phase 2 | Pending |
+| SEED-05     | Phase 2 | Pending |
+| SEED-06     | Phase 2 | Pending |
+| IMPORT-01   | Phase 2 | Pending |
+| IMPORT-02   | Phase 2 | Pending |
+| QUEUE-01    | Phase 2 | Pending |
+| QUEUE-02    | Phase 2 | Pending |
+| BATCH-01    | Phase 2 | Pending |
+| BATCH-02    | Phase 4 | Pending |
+| BATCH-03    | Phase 2 | Pending |
+| BATCH-04    | Phase 2 | Pending |
+| BATCH-05    | Phase 4 | Pending |
+| OUTPUT-01   | Phase 2 | Pending |
+| OUTPUT-02   | Phase 2 | Pending |
+| UI-01       | Phase 3 | Pending |
+| UI-02       | Phase 3 | Pending |
 
 **Coverage:**
+
 - v1 requirements: 22 total
 - Mapped to phases: 22
 - Unmapped: 0
 
 ---
-*Requirements defined: 2026-05-12*
-*Last updated: 2026-05-12 after roadmap creation*
+
+_Requirements defined: 2026-05-12_
+_Last updated: 2026-05-12 after roadmap creation_

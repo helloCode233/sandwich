@@ -68,107 +68,108 @@ None -- discussion stayed entirely within phase scope.
 
 ## Phase Requirements
 
-| ID | Description | Research Support |
-|----|-------------|------------------|
-| FFMPEG-01 | App startup auto-detects FFmpeg in PATH | ffmpeg-sidecar `ffmpeg_is_installed()` + `ffmpeg_version()` -- checks PATH and common install locations. Returns bool + semver string. Called in Tauri setup hook before window creation. |
+| ID        | Description                                                                                   | Research Support                                                                                                                                                                                                                                                                                  |
+| --------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FFMPEG-01 | App startup auto-detects FFmpeg in PATH                                                       | ffmpeg-sidecar `ffmpeg_is_installed()` + `ffmpeg_version()` -- checks PATH and common install locations. Returns bool + semver string. Called in Tauri setup hook before window creation.                                                                                                         |
 | FFMPEG-02 | When missing, one-click download with progress display and platform-adaptive binary selection | Custom download via `reqwest` streaming + ffmpeg-sidecar `unpack_ffmpeg()`. URLs selected at runtime via platform detection. Progress streamed to frontend via Tauri events. GitHub Releases (BtbN) for Linux/Windows; evermeet.cx/osxexperts.net for macOS. jsDelivr CDN mirror for CN fallback. |
-| FFMPEG-03 | Post-download auto-verify FFmpeg is executable | `ffmpeg_version_with_path()` verifies the downloaded binary. On macOS, `xattr -dr com.apple.quarantine` runs first to remove Gatekeeper isolation. Verified path + version persisted to tauri-plugin-store. |
+| FFMPEG-03 | Post-download auto-verify FFmpeg is executable                                                | `ffmpeg_version_with_path()` verifies the downloaded binary. On macOS, `xattr -dr com.apple.quarantine` runs first to remove Gatekeeper isolation. Verified path + version persisted to tauri-plugin-store.                                                                                       |
 
 ## Architectural Responsibility Map
 
-| Capability | Primary Tier | Secondary Tier | Rationale |
-|------------|-------------|----------------|-----------|
-| FFmpeg PATH detection | API / Backend (Rust) | -- | `ffmpeg_sidecar::command::ffmpeg_is_installed()` runs in Rust process |
-| FFmpeg version reading | API / Backend (Rust) | -- | Executes `ffmpeg -version`, parses output in Rust |
-| Download URL selection (platform) | API / Backend (Rust) | -- | `cfg!` macros + runtime platform detection determine correct binary URL |
-| HTTP download with progress | API / Backend (Rust) | -- | `reqwest` streaming download, progress emitted via Tauri events |
-| Archive extraction | API / Backend (Rust) | -- | ffmpeg-sidecar `unpack_ffmpeg()` handles tar/zip extraction |
-| Post-download verification | API / Backend (Rust) | -- | Runs `ffmpeg -version` on downloaded binary |
-| macOS quarantine removal | API / Backend (Rust) | -- | `std::process::Command` runs `xattr -dr com.apple.quarantine` |
-| Download progress UI | Browser / Client (Vue) | -- | Listens to Tauri events, updates Pinia store, renders NProgress + stats |
-| FFmpeg status UI | Browser / Client (Vue) | -- | Vue component reads Pinia store, renders status card |
-| FFmpeg path persistence | API / Backend (Rust) | -- | tauri-plugin-store writes to app_data_dir |
-| Directory selection dialog | Browser / Client (Vue) | -- | @tauri-apps/plugin-dialog `open()` triggers native directory picker |
-| User-selected download path | API / Backend (Rust) | Browser / Client (Vue) | Frontend passes path from dialog to Rust download command |
-| Dark theme | Browser / Client (Vue) | -- | Naive UI NConfigProvider + darkTheme import |
-| i18n (zh/en) | Browser / Client (Vue) | -- | vue-i18n `createI18n()` with locale message files |
-| Project build/dev | Frontend Server (Vite) | -- | Vite dev server + Tauri Rust compilation |
-| Tauri window config | API / Backend (Rust) | -- | tauri.conf.json `app.windows[]` |
-| CI checks | CI (GitHub Actions) | -- | ubuntu-latest runner with bun + Rust toolchains |
+| Capability                        | Primary Tier           | Secondary Tier         | Rationale                                                               |
+| --------------------------------- | ---------------------- | ---------------------- | ----------------------------------------------------------------------- |
+| FFmpeg PATH detection             | API / Backend (Rust)   | --                     | `ffmpeg_sidecar::command::ffmpeg_is_installed()` runs in Rust process   |
+| FFmpeg version reading            | API / Backend (Rust)   | --                     | Executes `ffmpeg -version`, parses output in Rust                       |
+| Download URL selection (platform) | API / Backend (Rust)   | --                     | `cfg!` macros + runtime platform detection determine correct binary URL |
+| HTTP download with progress       | API / Backend (Rust)   | --                     | `reqwest` streaming download, progress emitted via Tauri events         |
+| Archive extraction                | API / Backend (Rust)   | --                     | ffmpeg-sidecar `unpack_ffmpeg()` handles tar/zip extraction             |
+| Post-download verification        | API / Backend (Rust)   | --                     | Runs `ffmpeg -version` on downloaded binary                             |
+| macOS quarantine removal          | API / Backend (Rust)   | --                     | `std::process::Command` runs `xattr -dr com.apple.quarantine`           |
+| Download progress UI              | Browser / Client (Vue) | --                     | Listens to Tauri events, updates Pinia store, renders NProgress + stats |
+| FFmpeg status UI                  | Browser / Client (Vue) | --                     | Vue component reads Pinia store, renders status card                    |
+| FFmpeg path persistence           | API / Backend (Rust)   | --                     | tauri-plugin-store writes to app_data_dir                               |
+| Directory selection dialog        | Browser / Client (Vue) | --                     | @tauri-apps/plugin-dialog `open()` triggers native directory picker     |
+| User-selected download path       | API / Backend (Rust)   | Browser / Client (Vue) | Frontend passes path from dialog to Rust download command               |
+| Dark theme                        | Browser / Client (Vue) | --                     | Naive UI NConfigProvider + darkTheme import                             |
+| i18n (zh/en)                      | Browser / Client (Vue) | --                     | vue-i18n `createI18n()` with locale message files                       |
+| Project build/dev                 | Frontend Server (Vite) | --                     | Vite dev server + Tauri Rust compilation                                |
+| Tauri window config               | API / Backend (Rust)   | --                     | tauri.conf.json `app.windows[]`                                         |
+| CI checks                         | CI (GitHub Actions)    | --                     | ubuntu-latest runner with bun + Rust toolchains                         |
 
 ## Standard Stack
 
 ### Core
 
-| Library | Version | Purpose | Why Standard |
-|---------|---------|---------|--------------|
-| tauri (crate) | 2.11.1 | Desktop framework (Rust backend + webview) | Only production-ready Rust+web hybrid desktop framework. v2 stable with unified plugin system. |
-| @tauri-apps/cli | 2.11.1 | Tauri CLI (`tauri dev`, `tauri build`) | Must match tauri crate minor version. Provides dev server orchestration. |
-| @tauri-apps/api | 2.11.0 | Frontend Tauri API (`invoke()`, events) | Core JS bridge to Rust commands. Version must match tauri crate minor. |
-| vue | 3.5.34 | Frontend framework | User-specified. Composition API with `<script setup>`. |
-| vite | 8.0.12 | Build tool & dev server | Default for Vue 3. Native ESM HMR. Required by Tauri v2 frontend. |
-| @vitejs/plugin-vue | 6.0.6 | Vue SFC compilation in Vite | Official Vue plugin for Vite. Required for `.vue` file support. |
-| typescript | 6.0.3 | Type safety | User-specified strict mode. All frontend code typed. |
-| ffmpeg-sidecar (crate) | 2.5.1 | FFmpeg binary management | Detection (`ffmpeg_is_installed`), download helpers, archive extraction. Provides `unpack_ffmpeg()` for cross-platform tar/zip handling. |
-| Naive UI | 2.44.1 | Vue 3 component library | User-chosen over Element Plus. Tree-shakeable, built-in dark theme, TypeScript-first, compact desktop density. |
-| Pinia | 3.0.4 | State management | Official Vue store. Composition API setup stores align with `<script setup>`. |
-| vue-i18n | 11.4.2 | Internationalization | User-required bilingual (zh-CN + en). Composition API mode. |
-| UnoCSS | 66.6.8 | Atomic CSS | User-chosen. Vite-native, zero runtime, tree-shakeable. |
-| tauri-plugin-store (crate + npm) | 2.4.3 | Persistent key-value storage | FFmpeg path/version/download_time persistence. Auto-save with debounce. |
-| tauri-plugin-shell (crate + npm) | 2.3.5 | Shell command execution | Required for `Command.sidecar()` and `Command.create()` -- though ffmpeg-sidecar handles process spawning, shell plugin enables xattr and other shell operations. |
-| tauri-plugin-dialog (crate + npm) | 2.7.1 | Native file/directory dialogs | Directory picker for user-selected FFmpeg storage location (D-18). |
-| tauri-plugin-fs (crate + npm) | 2.5.1 | File system access | Read/write config files, manage temp download files. |
+| Library                           | Version | Purpose                                    | Why Standard                                                                                                                                                      |
+| --------------------------------- | ------- | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| tauri (crate)                     | 2.11.1  | Desktop framework (Rust backend + webview) | Only production-ready Rust+web hybrid desktop framework. v2 stable with unified plugin system.                                                                    |
+| @tauri-apps/cli                   | 2.11.1  | Tauri CLI (`tauri dev`, `tauri build`)     | Must match tauri crate minor version. Provides dev server orchestration.                                                                                          |
+| @tauri-apps/api                   | 2.11.0  | Frontend Tauri API (`invoke()`, events)    | Core JS bridge to Rust commands. Version must match tauri crate minor.                                                                                            |
+| vue                               | 3.5.34  | Frontend framework                         | User-specified. Composition API with `<script setup>`.                                                                                                            |
+| vite                              | 8.0.12  | Build tool & dev server                    | Default for Vue 3. Native ESM HMR. Required by Tauri v2 frontend.                                                                                                 |
+| @vitejs/plugin-vue                | 6.0.6   | Vue SFC compilation in Vite                | Official Vue plugin for Vite. Required for `.vue` file support.                                                                                                   |
+| typescript                        | 6.0.3   | Type safety                                | User-specified strict mode. All frontend code typed.                                                                                                              |
+| ffmpeg-sidecar (crate)            | 2.5.1   | FFmpeg binary management                   | Detection (`ffmpeg_is_installed`), download helpers, archive extraction. Provides `unpack_ffmpeg()` for cross-platform tar/zip handling.                          |
+| Naive UI                          | 2.44.1  | Vue 3 component library                    | User-chosen over Element Plus. Tree-shakeable, built-in dark theme, TypeScript-first, compact desktop density.                                                    |
+| Pinia                             | 3.0.4   | State management                           | Official Vue store. Composition API setup stores align with `<script setup>`.                                                                                     |
+| vue-i18n                          | 11.4.2  | Internationalization                       | User-required bilingual (zh-CN + en). Composition API mode.                                                                                                       |
+| UnoCSS                            | 66.6.8  | Atomic CSS                                 | User-chosen. Vite-native, zero runtime, tree-shakeable.                                                                                                           |
+| tauri-plugin-store (crate + npm)  | 2.4.3   | Persistent key-value storage               | FFmpeg path/version/download_time persistence. Auto-save with debounce.                                                                                           |
+| tauri-plugin-shell (crate + npm)  | 2.3.5   | Shell command execution                    | Required for `Command.sidecar()` and `Command.create()` -- though ffmpeg-sidecar handles process spawning, shell plugin enables xattr and other shell operations. |
+| tauri-plugin-dialog (crate + npm) | 2.7.1   | Native file/directory dialogs              | Directory picker for user-selected FFmpeg storage location (D-18).                                                                                                |
+| tauri-plugin-fs (crate + npm)     | 2.5.1   | File system access                         | Read/write config files, manage temp download files.                                                                                                              |
 
 ### Supporting
 
-| Library | Version | Purpose | When to Use |
-|---------|---------|---------|-------------|
-| tokio (crate) | 1.52.3 | Async runtime | `spawn_blocking` for CPU-bound FFmpeg work. Async Tauri commands. |
-| serde + serde_json (crate) | 1.0.149 | Serialization | Tauri command arguments/returns. Store values as JSON. |
-| anyhow (crate) | 1.0.102 | Error handling | Ergonomic `Result<T>` in Rust commands. |
-| rand (crate) | 0.10.1 | Random generation | Not directly used in Phase 1, but included in Cargo.toml for future phases. |
-| reqwest (crate) | 0.12.x | HTTP client | Custom FFmpeg download with streaming progress. ffmpeg-sidecar uses reqwest internally. |
-| @tauri-apps/plugin-store (npm) | 2.4.3 | Store JS bindings | `load()`, `set()`, `get()` from frontend for reading persisted FFmpeg info. |
-| @tauri-apps/plugin-dialog (npm) | 2.7.1 | Dialog JS bindings | `open()` with directory option for user path selection. |
-| @tauri-apps/plugin-shell (npm) | 2.3.5 | Shell JS bindings | `Command.create()` for shell operations. |
+| Library                         | Version | Purpose            | When to Use                                                                             |
+| ------------------------------- | ------- | ------------------ | --------------------------------------------------------------------------------------- |
+| tokio (crate)                   | 1.52.3  | Async runtime      | `spawn_blocking` for CPU-bound FFmpeg work. Async Tauri commands.                       |
+| serde + serde_json (crate)      | 1.0.149 | Serialization      | Tauri command arguments/returns. Store values as JSON.                                  |
+| anyhow (crate)                  | 1.0.102 | Error handling     | Ergonomic `Result<T>` in Rust commands.                                                 |
+| rand (crate)                    | 0.10.1  | Random generation  | Not directly used in Phase 1, but included in Cargo.toml for future phases.             |
+| reqwest (crate)                 | 0.12.x  | HTTP client        | Custom FFmpeg download with streaming progress. ffmpeg-sidecar uses reqwest internally. |
+| @tauri-apps/plugin-store (npm)  | 2.4.3   | Store JS bindings  | `load()`, `set()`, `get()` from frontend for reading persisted FFmpeg info.             |
+| @tauri-apps/plugin-dialog (npm) | 2.7.1   | Dialog JS bindings | `open()` with directory option for user path selection.                                 |
+| @tauri-apps/plugin-shell (npm)  | 2.3.5   | Shell JS bindings  | `Command.create()` for shell operations.                                                |
 
 ### Dev Dependencies
 
-| Library | Version | Purpose | Why Standard |
-|---------|---------|---------|--------------|
-| eslint | 9.39.4 | JS/TS linting | Latest 9.x (user specifies ESLint 9 flat config). Flat config format (`eslint.config.mjs`). |
-| typescript-eslint | 8.59.3 | TypeScript ESLint integration | `tseslint.config()` helper for flat config. Provides TS-aware lint rules. |
-| eslint-plugin-vue | 10.9.1 | Vue SFC linting | v10 required for ESLint 9 flat config compatibility. `flat/recommended` config. |
-| vue-eslint-parser | 10.4.0 | Vue SFC parser for ESLint | Required by eslint-plugin-vue. Delegates `<script lang="ts">` to typescript-eslint parser. |
-| @eslint/js | 9.39.4 | ESLint core JS rules | `js.configs.recommended` in flat config. |
-| prettier | 3.8.3 | Code formatting | Consistent formatting. Separate from ESLint (no eslint-plugin-prettier). |
-| vitest | 4.1.6 | Frontend testing | Vite-native. Jest-compatible API. happy-dom for DOM simulation. |
-| @vue/test-utils | 2.4.10 | Vue component mounting | `mount()` for isolated component tests. |
-| vue-tsc | 3.2.8 | Vue type checking | CLI type checker for `.vue` files. Run as `vue-tsc -b`. |
-| husky | 9.1.7 | Git hooks | Pre-commit hook for lint-staged. Configured per D-07. |
-| lint-staged | 17.0.4 | Staged file linting | Runs ESLint + Prettier on staged files before commit. |
-| rstest (crate) | 0.26.1 | Parameterized Rust tests | `#[rstest]` macro for table-driven tests. |
+| Library           | Version | Purpose                       | Why Standard                                                                                |
+| ----------------- | ------- | ----------------------------- | ------------------------------------------------------------------------------------------- |
+| eslint            | 9.39.4  | JS/TS linting                 | Latest 9.x (user specifies ESLint 9 flat config). Flat config format (`eslint.config.mjs`). |
+| typescript-eslint | 8.59.3  | TypeScript ESLint integration | `tseslint.config()` helper for flat config. Provides TS-aware lint rules.                   |
+| eslint-plugin-vue | 10.9.1  | Vue SFC linting               | v10 required for ESLint 9 flat config compatibility. `flat/recommended` config.             |
+| vue-eslint-parser | 10.4.0  | Vue SFC parser for ESLint     | Required by eslint-plugin-vue. Delegates `<script lang="ts">` to typescript-eslint parser.  |
+| @eslint/js        | 9.39.4  | ESLint core JS rules          | `js.configs.recommended` in flat config.                                                    |
+| prettier          | 3.8.3   | Code formatting               | Consistent formatting. Separate from ESLint (no eslint-plugin-prettier).                    |
+| vitest            | 4.1.6   | Frontend testing              | Vite-native. Jest-compatible API. happy-dom for DOM simulation.                             |
+| @vue/test-utils   | 2.4.10  | Vue component mounting        | `mount()` for isolated component tests.                                                     |
+| vue-tsc           | 3.2.8   | Vue type checking             | CLI type checker for `.vue` files. Run as `vue-tsc -b`.                                     |
+| husky             | 9.1.7   | Git hooks                     | Pre-commit hook for lint-staged. Configured per D-07.                                       |
+| lint-staged       | 17.0.4  | Staged file linting           | Runs ESLint + Prettier on staged files before commit.                                       |
+| rstest (crate)    | 0.26.1  | Parameterized Rust tests      | `#[rstest]` macro for table-driven tests.                                                   |
 
 ### Rust Dev Tooling
 
-| Tool | Version | Purpose |
-|------|---------|---------|
-| rustfmt | (bundled) | Rust code formatting. CI: `cargo fmt --check`. |
-| clippy | (bundled) | Rust linting. CI: `cargo clippy -- -D warnings`. |
+| Tool    | Version   | Purpose                                          |
+| ------- | --------- | ------------------------------------------------ |
+| rustfmt | (bundled) | Rust code formatting. CI: `cargo fmt --check`.   |
+| clippy  | (bundled) | Rust linting. CI: `cargo clippy -- -D warnings`. |
 
 ### Alternatives Considered
 
-| Instead of | Could Use | Tradeoff |
-|------------|-----------|----------|
-| ffmpeg-sidecar default URLs | GitHub Releases (BtbN) for Linux/Windows | GitHub Releases has higher availability confidence. But BtbN provides NO macOS builds -- macOS must use evermeet.cx/osxexperts.net. |
-| ffmpeg-sidecar `auto_download()` | Custom reqwest download with progress | `auto_download()` handles everything but uses baked-in URLs. Custom reqwest gives us URL control + progress streaming to UI. |
-| Naive UI | Element Plus | Naive UI wins on bundle size, dark theme native support, desktop density. User explicitly chose Naive UI. |
-| Pinia (Composition API) | Pinia (Options API) | Composition API stores align with `<script setup>` and composables. |
-| No router (D-14) | Vue Router | Phase 1 is single-page; no routes needed. Router added in later phases if needed. |
-| Vitest | Jest | Vitest is Vite-native, faster, shares transform pipeline. User chose Vitest. |
-| Prettier integrated with ESLint | Separate Prettier + ESLint | Separate is current best practice (avoids plugin compatibility issues). ESLint 9 flat config makes this cleaner. |
+| Instead of                       | Could Use                                | Tradeoff                                                                                                                            |
+| -------------------------------- | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| ffmpeg-sidecar default URLs      | GitHub Releases (BtbN) for Linux/Windows | GitHub Releases has higher availability confidence. But BtbN provides NO macOS builds -- macOS must use evermeet.cx/osxexperts.net. |
+| ffmpeg-sidecar `auto_download()` | Custom reqwest download with progress    | `auto_download()` handles everything but uses baked-in URLs. Custom reqwest gives us URL control + progress streaming to UI.        |
+| Naive UI                         | Element Plus                             | Naive UI wins on bundle size, dark theme native support, desktop density. User explicitly chose Naive UI.                           |
+| Pinia (Composition API)          | Pinia (Options API)                      | Composition API stores align with `<script setup>` and composables.                                                                 |
+| No router (D-14)                 | Vue Router                               | Phase 1 is single-page; no routes needed. Router added in later phases if needed.                                                   |
+| Vitest                           | Jest                                     | Vitest is Vite-native, faster, shares transform pipeline. User chose Vitest.                                                        |
+| Prettier integrated with ESLint  | Separate Prettier + ESLint               | Separate is current best practice (avoids plugin compatibility issues). ESLint 9 flat config makes this cleaner.                    |
 
 **Installation:**
+
 ```bash
 # Scaffold (once)
 bun create tauri-app -- --template vue-ts sandwich
@@ -329,6 +330,7 @@ sandwich/
 **What:** Synchronous request from frontend to Rust backend via `invoke()`. Frontend calls, Rust processes, returns value.
 **When to use:** FFmpeg detection, version retrieval, store operations.
 **Example:**
+
 ```typescript
 // Frontend (src/composables/useFfmpeg.ts)
 // Source: @tauri-apps/api invoke() [VERIFIED: Tauri v2 docs]
@@ -375,6 +377,7 @@ async fn detect_ffmpeg() -> Result<FfmpegInfo, String> {
 **What:** Rust emits events to the frontend during long-running operations. Frontend listens and updates UI reactively.
 **When to use:** FFmpeg download progress, extraction progress.
 **Example:**
+
 ```rust
 // Backend — emit progress from download function
 // Source: Tauri v2 event system [VERIFIED: Context7 /websites/v2_tauri_app]
@@ -403,7 +406,7 @@ import { listen } from '@tauri-apps/api/event';
 import type { DownloadProgress } from '@/types/ffmpeg';
 
 export function subscribeDownloadProgress(
-  callback: (progress: DownloadProgress) => void
+  callback: (progress: DownloadProgress) => void,
 ): Promise<() => void> {
   return listen<DownloadProgress>('ffmpeg-download-progress', (event) => {
     callback(event.payload);
@@ -416,30 +419,59 @@ export function subscribeDownloadProgress(
 **What:** Reactive state managed in a Pinia setup store, consumed by Vue components.
 **When to use:** FFmpeg status, download progress, version info.
 **Example:**
+
 ```typescript
 // src/stores/ffmpeg.ts
 // Source: Pinia Composition API [VERIFIED: Context7 /vuejs/pinia]
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 
-export type FfmpegStatus = 'detecting' | 'found' | 'missing' | 'outdated' | 'downloading' | 'verifying' | 'verified' | 'error';
+export type FfmpegStatus =
+  | 'detecting'
+  | 'found'
+  | 'missing'
+  | 'outdated'
+  | 'downloading'
+  | 'verifying'
+  | 'verified'
+  | 'error';
 
 export const useFfmpegStore = defineStore('ffmpeg', () => {
   const status = ref<FfmpegStatus>('detecting');
   const version = ref<string | null>(null);
   const path = ref<string | null>(null);
-  const downloadProgress = ref({ percent: 0, downloadedBytes: 0, totalBytes: 0, speedBytesPerSec: 0 });
+  const downloadProgress = ref({
+    percent: 0,
+    downloadedBytes: 0,
+    totalBytes: 0,
+    speedBytesPerSec: 0,
+  });
   const downloadError = ref<string | null>(null);
   const retryCount = ref(0);
 
   const isReady = computed(() => status.value === 'found' || status.value === 'verified');
   const needsDownload = computed(() => status.value === 'missing' || status.value === 'outdated');
 
-  function setDownloadProgress(p: { percent: number; downloadedBytes: number; totalBytes: number; speedBytesPerSec: number }) {
+  function setDownloadProgress(p: {
+    percent: number;
+    downloadedBytes: number;
+    totalBytes: number;
+    speedBytesPerSec: number;
+  }) {
     downloadProgress.value = p;
   }
 
-  return { status, version, path, downloadProgress, downloadError, retryCount, isReady, needsDownload, setDownloadProgress };
+  return {
+    status,
+    version,
+    path,
+    downloadProgress,
+    downloadError,
+    retryCount,
+    isReady,
+    needsDownload,
+    setDownloadProgress,
+  };
 });
 ```
 
@@ -448,6 +480,7 @@ export const useFfmpegStore = defineStore('ffmpeg', () => {
 **What:** Root `App.vue` wraps content in `NConfigProvider` with dark theme and locale.
 **When to use:** D-32, D-33 — dark theme from Phase 1, Naive UI locale for component text.
 **Example:**
+
 ```html
 <!-- src/App.vue -->
 <!-- Source: Naive UI docs [VERIFIED: Context7 /tusen-ai/naive-ui] -->
@@ -460,14 +493,14 @@ export const useFfmpegStore = defineStore('ffmpeg', () => {
 </template>
 
 <script setup lang="ts">
-import { darkTheme, zhCN, enUS, dateZhCN, dateEnUS } from 'naive-ui';
-import { useFfmpegStore } from '@/stores/ffmpeg';
-import { useI18n } from 'vue-i18n';
-import { computed } from 'vue';
+  import { darkTheme, zhCN, enUS, dateZhCN, dateEnUS } from 'naive-ui';
+  import { useFfmpegStore } from '@/stores/ffmpeg';
+  import { useI18n } from 'vue-i18n';
+  import { computed } from 'vue';
 
-const ffmpegStore = useFfmpegStore();
-const { locale } = useI18n();
-const naiveLocale = computed(() => locale.value === 'zh-CN' ? zhCN : enUS);
+  const ffmpegStore = useFfmpegStore();
+  const { locale } = useI18n();
+  const naiveLocale = computed(() => (locale.value === 'zh-CN' ? zhCN : enUS));
 </script>
 ```
 
@@ -476,6 +509,7 @@ const naiveLocale = computed(() => locale.value === 'zh-CN' ? zhCN : enUS);
 **What:** Single `eslint.config.mjs` using `tseslint.config()` with Vue plugin.
 **When to use:** D-36 — ESLint 9 flat config for all linting.
 **Example:**
+
 ```js
 // eslint.config.mjs
 // Source: typescript-eslint docs + eslint-plugin-vue v10 [CITED: typescript-eslint.io/getting-started]
@@ -518,17 +552,17 @@ export default tseslint.config(
 
 ## Don't Hand-Roll
 
-| Problem | Don't Build | Use Instead | Why |
-|---------|-------------|-------------|-----|
-| FFmpeg binary detection | Manual `which ffmpeg` + parsing | `ffmpeg_sidecar::command::ffmpeg_is_installed()` + `ffmpeg_version()` | Handles PATH search, Windows PATHEXT, version string parsing, edge cases across OS |
-| Archive extraction (tar.xz, zip) | Custom tar/zip extraction | `ffmpeg_sidecar::download::unpack_ffmpeg()` | Handles macOS quarantine flags, permissions, nested directory structures, Windows tar since 1803 |
-| HTTP download with resume | Custom HTTP Range request logic | `reqwest` with `Range` header + streaming | Handles TLS, redirects, connection pooling, platform cert stores |
-| Persistent key-value storage | Manual JSON file read/write | `tauri-plugin-store` | Handles app_data_dir path, auto-save with debounce, atomic writes, JS/Rust interop |
-| Native directory picker | Custom file browser UI | `tauri-plugin-dialog` `open({directory: true})` | Native OS dialog, platform-appropriate UX, accessibility |
-| Progress display component | Custom progress bar | Naive UI `NProgress` | Accessible, animated, themed, consistent with rest of UI |
-| State management for download | Manual reactive state | Pinia `defineStore` | Devtools integration, hot module replacement, TypeScript inference |
-| i18n string management | Custom JSON loader + reactive locale | `vue-i18n` `createI18n()` | Pluralization, interpolation, lazy loading, Composition API support |
-| Git hooks | Custom shell scripts | `husky` + `lint-staged` | Cross-platform, staged-file-only, configurable |
+| Problem                          | Don't Build                          | Use Instead                                                           | Why                                                                                              |
+| -------------------------------- | ------------------------------------ | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| FFmpeg binary detection          | Manual `which ffmpeg` + parsing      | `ffmpeg_sidecar::command::ffmpeg_is_installed()` + `ffmpeg_version()` | Handles PATH search, Windows PATHEXT, version string parsing, edge cases across OS               |
+| Archive extraction (tar.xz, zip) | Custom tar/zip extraction            | `ffmpeg_sidecar::download::unpack_ffmpeg()`                           | Handles macOS quarantine flags, permissions, nested directory structures, Windows tar since 1803 |
+| HTTP download with resume        | Custom HTTP Range request logic      | `reqwest` with `Range` header + streaming                             | Handles TLS, redirects, connection pooling, platform cert stores                                 |
+| Persistent key-value storage     | Manual JSON file read/write          | `tauri-plugin-store`                                                  | Handles app_data_dir path, auto-save with debounce, atomic writes, JS/Rust interop               |
+| Native directory picker          | Custom file browser UI               | `tauri-plugin-dialog` `open({directory: true})`                       | Native OS dialog, platform-appropriate UX, accessibility                                         |
+| Progress display component       | Custom progress bar                  | Naive UI `NProgress`                                                  | Accessible, animated, themed, consistent with rest of UI                                         |
+| State management for download    | Manual reactive state                | Pinia `defineStore`                                                   | Devtools integration, hot module replacement, TypeScript inference                               |
+| i18n string management           | Custom JSON loader + reactive locale | `vue-i18n` `createI18n()`                                             | Pluralization, interpolation, lazy loading, Composition API support                              |
+| Git hooks                        | Custom shell scripts                 | `husky` + `lint-staged`                                               | Cross-platform, staged-file-only, configurable                                                   |
 
 **Key insight:** FFmpeg binary management seems simple (download a zip, extract, run) but has significant hidden complexity: platform-specific URL selection, macOS code signing quarantine, tar vs zip format differences across platforms, binary permission bits, version string parsing across FFmpeg build variants, and temp file cleanup. ffmpeg-sidecar handles most of this. Only the URL source selection and progress streaming need custom implementation.
 
@@ -701,12 +735,12 @@ import zhCN from './locales/zh-CN.json';
 import en from './locales/en.json';
 
 const i18n = createI18n({
-  legacy: false,            // Composition API mode
+  legacy: false, // Composition API mode
   locale: 'zh-CN',
   fallbackLocale: 'en',
   messages: {
     'zh-CN': zhCN,
-    'en': en,
+    en: en,
   },
 });
 ```
@@ -736,17 +770,18 @@ import 'virtual:uno.css';
 
 ## State of the Art
 
-| Old Approach | Current Approach | When Changed | Impact |
-|--------------|------------------|--------------|--------|
-| Tauri v1 + `tauri::api::dialog` | Tauri v2 + `tauri-plugin-dialog` | Tauri v2 (2024) | Unified plugin system across all platforms. v1 APIs removed. |
-| ESLint 8 `.eslintrc.js` | ESLint 9 `eslint.config.mjs` flat config | ESLint 9 (2024) | Flat config is the only format in ESLint 9+. Old format deprecated. |
-| `@tauri-apps/api/store` (v1) | `@tauri-apps/plugin-store` (v2) | Tauri v2 | Store is now a separate plugin, not part of core API. |
-| `create-tauri-app@3` | `create-tauri-app@4` | 2025-2026 | v4 is the current npm version (4.6.2). Interactive CLI with Vue + TS template. |
-| `ffmpeg-sidecar` default URLs | Custom URL selection | This phase | GitHub Releases for Linux/Windows, default sources for macOS, mirror for CN. |
-| `KEEP_ONLY_FFMPEG=1` | Do NOT set (need ffprobe) | This phase | D-16 requires ffprobe for Phase 2 metadata extraction. |
-| Vue I18n v10 (Options API default) | Vue I18n v11 (`legacy: false`) | v11 (2025) | Composition API mode is now the default in v11. |
+| Old Approach                       | Current Approach                         | When Changed    | Impact                                                                         |
+| ---------------------------------- | ---------------------------------------- | --------------- | ------------------------------------------------------------------------------ |
+| Tauri v1 + `tauri::api::dialog`    | Tauri v2 + `tauri-plugin-dialog`         | Tauri v2 (2024) | Unified plugin system across all platforms. v1 APIs removed.                   |
+| ESLint 8 `.eslintrc.js`            | ESLint 9 `eslint.config.mjs` flat config | ESLint 9 (2024) | Flat config is the only format in ESLint 9+. Old format deprecated.            |
+| `@tauri-apps/api/store` (v1)       | `@tauri-apps/plugin-store` (v2)          | Tauri v2        | Store is now a separate plugin, not part of core API.                          |
+| `create-tauri-app@3`               | `create-tauri-app@4`                     | 2025-2026       | v4 is the current npm version (4.6.2). Interactive CLI with Vue + TS template. |
+| `ffmpeg-sidecar` default URLs      | Custom URL selection                     | This phase      | GitHub Releases for Linux/Windows, default sources for macOS, mirror for CN.   |
+| `KEEP_ONLY_FFMPEG=1`               | Do NOT set (need ffprobe)                | This phase      | D-16 requires ffprobe for Phase 2 metadata extraction.                         |
+| Vue I18n v10 (Options API default) | Vue I18n v11 (`legacy: false`)           | v11 (2025)      | Composition API mode is now the default in v11.                                |
 
 **Deprecated/outdated:**
+
 - `tauri::api::dialog` — removed in Tauri v2. Use `tauri-plugin-dialog`.
 - `@tauri-apps/api/dialog` — removed in Tauri v2. Use `@tauri-apps/plugin-dialog`.
 - `.eslintrc.*` config files — ESLint 9+ uses flat config only.
@@ -756,63 +791,56 @@ import 'virtual:uno.css';
 
 ## Assumptions Log
 
-| # | Claim | Section | Risk if Wrong |
-|---|-------|---------|---------------|
-| A1 | `xattr` command is always available on macOS (ships with OS since 10.4) | Common Pitfalls #2 | LOW: `xattr` is part of the base macOS install. Only risk is if Apple removes it in a future OS version. |
-| A2 | BtbN/FFmpeg-Builds GitHub Releases provides ffprobe in the same archive as ffmpeg | Code Examples | MEDIUM: If verified that ffprobe is NOT in the archive, we need a separate ffprobe download step. User reports and the project's README indicate both are bundled. |
-| A3 | jsDelivr CDN can proxy GitHub Releases assets for CN mirror fallback | Architecture Patterns | MEDIUM: jsDelivr's China CDN access depends on China's Great Firewall status at any given time. Alternative: ghproxy.com or self-hosted mirror. |
-| A4 | `reqwest` with `stream` feature provides Content-Length and download progress tracking | Standard Stack | LOW: This is standard HTTP client behavior, well-documented in reqwest. |
-| A5 | Tauri v2 + bun integration is stable (Tauri docs explicitly document `bun create tauri-app` and `bun tauri dev`) | Architecture Patterns | LOW: Confirmed by official Tauri v2 docs. Bun is listed as a supported package manager. |
-| A6 | create-tauri-app v4.6.2 Vue+TS template generates a project with Vite 8.x (not a lower version) | Common Pitfalls #3 | LOW: Can be verified in seconds by scaffolding and checking. If wrong, manual version adjustment is trivial. |
+| #   | Claim                                                                                                            | Section               | Risk if Wrong                                                                                                                                                      |
+| --- | ---------------------------------------------------------------------------------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| A1  | `xattr` command is always available on macOS (ships with OS since 10.4)                                          | Common Pitfalls #2    | LOW: `xattr` is part of the base macOS install. Only risk is if Apple removes it in a future OS version.                                                           |
+| A2  | BtbN/FFmpeg-Builds GitHub Releases provides ffprobe in the same archive as ffmpeg                                | Code Examples         | MEDIUM: If verified that ffprobe is NOT in the archive, we need a separate ffprobe download step. User reports and the project's README indicate both are bundled. |
+| A3  | jsDelivr CDN can proxy GitHub Releases assets for CN mirror fallback                                             | Architecture Patterns | MEDIUM: jsDelivr's China CDN access depends on China's Great Firewall status at any given time. Alternative: ghproxy.com or self-hosted mirror.                    |
+| A4  | `reqwest` with `stream` feature provides Content-Length and download progress tracking                           | Standard Stack        | LOW: This is standard HTTP client behavior, well-documented in reqwest.                                                                                            |
+| A5  | Tauri v2 + bun integration is stable (Tauri docs explicitly document `bun create tauri-app` and `bun tauri dev`) | Architecture Patterns | LOW: Confirmed by official Tauri v2 docs. Bun is listed as a supported package manager.                                                                            |
+| A6  | create-tauri-app v4.6.2 Vue+TS template generates a project with Vite 8.x (not a lower version)                  | Common Pitfalls #3    | LOW: Can be verified in seconds by scaffolding and checking. If wrong, manual version adjustment is trivial.                                                       |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **GitHub Releases as primary macOS source?**
-   - What we know: BtbN/FFmpeg-Builds (dominant GitHub Releases FFmpeg source) does NOT provide macOS builds. ffmpeg-sidecar uses evermeet.cx (x86_64) and osxexperts.net (aarch64).
-   - What's unclear: Is there another GitHub-hosted FFmpeg build that provides macOS + ffprobe? Gyansoft (Windows-only), johnvansickle (Linux-only). The FFmpeg project itself does not distribute binaries.
-   - Recommendation: Accept ffmpeg-sidecar's macOS URLs as primary for macOS. GitHub Releases primary only for Linux/Windows. Document this clearly so user understands the platform constraint behind D-21.
+   - RESOLVED: Accept ffmpeg-sidecar's macOS URLs as primary for macOS. GitHub Releases primary only for Linux/Windows. BtbN/FFmpeg-Builds does NOT provide macOS builds. evermeet.cx (x86_64) and osxexperts.net (aarch64) are the established macOS distribution channels used by ffmpeg-sidecar. Document this platform constraint clearly.
 
 2. **How to implement download resume (D-26)?**
-   - What we know: HTTP Range requests enable resuming partial downloads. reqwest supports `Range` header. We need to track downloaded byte count and temp file path.
-   - What's unclear: Does ffmpeg-sidecar's `download_ffmpeg_package()` support resume? It does not appear to.
-   - Recommendation: Bypass `download_ffmpeg_package()` entirely. Implement custom download with reqwest streaming, check temp file existence on startup, send `Range: bytes={downloaded}-` header. Only use `unpack_ffmpeg()` from ffmpeg-sidecar.
+   - RESOLVED: Bypass `download_ffmpeg_package()` entirely. Implement custom download with reqwest streaming, check temp file existence on startup, send `Range: bytes={downloaded}-` header. Only use `unpack_ffmpeg()` from ffmpeg-sidecar for extraction. Track downloaded byte count and temp file path in the download state.
 
 3. **What is the specific GitHub Releases URL pattern for BtbN builds?**
-   - What we know: BtbN/FFmpeg-Builds releases auto-builds at `https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-{platform}-{variant}.{ext}`. Platform values: `linux64`, `linuxarm64`, `win64`. No macOS.
-   - What's unclear: Exact latest version tag (tags are date-based like `autobuild-2026-05-12-13-59`). The `latest` redirect URL works but doesn't allow version caching.
-   - Recommendation: Use the `/releases/latest` redirect for initial download. Parse the redirect URL to extract the version tag for caching and update checks.
+   - RESOLVED: Use the `/releases/latest` redirect for initial download on Linux/Windows. Parse the redirect URL to extract the version tag (date-based, e.g., `autobuild-2026-05-12-13-59`) for caching and update checks. URL pattern: `https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-{linux64|linuxarm64|win64}-{variant}.{ext}`.
 
 4. **Should `tauri-plugin-shell` be used for xattr or should we use `std::process::Command` directly?**
-   - What we know: xattr is an OS command, not FFmpeg-related. `std::process::Command` works from Rust without the shell plugin. `tauri-plugin-shell` is designed for commands the frontend needs to execute.
-   - What's unclear: Whether we want xattr execution to be triggered from frontend (needs plugin) or handled entirely in Rust setup (no plugin needed).
-   - Recommendation: Execute `xattr` in Rust setup hook after unpack completes. No need for shell plugin specifically for xattr. Install shell plugin anyway (needed for future phases).
+   - RESOLVED: Execute `xattr` in Rust setup hook via `std::process::Command` after unpack completes. No need for shell plugin specifically for xattr. Install `tauri-plugin-shell` anyway (needed for future phases like Phase 2 FFmpeg process spawning).
 
 5. **How to handle the CN mirror fallback URL construction?**
-   - What we know: User wants CN-friendly mirror (D-21). jsDelivr CDN can proxy GitHub Releases: `https://cdn.jsdelivr.net/gh/BtbN/FFmpeg-Builds@latest/...`. However, this doesn't help for macOS sources (evermeet.cx already works in CN).
-   - What's unclear: Does jsDelivr's China CDN edge work reliably from mainland China? Is ghproxy.com more appropriate?
-   - Recommendation: Implement a fallback chain: Primary URL -> jsDelivr CDN proxy -> error with manual download link. Document which mirrors were tried so users can debug.
+   - RESOLVED: Implement a fallback chain: Primary URL → jsDelivr CDN proxy → error with manual download link. For Linux/Windows GitHub-hosted builds, use `https://cdn.jsdelivr.net/gh/BtbN/FFmpeg-Builds@latest/...`. For macOS, evermeet.cx and osxexperts.net already serve China. Document which mirrors were tried so users can debug connectivity issues.
 
 ## Environment Availability
 
-| Dependency | Required By | Available | Version | Fallback |
-|------------|------------|-----------|---------|----------|
-| Node.js | Frontend dev, Vite, ESLint | Yes | v23.11.0 | -- |
-| bun | Package manager (D-05), dev server | Yes | 1.3.2 | -- |
-| Rust (rustc) | Tauri backend compilation | Yes | 1.94.1 | -- |
-| Cargo | Rust dependency management | Yes | 1.94.1 | -- |
-| pnpm | Alternative if bun has issues | Yes | 10.33.0 | Use if bun scaffolding fails |
-| FFmpeg | Runtime (detected or downloaded) | No | -- | This phase will install it |
-| FFprobe | Runtime (Phase 2 metadata) | No | -- | This phase will install it |
-| Git | Version control, husky | Yes | (present) | -- |
-| macOS | Target platform (development) | Yes | Darwin 25.0.0 (ARM64) | -- |
+| Dependency   | Required By                        | Available | Version               | Fallback                     |
+| ------------ | ---------------------------------- | --------- | --------------------- | ---------------------------- |
+| Node.js      | Frontend dev, Vite, ESLint         | Yes       | v23.11.0              | --                           |
+| bun          | Package manager (D-05), dev server | Yes       | 1.3.2                 | --                           |
+| Rust (rustc) | Tauri backend compilation          | Yes       | 1.94.1                | --                           |
+| Cargo        | Rust dependency management         | Yes       | 1.94.1                | --                           |
+| pnpm         | Alternative if bun has issues      | Yes       | 10.33.0               | Use if bun scaffolding fails |
+| FFmpeg       | Runtime (detected or downloaded)   | No        | --                    | This phase will install it   |
+| FFprobe      | Runtime (Phase 2 metadata)         | No        | --                    | This phase will install it   |
+| Git          | Version control, husky             | Yes       | (present)             | --                           |
+| macOS        | Target platform (development)      | Yes       | Darwin 25.0.0 (ARM64) | --                           |
 
 **Missing dependencies with no fallback:**
+
 - None. FFmpeg/FFprobe are the purpose of this phase — their absence is expected and will be resolved by the implementation.
 
 **Missing dependencies with fallback:**
+
 - None. All build/runtime tools are available.
 
 **Platform notes:**
+
 - Development machine: macOS ARM64 (Apple Silicon). ffmpeg-sidecar will select `https://www.osxexperts.net/ffmpeg80arm.zip` as the default macOS aarch64 binary.
 - For cross-platform consideration: Linux and Windows builds will need GitHub Actions CI runners. Linux requires `libwebkit2gtk-4.1-dev` and other system deps installed on CI.
 
@@ -820,29 +848,29 @@ import 'virtual:uno.css';
 
 ### Applicable ASVS Categories
 
-| ASVS Category | Applies | Standard Control |
-|---------------|---------|------------------|
-| V2 Authentication | No | N/A — no user accounts in Phase 1 |
-| V3 Session Management | No | N/A — no sessions |
-| V4 Access Control | No | N/A — local desktop app |
-| V5 Input Validation | Yes | TypeScript strict mode (D-03) validates FFmpeg version strings, paths. Rust type system validates Tauri command parameters. Path traversal prevention via `tauri-plugin-fs` scope restrictions. |
-| V6 Cryptography | No | N/A — no cryptographic operations |
-| V7 Error Handling | Yes | `anyhow` for ergonomic Rust errors. Frontend error boundaries via Pinia store error state. Never expose raw system paths or FFmpeg stderr to user without sanitization. |
-| V8 Data Protection | Yes | FFmpeg binary path, version, download time stored in local app_data_dir via `tauri-plugin-store`. No sensitive data. |
-| V9 Communication | Yes | All IPC via Tauri's typed `invoke()` and event system. Plugin permissions explicitly allow-listed in capabilities. |
-| V10 Malicious Code | Yes | Downloaded FFmpeg binary verified post-extraction (`ffmpeg -version` succeeds). Checksum verification recommended for download integrity (can be added for GitHub Releases which publish checksums). |
+| ASVS Category         | Applies | Standard Control                                                                                                                                                                                     |
+| --------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| V2 Authentication     | No      | N/A — no user accounts in Phase 1                                                                                                                                                                    |
+| V3 Session Management | No      | N/A — no sessions                                                                                                                                                                                    |
+| V4 Access Control     | No      | N/A — local desktop app                                                                                                                                                                              |
+| V5 Input Validation   | Yes     | TypeScript strict mode (D-03) validates FFmpeg version strings, paths. Rust type system validates Tauri command parameters. Path traversal prevention via `tauri-plugin-fs` scope restrictions.      |
+| V6 Cryptography       | No      | N/A — no cryptographic operations                                                                                                                                                                    |
+| V7 Error Handling     | Yes     | `anyhow` for ergonomic Rust errors. Frontend error boundaries via Pinia store error state. Never expose raw system paths or FFmpeg stderr to user without sanitization.                              |
+| V8 Data Protection    | Yes     | FFmpeg binary path, version, download time stored in local app_data_dir via `tauri-plugin-store`. No sensitive data.                                                                                 |
+| V9 Communication      | Yes     | All IPC via Tauri's typed `invoke()` and event system. Plugin permissions explicitly allow-listed in capabilities.                                                                                   |
+| V10 Malicious Code    | Yes     | Downloaded FFmpeg binary verified post-extraction (`ffmpeg -version` succeeds). Checksum verification recommended for download integrity (can be added for GitHub Releases which publish checksums). |
 
 ### Known Threat Patterns for Tauri + FFmpeg Desktop App
 
-| Pattern | STRIDE | Standard Mitigation |
-|---------|--------|---------------------|
-| Malicious FFmpeg binary substitution (MITM during download) | Tampering | Use HTTPS (enforced by reqwest). Verify checksum against GitHub Releases published SHA256. |
-| Path traversal in user-selected download directory | Tampering / Elevation | `tauri-plugin-fs` scope restricts file operations to allowed paths. Sanitize user-provided paths. |
-| Command injection via FFmpeg arguments (future phases) | Elevation | Not applicable in Phase 1 (only version check and download). For Phase 2+: use argument arrays, never string interpolation. |
-| DLL sideloading on Windows | Elevation | Verify digital signature of downloaded binaries on Windows. Store FFmpeg in app-local directory (not system PATH). |
-| Unvalidated binary execution | Elevation | `ffmpeg -version` verification catches corrupt/non-executable files. macOS quarantine removal only after explicit user download consent. |
-| Tauri webview CSP bypass | Information Disclosure | Tauri v2 default CSP is restrictive. Plugin capabilities explicitly allow-listed per command. |
-| Download temp file leakage | Information Disclosure | Clean temp files on cancel (D-27) and on app exit. Use OS temp directory (`std::env::temp_dir()`). |
+| Pattern                                                     | STRIDE                 | Standard Mitigation                                                                                                                      |
+| ----------------------------------------------------------- | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Malicious FFmpeg binary substitution (MITM during download) | Tampering              | Use HTTPS (enforced by reqwest). Verify checksum against GitHub Releases published SHA256.                                               |
+| Path traversal in user-selected download directory          | Tampering / Elevation  | `tauri-plugin-fs` scope restricts file operations to allowed paths. Sanitize user-provided paths.                                        |
+| Command injection via FFmpeg arguments (future phases)      | Elevation              | Not applicable in Phase 1 (only version check and download). For Phase 2+: use argument arrays, never string interpolation.              |
+| DLL sideloading on Windows                                  | Elevation              | Verify digital signature of downloaded binaries on Windows. Store FFmpeg in app-local directory (not system PATH).                       |
+| Unvalidated binary execution                                | Elevation              | `ffmpeg -version` verification catches corrupt/non-executable files. macOS quarantine removal only after explicit user download consent. |
+| Tauri webview CSP bypass                                    | Information Disclosure | Tauri v2 default CSP is restrictive. Plugin capabilities explicitly allow-listed per command.                                            |
+| Download temp file leakage                                  | Information Disclosure | Clean temp files on cancel (D-27) and on app exit. Use OS temp directory (`std::env::temp_dir()`).                                       |
 
 ## Sources
 
@@ -874,6 +902,7 @@ import 'virtual:uno.css';
 ## Metadata
 
 **Confidence breakdown:**
+
 - Standard stack: HIGH — all versions verified against npm registry and crates.io on 2026-05-13
 - Architecture: HIGH — Tauri v2 plugin system, IPC patterns, and ffmpeg-sidecar API confirmed through multiple Context7 sources
 - Pitfalls: MEDIUM-HIGH — pitfalls identified from library documentation and known Tauri v2 migration issues; macOS quarantine pitfall is well-documented
@@ -883,5 +912,6 @@ import 'virtual:uno.css';
 **Valid until:** 2026-06-13 (30 days for stable libraries; ffmpeg-sidecar URLs may change, re-verify if Phase 1 extends beyond this date)
 
 **Note on CLAUDE.md deviations identified:**
+
 - CLAUDE.md recommends `KEEP_ONLY_FFMPEG=1` (skip ffplay/ffprobe to save ~30MB). D-16 overrides this: user requires ffprobe for Phase 2 metadata extraction.
 - CLAUDE.md lists `eslint@9.x`, `eslint-plugin-vue@10.x`, `@eslint/js@9.x` — versions confirmed and matched to latest in 9.x/10.x lines (ESLint 10 exists but user pinned to 9).

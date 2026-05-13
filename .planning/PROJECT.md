@@ -54,18 +54,19 @@
 
 ## Key Decisions
 
-| Decision | Rationale | Outcome |
-|----------|-----------|---------|
-| Tauri 替代 Ratatui TUI | 用户偏好切换 | — Pending |
-| Vue 3 前端 | 用户指定 | — Pending |
-| 自动生成种子（非手动编排） | 用户指定 | — Pending |
-| 一个种子处理所有视频 | 暂定，后续支持复杂对应关系 | — Pending |
+| Decision                   | Rationale                  | Outcome   |
+| -------------------------- | -------------------------- | --------- |
+| Tauri 替代 Ratatui TUI     | 用户偏好切换               | — Pending |
+| Vue 3 前端                 | 用户指定                   | — Pending |
+| 自动生成种子（非手动编排） | 用户指定                   | — Pending |
+| 一个种子处理所有视频       | 暂定，后续支持复杂对应关系 | — Pending |
 
 ## Evolution
 
 This document evolves at phase transitions and milestone boundaries.
 
 **After each phase transition** (via `/gsd-transition`):
+
 1. Requirements invalidated? → Move to Out of Scope with reason
 2. Requirements validated? → Move to Validated with phase reference
 3. New requirements emerged? → Add to Active
@@ -73,10 +74,12 @@ This document evolves at phase transitions and milestone boundaries.
 5. "What This Is" still accurate? → Update if drifted
 
 **After each milestone** (via `/gsd-complete-milestone`):
+
 1. Full review of all sections
 2. Core Value check — still the right priority?
 3. Audit Out of Scope — reasons still valid?
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-12 after initialization*
+
+_Last updated: 2026-05-12 after initialization_

@@ -22,6 +22,7 @@ The two highest risks are FFmpeg download reliability (the app is non-functional
 The stack is anchored on Tauri 2.11.x (Rust backend) + Vue 3.5.x (web frontend), the user-specified constraint. The critical architectural decision is using **ffmpeg-sidecar** (a Rust crate that handles platform-specific FFmpeg binary download, version detection, and structured progress parsing) rather than ffmpeg-next (C bindings requiring system FFmpeg dev libraries) or raw `std::process::Command` (no auto-download, no progress parsing). This directly satisfies the FFMPEG-01 and FFMPEG-02 requirements from PROJECT.md.
 
 **Core technologies:**
+
 - **Tauri 2.11.x**: Production-grade Rust+web desktop framework with mature plugin system, sidecar bundling, and IPC. v2 is required (v1 is EOL).
 - **Vue 3.5.x + Vite 8.x + TypeScript 6.x**: Modern frontend stack. Composition API with `<script setup>` for concise reactive code. Vite for instant HMR and optimized production builds for Tauri's webview.
 - **ffmpeg-sidecar 2.5.x**: FFmpeg binary management with `auto_download()`. Handles platform detection, download from official builds, extraction, and caching. Also provides `filter_progress()` for parsing FFmpeg stderr.
@@ -36,6 +37,7 @@ The stack is anchored on Tauri 2.11.x (Rust backend) + Vue 3.5.x (web frontend),
 **Source:** [FEATURES.md](./FEATURES.md) -- MEDIUM confidence. Table-stakes features verified against competitive landscape; differentiators derived from PROJECT.md requirements.
 
 **Must have for launch (P1 -- 9 features):**
+
 - FFmpeg detection + one-click download when missing -- zero-config prerequisite
 - Seed generation (auto-randomized multi-operation chains) -- the core value proposition
 - Seed list management (view, rename, delete, duplicate) -- users build a seed library
@@ -47,6 +49,7 @@ The stack is anchored on Tauri 2.11.x (Rust backend) + Vue 3.5.x (web frontend),
 - Error handling (per-file failures, batch continues) -- robustness
 
 **Should have post-validation (P2 -- 6 features):**
+
 - Video preview thumbnails -- visual identification of queued files
 - Queue reordering -- control over processing sequence
 - Processing log and history -- reviewable record of what was done
@@ -55,6 +58,7 @@ The stack is anchored on Tauri 2.11.x (Rust backend) + Vue 3.5.x (web frontend),
 - Processing cancellation polish -- clean state after abort
 
 **Defer to v2+ (P3 -- 5 features):**
+
 - Different seeds per video in a batch -- explodes state machine complexity
 - Project files / workspace persistence -- adds file format design and backward compat burden
 - Minimize to tray / background processing -- significant system tray integration
@@ -70,6 +74,7 @@ The stack is anchored on Tauri 2.11.x (Rust backend) + Vue 3.5.x (web frontend),
 Three-layer split: Vue 3 frontend (components + Pinia stores) communicates with the Rust backend via Tauri's IPC boundary (commands for request-response, events for progress streaming). Rust backend organized into services (pure domain logic, no Tauri dependency, fully unit-testable) and commands (thin IPC handlers that extract state and delegate to services). External processes (FFmpeg, FFprobe) spawned via `tauri-plugin-shell`, progress communicated through Rust-emitted events.
 
 **Major components:**
+
 1. **Seed Engine** (Rust service) -- Random seed generation, operation chain construction, safety constraint validation, JSON serialization. Stateless and pure -- core IP.
 2. **Video Manager** (Rust service) -- Video file import validation, FFprobe metadata extraction, queue item creation. Spawns FFprobe as short-lived child process.
 3. **FFmpeg Engine** (Rust service) -- FFmpeg detection, auto-download, command building (seed ops to filtergraph args), async process spawning with stderr progress parsing, cancellation.
@@ -179,12 +184,12 @@ Based on the dependency graph from ARCHITECTURE.md, the priority matrix from FEA
 
 ## Confidence Assessment
 
-| Area | Confidence | Notes |
-|------|------------|-------|
-| Stack | HIGH | All technology decisions verified against Context7 official docs. Current versions confirmed via npm/crates.io. No speculative choices. |
-| Features | MEDIUM | Table-stakes validated against competitive landscape. Competitor analysis partially based on training knowledge (HandBrake, Shutter Encoder -- not verified via official sources). Differentiators from PROJECT.md requirements. P1/P2/P3 prioritization is sound. |
-| Architecture | HIGH | Three-layer pattern, Command-Event Split, Thin Commands/Fat Services, Rust Owns Truth/Pinia Mirrors all verified against Tauri v2 official docs. Project structure and build order follow documented best practices. |
-| Pitfalls | MEDIUM | 10 critical pitfalls identified with prevention strategies, verification criteria, and phase mapping. Technical debt patterns, integration gotchas, and performance traps catalogued. Source quality varies: Tauri sidecar/event system is HIGH (Context7 official docs), FFmpeg progress protocol is HIGH (Context7 FFmpeg docs), Vue reactivity performance is MEDIUM (ecosystem knowledge), FFmpeg licensing is MEDIUM (build config is HIGH, legal interpretation requires lawyer review). |
+| Area         | Confidence | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| ------------ | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Stack        | HIGH       | All technology decisions verified against Context7 official docs. Current versions confirmed via npm/crates.io. No speculative choices.                                                                                                                                                                                                                                                                                                                                                        |
+| Features     | MEDIUM     | Table-stakes validated against competitive landscape. Competitor analysis partially based on training knowledge (HandBrake, Shutter Encoder -- not verified via official sources). Differentiators from PROJECT.md requirements. P1/P2/P3 prioritization is sound.                                                                                                                                                                                                                             |
+| Architecture | HIGH       | Three-layer pattern, Command-Event Split, Thin Commands/Fat Services, Rust Owns Truth/Pinia Mirrors all verified against Tauri v2 official docs. Project structure and build order follow documented best practices.                                                                                                                                                                                                                                                                           |
+| Pitfalls     | MEDIUM     | 10 critical pitfalls identified with prevention strategies, verification criteria, and phase mapping. Technical debt patterns, integration gotchas, and performance traps catalogued. Source quality varies: Tauri sidecar/event system is HIGH (Context7 official docs), FFmpeg progress protocol is HIGH (Context7 FFmpeg docs), Vue reactivity performance is MEDIUM (ecosystem knowledge), FFmpeg licensing is MEDIUM (build config is HIGH, legal interpretation requires lawyer review). |
 
 **Overall confidence:** MEDIUM-HIGH (HIGH on stack and architecture, MEDIUM on features and pitfalls)
 
@@ -228,6 +233,7 @@ Based on the dependency graph from ARCHITECTURE.md, the priority matrix from FEA
 - Training knowledge: FFmpeg stderr progress parsing format - Validated against Tauri shell plugin API but not tested against specific downloaded FFmpeg version
 
 ---
-*Research completed: 2026-05-12*
-*Ready for roadmap: yes*
-*Research files: STACK.md, FEATURES.md, ARCHITECTURE.md, PITFALLS.md all complete*
+
+_Research completed: 2026-05-12_
+_Ready for roadmap: yes_
+_Research files: STACK.md, FEATURES.md, ARCHITECTURE.md, PITFALLS.md all complete_

@@ -8,8 +8,22 @@ dependency_graph:
   provides: [buildable-project-skeleton, pinned-dependencies, all-config-files]
   affects: [01-02-ffmpeg-detection, 01-03-ffmpeg-download, 01-04-frontend-infra]
 tech_stack:
-  added: [tauri@2.11.1, vue@3.5.34, vite@8.0.12, typescript@6.0.3, naive-ui@2.44.1, pinia@3.0.4, vue-i18n@11.4.2, unocss@66.6.8, ffmpeg-sidecar@2.5.1, tokio@1.52.3, reqwest@0.12]
-  patterns: [exact-version-pinning, tauri-generate-context, vite-vue-plugin-setup, unocss-vite-integration]
+  added:
+    [
+      tauri@2.11.1,
+      vue@3.5.34,
+      vite@8.0.12,
+      typescript@6.0.3,
+      naive-ui@2.44.1,
+      pinia@3.0.4,
+      vue-i18n@11.4.2,
+      unocss@66.6.8,
+      ffmpeg-sidecar@2.5.1,
+      tokio@1.52.3,
+      reqwest@0.12,
+    ]
+  patterns:
+    [exact-version-pinning, tauri-generate-context, vite-vue-plugin-setup, unocss-vite-integration]
 key_files:
   created:
     - package.json
@@ -31,14 +45,14 @@ key_files:
     - src-tauri/icons/icon.png
   modified: []
 decisions:
-  - "Manual scaffold instead of create-tauri-app (CLI requires TTY, not available in executor environment)"
-  - "All 39 user decisions (D-01 through D-39) from CONTEXT.md encoded in config files"
-  - "Placeholder RGBA icons generated programmatically for Tauri build requirement"
-  - "Frontend directories created per D-11 with .gitkeep placeholders"
-  - "Tauri gen/schemas committed for IDE $schema validation support"
+  - 'Manual scaffold instead of create-tauri-app (CLI requires TTY, not available in executor environment)'
+  - 'All 39 user decisions (D-01 through D-39) from CONTEXT.md encoded in config files'
+  - 'Placeholder RGBA icons generated programmatically for Tauri build requirement'
+  - 'Frontend directories created per D-11 with .gitkeep placeholders'
+  - 'Tauri gen/schemas committed for IDE $schema validation support'
 metrics:
-  duration: "~10 minutes"
-  completed_date: "2026-05-13T03:51:23Z"
+  duration: '~10 minutes'
+  completed_date: '2026-05-13T03:51:23Z'
   tasks: 2
   files_created: 26
   files_modified: 0
@@ -57,6 +71,7 @@ Tauri 2.11.1 desktop app scaffolded with Vue 3.5.34 frontend, Vite 8.0.12 build 
 Scaffolded the complete Tauri + Vue + Vite + TypeScript project skeleton manually (create-tauri-app CLI requires a TTY, which is unavailable in the executor environment). All dependencies installed at exact pinned versions as specified in CLAUDE.md and RESEARCH.md.
 
 **Key accomplishments:**
+
 - Created all 15 source/config files matching the vue-ts template structure
 - 9 production dependencies at exact versions (vue@3.5.34, @tauri-apps/api@2.11.0, naive-ui@2.44.1, pinia@3.0.4, vue-i18n@11.4.2, 4 Tauri plugins)
 - 17 devDependencies at exact versions (vite@8.0.12, typescript@6.0.3, eslint@9.39.4, vitest@4.1.6, and 13 more)
@@ -76,8 +91,9 @@ Scaffolded the complete Tauri + Vue + Vite + TypeScript project skeleton manuall
 Verified all config files match the plan's exact specifications. Created frontend directory structure and committed generated Tauri schema files.
 
 **Key accomplishments:**
+
 - tauri.conf.json: identifier "com.sandwich.app", title "Sandwich", 1200x800 with minWidth 900, minHeight 600, beforeDevCommand "bun dev"
-- tsconfig.json: strict=true, noUnusedLocals/Parameters, noFallthroughCasesInSwitch, noUncheckedSideEffectImports, @/* path alias
+- tsconfig.json: strict=true, noUnusedLocals/Parameters, noFallthroughCasesInSwitch, noUncheckedSideEffectImports, @/\* path alias
 - tsconfig.node.json: separate config for build tool files (vite.config.ts, uno.config.ts)
 - vite.config.ts: Vue() and UnoCSS() plugins, port 1420, strict port, Tauri HMR config, @ alias resolve
 - uno.config.ts: presetUno() atomic CSS
@@ -91,6 +107,7 @@ Verified all config files match the plan's exact specifications. Created fronten
 ## Verification Results
 
 ### Task 1 Verification
+
 - [x] No caret (^) or tilde (~) in any package.json dependency version
 - [x] All 9 production dependencies at exact pinned versions
 - [x] All 17 devDependencies at exact pinned versions
@@ -101,8 +118,9 @@ Verified all config files match the plan's exact specifications. Created fronten
 - [x] All 11 npm scripts present
 
 ### Task 2 Verification
+
 - [x] tauri.conf.json: identifier "com.sandwich.app", title "Sandwich", 1200x800, resizable, minWidth 900, minHeight 600
-- [x] tsconfig.json: strict=true, @/* alias
+- [x] tsconfig.json: strict=true, @/\* alias
 - [x] vite.config.ts: Vue + UnoCSS plugins
 - [x] uno.config.ts: presetUno() exported
 - [x] capabilities/default.json: store:default, shell:default, dialog:default, fs:default
@@ -116,6 +134,7 @@ Verified all config files match the plan's exact specifications. Created fronten
 ### Auto-fixed Issues
 
 **1. [Rule 3 - Blocking] create-tauri-app requires TTY — manually scaffolded instead**
+
 - **Found during:** Task 1, Step A
 - **Issue:** Both `bun create tauri-app@4.6.2` and `npx create-tauri-app@4.6.2` fail with "IO error: not a terminal" in the non-interactive executor environment
 - **Fix:** Manually created all 15 scaffold files matching the vue-ts template output; all config files set to the exact specifications from the plan
@@ -123,6 +142,7 @@ Verified all config files match the plan's exact specifications. Created fronten
 - **Commit:** 4b70a4d
 
 **2. [Rule 3 - Blocking] Missing icon.png required by Tauri generate_context! macro**
+
 - **Found during:** Task 1, Step F (cargo check)
 - **Issue:** `generate_context!()` macro panics: "failed to open icon .../icons/icon.png: No such file or directory"
 - **Fix:** Created minimal valid RGBA PNG icons (512x512, 128x128, 32x32, 128x128@2x) programmatically
@@ -130,6 +150,7 @@ Verified all config files match the plan's exact specifications. Created fronten
 - **Commit:** 4b70a4d
 
 **3. [Rule 3 - Blocking] First icon attempt used RGB format — Tauri requires RGBA**
+
 - **Found during:** Task 1, Step F (cargo check retry)
 - **Issue:** `generate_context!()` macro panics: "icon .../icons/icon.png is not RGBA"
 - **Fix:** Regenerated all icons with color type 6 (RGBA) instead of color type 2 (RGB)
@@ -145,12 +166,12 @@ Verified all config files match the plan's exact specifications. Created fronten
 
 All 4 mitigations from the plan's `<threat_model>` are in place:
 
-| Threat ID | Mitigation | Status |
-|-----------|-----------|--------|
-| T-01-01 | capabilities/default.json uses per-plugin allow-lists | Implemented |
-| T-01-02 | No secrets in config files | Verified |
-| T-01-03 | fs scope restricted to $APPDATA/** and $HOME/** | Implemented |
-| T-01-04 | All versions exact-pinned, bun.lock provides integrity hashes | Implemented |
+| Threat ID | Mitigation                                                    | Status      |
+| --------- | ------------------------------------------------------------- | ----------- |
+| T-01-01   | capabilities/default.json uses per-plugin allow-lists         | Implemented |
+| T-01-02   | No secrets in config files                                    | Verified    |
+| T-01-03   | fs scope restricted to $APPDATA/** and $HOME/**               | Implemented |
+| T-01-04   | All versions exact-pinned, bun.lock provides integrity hashes | Implemented |
 
 No new threat surfaces introduced beyond what the plan accounts for.
 

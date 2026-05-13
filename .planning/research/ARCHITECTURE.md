@@ -94,15 +94,15 @@
 
 ### Component Responsibilities
 
-| Component | Responsibility | Typical Implementation |
-|-----------|----------------|------------------------|
-| **Seed Engine** (Rust) | Random seed generation, validation against constraints, JSON serialization/deserialization | Pure Rust structs + `rand` crate + `serde_json`. Stateless — input is random seed value, output is `Seed` struct. |
-| **Video Manager** (Rust) | Import video files, validate formats, extract metadata via FFprobe, queue management | Spawns `ffprobe` via `tauri_plugin_shell`, parses JSON output, returns `VideoMeta` structs. |
-| **FFmpeg Engine** (Rust) | FFmpeg detection/download, command building from seed ops, process spawning, progress parsing, cancellation | Uses `tauri_plugin_shell::ShellExt` to spawn FFmpeg, reads `CommandEvent::Stderr` for progress, emits events to frontend. |
-| **Managed State** (Rust) | In-memory store for seeds, video queue, processing status, FFmpeg path | `tauri::State` with `std::sync::Mutex` (sync commands) or `tokio::sync::Mutex` (async commands). Managed via `app.manage()`. |
-| **Tauri Commands** (Rust) | IPC entry points that delegate to domain services | `#[tauri::command]` functions. Each receives `State<>` for managed data, `AppHandle` for event emission. |
-| **Pinia Stores** (Vue) | UI state: seed list display, video queue display, processing progress, selection state, loading/error flags | Setup stores (Composition API) with `ref()`/`computed()`. Stores mirror Rust state fetched via `invoke()` commands. |
-| **Vue Components** (Vue) | Layout, drag-and-drop zones, seed list, video preview, progress bars, settings | `<script setup>` components using composables and Pinia stores. No direct FFmpeg interaction — all through Tauri commands. |
+| Component                 | Responsibility                                                                                              | Typical Implementation                                                                                                       |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| **Seed Engine** (Rust)    | Random seed generation, validation against constraints, JSON serialization/deserialization                  | Pure Rust structs + `rand` crate + `serde_json`. Stateless — input is random seed value, output is `Seed` struct.            |
+| **Video Manager** (Rust)  | Import video files, validate formats, extract metadata via FFprobe, queue management                        | Spawns `ffprobe` via `tauri_plugin_shell`, parses JSON output, returns `VideoMeta` structs.                                  |
+| **FFmpeg Engine** (Rust)  | FFmpeg detection/download, command building from seed ops, process spawning, progress parsing, cancellation | Uses `tauri_plugin_shell::ShellExt` to spawn FFmpeg, reads `CommandEvent::Stderr` for progress, emits events to frontend.    |
+| **Managed State** (Rust)  | In-memory store for seeds, video queue, processing status, FFmpeg path                                      | `tauri::State` with `std::sync::Mutex` (sync commands) or `tokio::sync::Mutex` (async commands). Managed via `app.manage()`. |
+| **Tauri Commands** (Rust) | IPC entry points that delegate to domain services                                                           | `#[tauri::command]` functions. Each receives `State<>` for managed data, `AppHandle` for event emission.                     |
+| **Pinia Stores** (Vue)    | UI state: seed list display, video queue display, processing progress, selection state, loading/error flags | Setup stores (Composition API) with `ref()`/`computed()`. Stores mirror Rust state fetched via `invoke()` commands.          |
+| **Vue Components** (Vue)  | Layout, drag-and-drop zones, seed list, video preview, progress bars, settings                              | `<script setup>` components using composables and Pinia stores. No direct FFmpeg interaction — all through Tauri commands.   |
 
 ## Recommended Project Structure
 
@@ -198,6 +198,7 @@ sandwich/
 **Trade-offs:** Events are fire-and-forget with no built-in acknowledgment. If the frontend misses an event, it won't be resent. For this app, progress events are informational (not critical), so this is acceptable.
 
 **Example:**
+
 ```rust
 // Rust: command starts processing, spawns async task that emits events
 #[tauri::command]
@@ -270,6 +271,7 @@ export function useTauriEvent() {
 **Trade-offs:** Slightly more indirection (one extra function call). Negligible for this app's scale.
 
 **Example:**
+
 ```rust
 // commands/seed_commands.rs — thin, only IPC concerns
 #[tauri::command]
@@ -308,6 +310,7 @@ pub fn generate_random(alias: Option<String>) -> Seed {
 **Trade-offs:** Every mutation requires an IPC round-trip. For lists of seeds and videos (small data), this is fast (<1ms). For video metadata queries (FFprobe), the latency is dominated by the external process, not IPC.
 
 **Example:**
+
 ```typescript
 // Pinia store: mirrors Rust state, mutations go through invoke()
 export const useSeedStore = defineStore('seeds', () => {
@@ -316,7 +319,7 @@ export const useSeedStore = defineStore('seeds', () => {
 
   async function loadSeeds() {
     loading.value = true;
-    seeds.value = await seedsApi.listSeeds();  // calls invoke('list_seeds')
+    seeds.value = await seedsApi.listSeeds(); // calls invoke('list_seeds')
     loading.value = false;
   }
 
@@ -328,7 +331,7 @@ export const useSeedStore = defineStore('seeds', () => {
 
   async function deleteSeed(id: string) {
     await seedsApi.deleteSeed(id);
-    seeds.value = seeds.value.filter(s => s.id !== id);
+    seeds.value = seeds.value.filter((s) => s.id !== id);
   }
 
   return { seeds, loading, loadSeeds, generateSeed, deleteSeed };
@@ -512,11 +515,11 @@ Return: Ok(())
 
 ## Scaling Considerations
 
-| Scale | Architecture Adjustments |
-|-------|--------------------------|
-| 1-10 videos/session | Monolith is fine. Single FFmpeg process per video, sequential. Async runtime handles it. |
-| 10-50 videos/session | Add parallel processing (spawn N FFmpeg processes, bounded by CPU cores). Add queue pause/resume. Progress tracking gets more complex. |
-| 50+ videos/session | Worker pool pattern. Tokio semaphore limiting concurrent FFmpeg processes. Disk I/O becomes bottleneck. Memory pressure from multiple encodes. |
+| Scale                | Architecture Adjustments                                                                                                                       |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1-10 videos/session  | Monolith is fine. Single FFmpeg process per video, sequential. Async runtime handles it.                                                       |
+| 10-50 videos/session | Add parallel processing (spawn N FFmpeg processes, bounded by CPU cores). Add queue pause/resume. Progress tracking gets more complex.         |
+| 50+ videos/session   | Worker pool pattern. Tokio semaphore limiting concurrent FFmpeg processes. Disk I/O becomes bottleneck. Memory pressure from multiple encodes. |
 
 ### Scaling Priorities
 
@@ -570,22 +573,22 @@ Return: Ok(())
 
 ### External Services
 
-| Service | Integration Pattern | Notes |
-|---------|---------------------|-------|
-| FFmpeg | `tauri_plugin_shell` child process. Spawned from Rust async task. Progress parsed from stderr line-by-line. | Detect at startup via `ffmpeg -version`. Download to `$APPDATA/ffmpeg/` if missing. Use absolute path from managed state. |
-| FFprobe | `tauri_plugin_shell` child process with `output()` (blocking, fast). Output format: JSON (`-print_format json`). | Used for video metadata extraction. Runs synchronously in Tauri command (50ms typical). Much simpler to parse JSON than stderr. |
+| Service     | Integration Pattern                                                                                                            | Notes                                                                                                                                |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| FFmpeg      | `tauri_plugin_shell` child process. Spawned from Rust async task. Progress parsed from stderr line-by-line.                    | Detect at startup via `ffmpeg -version`. Download to `$APPDATA/ffmpeg/` if missing. Use absolute path from managed state.            |
+| FFprobe     | `tauri_plugin_shell` child process with `output()` (blocking, fast). Output format: JSON (`-print_format json`).               | Used for video metadata extraction. Runs synchronously in Tauri command (50ms typical). Much simpler to parse JSON than stderr.      |
 | File System | Tauri `path` API for app directories. `tauri-plugin-fs` for JS-side file reads (preview). Rust `std::fs` for backend file I/O. | Seeds stored as JSON in `BaseDirectory.AppData/seeds/`. Config in `BaseDirectory.AppConfig/`. Video output in user-chosen directory. |
 
 ### Internal Boundaries
 
-| Boundary | Communication | Notes |
-|----------|---------------|-------|
-| Vue Components ↔ Pinia Stores | Direct imports. Components call store actions, read store state reactively (`storeToRefs`). | Standard Vue/Pinia pattern. Components never call `invoke()` directly — always through store actions. |
-| Pinia Stores ↔ Rust Backend | Tauri `invoke()` for commands, `listen()` for events. Typed through `src/tauri-api/` wrappers. | Stores are the single point of IPC in the frontend. Components are IPC-unaware. |
-| Tauri Commands ↔ Services | Direct function calls. Commands extract `State<>` and pass to service functions. | Services are pure Rust with no Tauri dependency. This is the most important internal boundary — it makes services testable. |
-| Services ↔ Managed State | `std::sync::Mutex` for sync commands, `tokio::sync::Mutex` for async. Services receive `&Mutex<T>` or cloned data. | Services should not hold lock references across `.await` points (deadlock risk). Clone data before async work. |
-| FFmpeg Engine ↔ Frontend | Rust `app.emit()` → frontend `listen()`. One-way, fire-and-forget. | Progress events are informational. If the frontend is reloaded mid-processing, the backend continues but the UI loses context. Acceptable for v1. |
-| Seed Engine ↔ Storage | Service calls `storage::save_seeds()` / `storage::load_seeds()`. | Storage is a thin I/O layer. Seeds serialized as JSON. One file per seed avoids read-modify-write races. |
+| Boundary                      | Communication                                                                                                      | Notes                                                                                                                                             |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Vue Components ↔ Pinia Stores | Direct imports. Components call store actions, read store state reactively (`storeToRefs`).                        | Standard Vue/Pinia pattern. Components never call `invoke()` directly — always through store actions.                                             |
+| Pinia Stores ↔ Rust Backend   | Tauri `invoke()` for commands, `listen()` for events. Typed through `src/tauri-api/` wrappers.                     | Stores are the single point of IPC in the frontend. Components are IPC-unaware.                                                                   |
+| Tauri Commands ↔ Services     | Direct function calls. Commands extract `State<>` and pass to service functions.                                   | Services are pure Rust with no Tauri dependency. This is the most important internal boundary — it makes services testable.                       |
+| Services ↔ Managed State      | `std::sync::Mutex` for sync commands, `tokio::sync::Mutex` for async. Services receive `&Mutex<T>` or cloned data. | Services should not hold lock references across `.await` points (deadlock risk). Clone data before async work.                                    |
+| FFmpeg Engine ↔ Frontend      | Rust `app.emit()` → frontend `listen()`. One-way, fire-and-forget.                                                 | Progress events are informational. If the frontend is reloaded mid-processing, the backend continues but the UI loses context. Acceptable for v1. |
+| Seed Engine ↔ Storage         | Service calls `storage::save_seeds()` / `storage::load_seeds()`.                                                   | Storage is a thin I/O layer. Seeds serialized as JSON. One file per seed avoids read-modify-write races.                                          |
 
 ## Build Order (Dependency Graph)
 
@@ -656,5 +659,6 @@ Phase 9: End-to-End Integration + Polish
 - FFmpeg progress parsing pattern: FFmpeg outputs `frame=`, `fps=`, `time=`, `bitrate=` to stderr periodically during encoding. Parsed line-by-line via `CommandEvent::Stderr`. (Training data, MEDIUM confidence — validated against Tauri shell plugin API)
 
 ---
-*Architecture research for: Tauri 2.x desktop video batch processing tool*
-*Researched: 2026-05-12*
+
+_Architecture research for: Tauri 2.x desktop video batch processing tool_
+_Researched: 2026-05-12_

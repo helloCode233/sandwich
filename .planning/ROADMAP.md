@@ -21,7 +21,13 @@ A four-phase horizontal-layers build: Foundation (FFmpeg lifecycle + scaffold) e
   1. User launches the app and immediately sees FFmpeg availability status (version found / missing)
   2. When FFmpeg is missing, user can initiate a download with one click and see real-time download progress with platform-appropriate binary selection
   3. After download completes, FFmpeg is automatically verified (runs `ffmpeg -version` successfully) and its path persists across app restarts
-**Plans**: TBD
+**Plans:** 4 plans
+
+Plans:
+- [ ] 01-01-PLAN.md — Project scaffold + all dependencies + config files
+- [ ] 01-02-PLAN.md — Dev tooling (ESLint, Prettier, rustfmt, clippy, husky, GitHub Actions CI)
+- [ ] 01-03-PLAN.md — Rust FFmpeg backend (detection, download, verification, persistence)
+- [ ] 01-04-PLAN.md — Vue FFmpeg frontend (status UI, download page, i18n, dark theme)
 
 ### Phase 2: Rust Backend
 **Goal**: All domain operations -- seed generation, video import with metadata extraction, video queue management, and batch FFmpeg processing with failure isolation and cancellation -- work through typed Tauri IPC commands with Rust-managed authoritative state.
@@ -64,7 +70,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 0/TBD | Not started | - |
+| 1. Foundation | 0/4 | Not started | - |
 | 2. Rust Backend | 0/TBD | Not started | - |
 | 3. Vue Frontend | 0/TBD | Not started | - |
 | 4. Integration & Polish | 0/TBD | Not started | - |

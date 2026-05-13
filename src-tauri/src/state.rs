@@ -9,9 +9,9 @@ use crate::models::video::VideoEntry;
 /// Wrapped in `Mutex<AppState>` and registered via `app.manage()`.
 pub struct AppState {
     /// All saved seeds.
-    pub seeds: Mutex<Vec<Seed>>,
+    pub seeds: Vec<Seed>,
     /// Video processing queue.
-    pub queue: Mutex<Vec<VideoEntry>>,
+    pub queue: Vec<VideoEntry>,
     /// Batch processing state (idle when not processing).
     pub batch_state: Mutex<BatchState>,
 }
@@ -19,8 +19,8 @@ pub struct AppState {
 impl Default for AppState {
     fn default() -> Self {
         Self {
-            seeds: Mutex::new(Vec::new()),
-            queue: Mutex::new(Vec::new()),
+            seeds: Vec::new(),
+            queue: Vec::new(),
             batch_state: Mutex::new(BatchState::default()),
         }
     }

@@ -26,5 +26,65 @@
     "retry": "Retry ({count}/{max})",
     "errorDefault": "Download failed",
     "manualDownload": "Automatic download failed. Please download FFmpeg manually:\nhttps://ffmpeg.org/download.html\n\nExtract ffmpeg and ffprobe to:\n{dir}"
+  },
+  "seed": {
+    "title": "Seeds",
+    "empty": "No Seeds Yet",
+    "emptyCta": "Generate Your First Seed",
+    "generate": "Generate Seed",
+    "generated": "Seed \"{alias}\" generated",
+    "rename": "Rename",
+    "renamed": "Seed renamed to \"{alias}\"",
+    "copy": "Copy",
+    "copied": "Seed \"{alias}\" copied",
+    "delete": "Delete",
+    "deleteConfirm": "Delete seed \"{alias}\"? This cannot be undone.",
+    "deleted": "Seed deleted",
+    "aliasPlaceholder": "Enter seed alias",
+    "aliasEmpty": "Alias cannot be empty"
+  },
+  "queue": {
+    "title": "Video Queue",
+    "empty": "No Videos Yet",
+    "emptyInstruction": "Drop videos here or click to add",
+    "addVideo": "Add Videos",
+    "remove": "Remove",
+    "clearAll": "Clear All",
+    "clearConfirm": "Clear all videos? {count} videos will be removed.",
+    "cleared": "Queue cleared",
+    "imported": "\"{filename}\" imported",
+    "removed": "\"{filename}\" removed",
+    "invalid": "File invalid",
+    "valid": "Valid"
+  },
+  "import": {
+    "dropHere": "Drop videos here",
+    "dropActive": "Drop to import",
+    "supportedFormats": "Supports MP4, MOV, AVI, MKV, WEBM, FLV, WMV",
+    "unsupportedFormat": "Unsupported format \".{ext}\". Supported: MP4, MOV, AVI, MKV, WEBM, FLV, WMV",
+    "noVideoStream": "File contains no video stream: {filename}",
+    "fileNotFound": "File not found: {path}"
+  },
+  "batch": {
+    "title": "Processing Controls",
+    "selectSeed": "Select Seed",
+    "concurrency": "Concurrency",
+    "outputDir": "Output Directory",
+    "changeDir": "Change Directory",
+    "start": "Start Processing",
+    "cancel": "Cancel Processing",
+    "cancelConfirm": "Cancel batch processing? Completed files will be preserved.",
+    "noSeedSelected": "Please select a seed first",
+    "queueEmpty": "Queue is empty. Import videos first",
+    "alreadyRunning": "A batch is already in progress",
+    "processing": "Processing",
+    "progress": "{completed}/{total}",
+    "completed": "Batch Complete",
+    "cancelled": "Batch Cancelled",
+    "defaultOutputDir": "~/Videos/sandwich-output/"
+  },
+  "notification": {
+    "lowDiskSpace": "Low disk space (less than 100 MB available)",
+    "operationFailed": "Operation failed: {error}"
   }
 }

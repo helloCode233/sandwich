@@ -26,5 +26,65 @@
     "retry": "重试 ({count}/{max})",
     "errorDefault": "下载失败",
     "manualDownload": "自动下载失败，请手动下载 FFmpeg：\nhttps://ffmpeg.org/download.html\n\n将 ffmpeg 和 ffprobe 解压到：\n{dir}"
+  },
+  "seed": {
+    "title": "种子列表",
+    "empty": "还没有种子",
+    "emptyCta": "生成第一个种子",
+    "generate": "生成种子",
+    "generated": "种子「{alias}」已生成",
+    "rename": "重命名",
+    "renamed": "种子已重命名为「{alias}」",
+    "copy": "复制",
+    "copied": "种子「{alias}」已复制",
+    "delete": "删除",
+    "deleteConfirm": "确定删除种子「{alias}」？此操作不可撤销。",
+    "deleted": "种子已删除",
+    "aliasPlaceholder": "输入种子别名",
+    "aliasEmpty": "别名不能为空"
+  },
+  "queue": {
+    "title": "视频队列",
+    "empty": "还没有视频",
+    "emptyInstruction": "拖拽视频到此处或点击添加",
+    "addVideo": "添加视频",
+    "remove": "移除",
+    "clearAll": "清空全部",
+    "clearConfirm": "确定清空所有视频？队列中的 {count} 个视频将被移除。",
+    "cleared": "队列已清空",
+    "imported": "「{filename}」已导入",
+    "removed": "已移除「{filename}」",
+    "invalid": "文件已失效",
+    "valid": "有效"
+  },
+  "import": {
+    "dropHere": "拖拽视频到此处",
+    "dropActive": "释放以导入",
+    "supportedFormats": "支持 MP4, MOV, AVI, MKV, WEBM, FLV, WMV",
+    "unsupportedFormat": "不支持的格式 \".{ext}\"，支持的格式：MP4, MOV, AVI, MKV, WEBM, FLV, WMV",
+    "noVideoStream": "文件不包含视频流：{filename}",
+    "fileNotFound": "文件不存在：{path}"
+  },
+  "batch": {
+    "title": "处理控制",
+    "selectSeed": "选择种子",
+    "concurrency": "并发数",
+    "outputDir": "输出目录",
+    "changeDir": "更改目录",
+    "start": "开始处理",
+    "cancel": "取消处理",
+    "cancelConfirm": "确定取消批处理？已完成处理的文件将保留。",
+    "noSeedSelected": "请先选择一个种子",
+    "queueEmpty": "队列为空，请先导入视频",
+    "alreadyRunning": "已有批处理正在进行中，请等待完成或取消",
+    "processing": "处理中",
+    "progress": "{completed}/{total}",
+    "completed": "批处理完成",
+    "cancelled": "批处理已取消",
+    "defaultOutputDir": "~/Videos/sandwich-output/"
+  },
+  "notification": {
+    "lowDiskSpace": "磁盘空间不足（剩余不足 100 MB）",
+    "operationFailed": "操作失败：{error}"
   }
 }

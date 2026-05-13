@@ -3,11 +3,16 @@ mod ffmpeg;
 mod models;
 mod state;
 
+use commands::batch::{cancel_batch, get_batch_status, start_batch};
 use commands::download::{cancel_download, start_download};
 use commands::ffmpeg::{
     check_latest_version, detect_ffmpeg, detect_ffmpeg_internal, get_ffmpeg_status, verify_ffmpeg,
 };
+use commands::import::import_video;
+use commands::queue::{clear_queue, get_queue, remove_from_queue};
+use commands::seed::{copy_seed, delete_seed, generate_seed, list_seeds, rename_seed};
 use tauri::Emitter;
+use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -17,22 +22,82 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .invoke_handler(tauri::generate_handler![
+            // Phase 1 commands (unchanged)
             detect_ffmpeg,
             get_ffmpeg_status,
             start_download,
             cancel_download,
             verify_ffmpeg,
+            // Phase 2: Seed commands
+            generate_seed,
+            rename_seed,
+            delete_seed,
+            copy_seed,
+            list_seeds,
+            // Phase 2: Import command
+            import_video,
+            // Phase 2: Queue commands
+            get_queue,
+            remove_from_queue,
+            clear_queue,
+            // Phase 2: Batch commands
+            start_batch,
+            cancel_batch,
+            get_batch_status,
         ])
         .setup(|app| {
-            // On startup, detect FFmpeg and emit initial status to frontend
+            // --- Phase 2: Initialize managed state ---
+            use std::sync::Mutex;
+            app.manage(Mutex::new(state::AppState::default()));
+
+            // Load persisted seeds and queue from store into managed state
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                use tauri_plugin_store::StoreExt;
+
+                // Load persisted seeds from seeds.json
+                if let Ok(store) = handle.store("seeds.json") {
+                    if let Some(value) = store.get("seeds") {
+                        if let Ok(seeds) = serde_json::from_value::<Vec<models::seed::Seed>>(value)
+                        {
+                            let app_state = handle.state::<Mutex<state::AppState>>();
+                            if let Ok(mut state) = app_state.lock() {
+                                state.seeds = seeds;
+                            }
+                        }
+                    }
+                }
+
+                // Load persisted queue from queue.json
+                if let Ok(store) = handle.store("queue.json") {
+                    if let Some(value) = store.get("queue") {
+                        if let Ok(queue) =
+                            serde_json::from_value::<Vec<models::video::VideoEntry>>(value)
+                        {
+                            let app_state = handle.state::<Mutex<state::AppState>>();
+                            if let Ok(mut state) = app_state.lock() {
+                                state.queue = queue;
+                            }
+                        }
+                    }
+                }
+
+                // Emit initial state counts to frontend
+                let app_state = handle.state::<Mutex<state::AppState>>();
+                if let Ok(state) = app_state.lock() {
+                    let _ = handle.emit("seeds-loaded", state.seeds.len());
+                    let _ = handle.emit("queue-loaded", state.queue.len());
+                }
+            });
+
+            // --- Existing Phase 1: FFmpeg detection on startup (unchanged) ---
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 let info = detect_ffmpeg_internal().await;
                 let _ = handle.emit("ffmpeg-status", info);
             });
 
-            // D-25: Non-blocking check for newer FFmpeg release on GitHub.
-            // Runs independently of detection; failures are silent (network errors ignored).
+            // D-25: Non-blocking check for newer FFmpeg release (unchanged)
             let update_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 if let Ok(Some(update_info)) = check_latest_version().await {

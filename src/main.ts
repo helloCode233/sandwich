@@ -1,4 +1,10 @@
 import { createApp } from 'vue';
+import { createPinia } from 'pinia';
 import App from './App.vue';
+import i18n from './utils/i18n';
+import 'virtual:uno.css';
 
-createApp(App).mount('#app');
+const app = createApp(App);
+app.use(createPinia());
+app.use(i18n);
+app.mount('#app');

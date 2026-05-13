@@ -1,0 +1,134 @@
+<script setup lang="ts">
+import { ref, onMounted, onUnmounted } from 'vue';
+import { NLayout, NLayoutSider, NLayoutContent, NLayoutFooter } from 'naive-ui';
+import { useBatchStore } from '@/stores/batch';
+import { useSeed } from '@/composables/useSeed';
+import { useQueue } from '@/composables/useQueue';
+import { useBatch } from '@/composables/useBatch';
+import SeedList from '@/components/seed/SeedList.vue';
+import ImportZone from '@/components/queue/ImportZone.vue';
+import QueueList from '@/components/queue/QueueList.vue';
+import BatchControls from '@/components/batch/BatchControls.vue';
+import BatchBanner from '@/components/batch/BatchBanner.vue';
+
+const batchStore = useBatchStore();
+const seedComposable = useSeed();
+const queueComposable = useQueue();
+const batchComposable = useBatch();
+
+// Panel sizing (D-01: default 50/50, draggable divider)
+const leftWidth = ref(Math.floor(window.innerWidth / 2));
+const isResizing = ref(false);
+
+function onResizePointerdown(e: PointerEvent) {
+  e.preventDefault();
+  isResizing.value = true;
+  document.body.style.userSelect = 'none';
+  document.body.style.cursor = 'col-resize';
+}
+
+function onResizePointermove(e: PointerEvent) {
+  if (!isResizing.value) return;
+  const w = e.clientX;
+  leftWidth.value = Math.max(250, Math.min(w, Math.floor(window.innerWidth * 0.7)));
+}
+
+function onResizePointerup() {
+  isResizing.value = false;
+  document.body.style.userSelect = '';
+  document.body.style.cursor = '';
+}
+
+// Attach global move/up listeners when resizing starts
+onMounted(() => {
+  window.addEventListener('pointermove', onResizePointermove);
+  window.addEventListener('pointerup', onResizePointerup);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('pointermove', onResizePointermove);
+  window.removeEventListener('pointerup', onResizePointerup);
+});
+
+// Composable subscriptions (app-lifetime — registered once, never duplicated)
+onMounted(async () => {
+  await seedComposable.subscribe();
+  await queueComposable.subscribe();
+  await batchComposable.subscribe();
+});
+
+onUnmounted(() => {
+  seedComposable.unsubscribe();
+  queueComposable.unsubscribe();
+  batchComposable.unsubscribe();
+});
+</script>
+
+<template>
+  <n-layout style="height: 100vh; height: 100dvh" position="absolute">
+    <n-layout has-sider position="absolute" style="top: 0; bottom: 0">
+      <!-- Left Panel: Seed Management -->
+      <n-layout-sider bordered :width="leftWidth" collapse-mode="width">
+        <SeedList />
+      </n-layout-sider>
+
+      <!-- Resize Handle (D-01: draggable divider) -->
+      <div
+        class="resize-handle"
+        :class="{ 'resize-handle--active': isResizing }"
+        @pointerdown="onResizePointerdown"
+      />
+
+      <!-- Right Panel: Queue + Batch Controls -->
+      <n-layout-content :native-scrollbar="false">
+        <div class="right-panel">
+          <!-- Queue Area (upper section per D-02) -->
+          <div class="queue-area">
+            <ImportZone />
+            <BatchBanner v-if="batchStore.isProcessing" />
+            <QueueList />
+          </div>
+
+          <!-- Batch Controls (lower section per D-02, sticky footer) -->
+          <n-layout-footer class="batch-footer">
+            <BatchControls />
+          </n-layout-footer>
+        </div>
+      </n-layout-content>
+    </n-layout>
+  </n-layout>
+</template>
+
+<style scoped>
+.resize-handle {
+  width: 4px;
+  cursor: col-resize;
+  background-color: transparent;
+  transition: background-color 0.2s;
+  flex-shrink: 0;
+  z-index: 10;
+}
+.resize-handle:hover,
+.resize-handle--active {
+  background-color: #2080f0;
+}
+
+.right-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.queue-area {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.batch-footer {
+  flex-shrink: 0;
+  border-top: 1px solid var(--n-border-color);
+  background-color: var(--n-color);
+}
+</style>

@@ -52,9 +52,11 @@ export function useBatch() {
   /** Start batch processing. Per D-11: concurrency is read from store by Rust, NOT passed here. */
   async function startBatch(seedId: string, outputDir: string): Promise<boolean> {
     try {
-      // Get current queue size from the queue store to initialize progress total.
-      // The executor will compute this from store state via the caller.
       await invoke('start_batch', { seedId, outputDir });
+      // CR-01 fix: Activate processing state IMMEDIATELY so UI shows progress
+      // banner, cancel button, and queue-lock guards before first progress event.
+      // The Rust backend will emit batch-progress with the real total shortly after.
+      store.startProcessing(1);
       return true;
     } catch (err) {
       console.error('Failed to start batch:', err);

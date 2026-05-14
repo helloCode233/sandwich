@@ -13,10 +13,20 @@ const bannerState = computed<'processing' | 'cancelling' | 'complete'>(() => {
   return 'processing';
 });
 
+/** True if batch was cancelled before processing all files.
+ *  Uses same logic as BatchSummary.vue: total processed < expected total.
+ *  `progress.total` is preserved by stopProcessing() — not reset during complete state. */
+const wasCancelled = computed(() => {
+  if (!batchStore.lastResult) return false;
+  const totalProcessed =
+    batchStore.lastResult.succeeded.length + batchStore.lastResult.failed.length;
+  return totalProcessed < batchStore.progress.total;
+});
+
 const labelText = computed(() => {
   if (bannerState.value === 'cancelling') return t('batch.cancelling');
   if (bannerState.value === 'complete') {
-    return batchStore.lastResult?.failed.length
+    return wasCancelled.value
       ? t('batch.summary.cancelledTitle')
       : t('batch.summary.completeTitle');
   }

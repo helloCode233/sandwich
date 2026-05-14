@@ -12,20 +12,9 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
 use crate::ffmpeg::filters::build_filter_args;
+use crate::models::batch::PerFileProgress;
 use crate::models::seed::Seed;
 use crate::models::video::VideoEntry;
-
-/// Emitted to the frontend as "batch-progress" during execution.
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ExecutorProgress {
-    /// Name of the file being processed.
-    pub file: String,
-    /// Processing stage description.
-    pub stage: String,
-    /// Progress percentage (0.0 - 100.0). Estimated from ffmpeg time output.
-    pub percent: f64,
-}
 
 /// Execute FFmpeg processing for a single video entry using the given seed.
 ///
@@ -60,16 +49,6 @@ pub fn execute_single_file(
     // Build output path: {original_stem}_{seed_alias}.{ext}
     let source_path = Path::new(&entry.filepath);
     let output_path = make_output_path(source_path, &seed.alias, Path::new(output_dir))?;
-
-    // Emit starting progress
-    let _ = app.emit(
-        "batch-progress",
-        ExecutorProgress {
-            file: entry.filename.clone(),
-            stage: "starting".to_string(),
-            percent: 0.0,
-        },
-    );
 
     // Build filter arguments from all operations in the seed
     let mut all_args: Vec<String> = Vec::new();
@@ -119,20 +98,28 @@ pub fn execute_single_file(
         // Parse progress from FfmpegEvent
         match event {
             ffmpeg_sidecar::event::FfmpegEvent::Progress(progress) => {
-                // Compute percent from time string (e.g., "00:03:29.04") vs total duration
                 let seconds = parse_time_to_seconds(&progress.time);
                 let percent = if total_duration > 0.0 {
                     (seconds / total_duration * 100.0).clamp(0.0, 100.0)
                 } else {
-                    // Fallback: use size-based progress if duration unknown
-                    progress.size_kb as f64 / 1000.0 * 100.0 // rough estimate
+                    0.0
                 };
+                let remaining = if progress.speed > 0.01 {
+                    (total_duration - seconds) / progress.speed as f64
+                } else {
+                    0.0
+                };
+                let total_frames = (total_duration * entry.metadata.fps as f64) as u32;
+
                 let _ = app_clone.emit(
-                    "batch-progress",
-                    ExecutorProgress {
+                    "batch-file-progress",
+                    PerFileProgress {
                         file: filename.clone(),
-                        stage: "processing".to_string(),
-                        percent: percent.clamp(0.0, 100.0),
+                        percent,
+                        current_frame: progress.frame,
+                        total_frames,
+                        fps: progress.fps,
+                        remaining_seconds: remaining.max(0.0),
                     },
                 );
             }

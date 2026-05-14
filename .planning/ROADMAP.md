@@ -2,14 +2,15 @@
 
 ## Overview
 
-A four-phase horizontal-layers build: Foundation (FFmpeg lifecycle + scaffold) establishes the non-negotiable prerequisite. The Rust Backend phase builds all domain logic, FFmpeg execution, and IPC commands as an independently testable layer. The Vue Frontend phase wraps that backend in a production UI. Integration & Polish wires real-time progress streaming and validates the end-to-end workflow.
+A five-phase build: Foundation (FFmpeg lifecycle + scaffold) establishes the non-negotiable prerequisite. The Rust Backend phase builds all domain logic, FFmpeg execution, and IPC commands as an independently testable layer. The Vue Frontend phase wraps that backend in a production UI. Integration & Polish wires real-time progress streaming and validates the end-to-end workflow. Production Hardening adds cross-platform packaging, GPU acceleration, multi-seed batch processing, and integrity verification.
 
 ## Phases
 
 - [x] **Phase 1: Foundation** - FFmpeg detection, one-click download, project scaffold, Tauri plugins (completed 2026-05-13)
-- [ ] **Phase 2: Rust Backend** - Domain services, FFmpeg command builder, processing pipeline, IPC commands
+- [x] **Phase 2: Rust Backend** - Domain services, FFmpeg command builder, processing pipeline, IPC commands (completed 2026-05-14)
 - [x] **Phase 3: Vue Frontend** - Pinia stores, typed API wrappers, dual-panel UI, Naive UI dark theme (completed 2026-05-13)
-- [x] **Phase 4: Integration & Polish** - Progress streaming, batch summary, cancel flow wiring, E2E validation (completed 2026-05-14, 3 gaps found)
+- [x] **Phase 4: Integration & Polish** - Progress streaming, batch summary, cancel flow wiring, E2E validation (completed 2026-05-14)
+- [ ] **Phase 5: Production Hardening** - Cross-platform builds, GPU acceleration, multi-seed batch, MD5 integrity verification
 
 ## Phase Details
 
@@ -97,7 +98,7 @@ Plans:
 2. After processing finishes, user sees a completion summary panel showing how many files succeeded, how many failed, and per-file output paths
 3. User can cancel an in-progress batch from the UI; FFmpeg processes terminate gracefully and the app returns to a clean, ready-to-process state
 4. The full end-to-end workflow operates without breaking: generate seed -> drag in videos -> select seed -> click process -> watch live progress per file -> review completion summary
-   **Plans:** 8 plans (5 execution + 3 gap closure, 5/8 complete)
+   **Plans:** 8 plans (5 execution + 3 gap closure, 8/8 complete)
 
 Plans:
 **Wave 1**
@@ -118,14 +119,42 @@ Plans:
 - [x] 04-07-PLAN.md — Fix BatchBanner wrong title for completed-with-failures (showed "Cancelled")
 - [x] 04-08-PLAN.md — Fix missing initial batch-progress event (progress showed "0/1" during first file)
 
+### Phase 5: Production Hardening
+
+**Goal**: The app ships as installable packages for Windows and Linux with CI build matrix; batch processing leverages GPU hardware acceleration and optimized scheduling; users can apply multiple seeds per video in a single batch; every output file is verified to differ from its input via MD5 checksum comparison.
+**Depends on**: Phase 4
+**Requirements**: CROSS-01, CROSS-02, CROSS-03, PERF-01, PERF-02, MULTI-01, MULTI-02, MD5-01, MD5-02
+**Success Criteria** (what must be TRUE):
+
+1. User can download and install the app on Windows (.msi/.exe) and Linux (.AppImage/.deb) via CI-built artifacts
+2. User on a GPU-equipped machine sees automatically accelerated encoding (NVENC/VideoToolbox/VAAPI) with measurable throughput improvement over CPU encoding
+3. User can select multiple seeds (not just one) and each video in the queue produces one output per selected seed ({original}_{seed_alias}.{ext})
+4. User sees MD5 checksums before and after processing for every file in the batch summary, with clear pass/fail indication that the file was actually modified
+5. All existing v1 functionality continues to work — this phase is additive hardening, not a rewrite
+   **Plans:** TBD
+
+Plans:
+**Wave 1** *(cross-platform)*
+- [ ] 05-01-PLAN.md — Tauri build config for Windows (.msi/.exe) + Linux (.AppImage/.deb) targets
+- [ ] 05-02-PLAN.md — GitHub Actions CI matrix build (macOS/Windows/Linux) with artifact upload
+
+**Wave 2** *(performance)*
+- [ ] 05-03-PLAN.md — GPU encoder detection (NVENC/VideoToolbox/VAAPI) + auto-select in executor
+- [ ] 05-04-PLAN.md — Parallel pipeline optimization (concurrency scheduling, streaming I/O, memory reduction)
+
+**Wave 3** *(multi-seed + MD5)*
+- [ ] 05-05-PLAN.md — Multi-seed selection UI + Rust batch command accepting Vec<SeedId>
+- [ ] 05-06-PLAN.md — MD5 checksum recording (pre-process) + comparison (post-process) + summary integration
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3 -> 4
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 
-| Phase                   | Plans Complete | Status      | Completed |
-| ----------------------- | -------------- | ----------- | --------- |
-| 1. Foundation           | 4/4            | Complete    | 2026-05-13 |
-| 2. Rust Backend         | 0/4            | Planned     | -         |
-| 3. Vue Frontend         | 7/7            | Complete    | 2026-05-13 |
-| 4. Integration & Polish | 5/8            | Gaps Found  | 2026-05-14 |
+| Phase                      | Plans Complete | Status      | Completed  |
+| -------------------------- | -------------- | ----------- | ---------- |
+| 1. Foundation              | 4/4            | Complete    | 2026-05-13 |
+| 2. Rust Backend            | 4/4            | Complete    | 2026-05-14 |
+| 3. Vue Frontend            | 7/7            | Complete    | 2026-05-13 |
+| 4. Integration & Polish    | 8/8            | Complete    | 2026-05-14 |
+| 5. Production Hardening    | 0/6            | Planned     | -          |

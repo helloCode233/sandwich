@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
-status: executing
-stopped_at: Phase 03 Research complete
-last_updated: "2026-05-14T02:49:28.147Z"
-last_activity: 2026-05-14 -- Phase 04 execution started
+milestone: v1.1
+milestone_name: production-hardening
+status: planning
+stopped_at: Phase 05 context gathered
+last_updated: "2026-05-14T10:00:00.000Z"
+last_activity: 2026-05-14 -- Phase 05 discussion started
 progress:
-  total_phases: 4
-  completed_phases: 3
-  total_plans: 23
-  completed_plans: 20
-  percent: 87
+  total_phases: 5
+  completed_phases: 4
+  total_plans: 29
+  completed_plans: 23
+  percent: 79
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-05-12)
 
 ## Current Position
 
-Phase: 04 (integration-polish) — EXECUTING
-Plan: 1 of 8
-Status: Executing Phase 04
-Last activity: 2026-05-14 -- Phase 04 execution started
+Phase: 05 (production-hardening) — PLANNING
+Plan: 0 of 6
+Status: Context gathered, ready for /gsd-plan-phase 5
+Last activity: 2026-05-14 -- Phase 05 discussion completed
 
-Progress: [██████████] 100%
+Progress: [████████████████░░░░] 79%
 
 ## Accumulated Context
 
@@ -61,19 +61,27 @@ None.
 
 None.
 
+### Decisions (Phase 5)
+
+Phase 05 CONTEXT.md contains 15 locked decisions (D-01 through D-15) covering cross-platform packaging, GPU auto-detection, multi-seed batch, MD5 verification, and pipeline optimization.
+
 ## Deferred Items
 
 Items acknowledged and carried forward from previous milestone close:
 
 | Category | Item | Status | Deferred At |
 | -------- | ---- | ------ | ----------- |
-| _(none)_ |      |        |             |
+| Phase 5  | Code signing + store publish | Deferred | 2026-05-14 |
+| Phase 5  | GPU encoder manual selector UI | Deferred | 2026-05-14 |
+| v2       | PROD-01 drag-to-reorder queue | Deferred | 2026-05-12 |
+| v2       | PROD-02 thumbnail previews | Deferred | 2026-05-12 |
+| v2       | PROD-03 processing log history | Deferred | 2026-05-12 |
 
 ## Session Continuity
 
-Last session: 2026-05-14T01:59:38.367Z
-Stopped at: Phase 03 Research complete
-Resume file: None
+Last session: 2026-05-14T09:55:00.000Z
+Stopped at: Phase 05 context gathered
+Resume file: .planning/phases/05-production-hardening/05-CONTEXT.md
 
 ## Performance Metrics
 

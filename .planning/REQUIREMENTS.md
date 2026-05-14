@@ -39,13 +39,38 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Output Management
 
-- [ ] **OUTPUT-01**: 支持选择输出目录（默认 ~/Videos/sandwich-output/）
-- [ ] **OUTPUT-02**: 输出文件命名：{原文件名}\_{种子别名}.{扩展名}
+- [x] **OUTPUT-01**: 支持选择输出目录（默认 ~/Videos/sandwich-output/）
+- [x] **OUTPUT-02**: 输出文件命名：{原文件名}\_{种子别名}.{扩展名}
 
 ### UI
 
-- [ ] **UI-01**: 双面板布局——左侧种子列表，右侧视频队列
-- [ ] **UI-02**: 暗色主题（Naive UI dark theme）
+- [x] **UI-01**: 双面板布局——左侧种子列表，右侧视频队列
+- [x] **UI-02**: 暗色主题（Naive UI dark theme）
+
+## v1.1 Requirements (Phase 5 — Production Hardening)
+
+Active development. See ROADMAP.md Phase 5.
+
+### Cross-Platform
+
+- [ ] **CROSS-01**: Windows 打包 — 生成 .msi 和 .exe 安装包
+- [ ] **CROSS-02**: Linux 打包 — 生成 .AppImage 和 .deb 安装包
+- [ ] **CROSS-03**: CI 矩阵构建（macOS/Windows/Linux），自动上传构建产物
+
+### Performance
+
+- [ ] **PERF-01**: GPU 硬件编码器自动检测与选择（macOS VideoToolbox / Windows NVENC+AMF / Linux VAAPI）
+- [ ] **PERF-02**: 并行 pipeline 优化 — 调度器减少空等、流式读写避免大内存分配
+
+### Multi-Seed Batch
+
+- [ ] **MULTI-01**: 多种子选择 UI（可勾选多个种子）
+- [ ] **MULTI-02**: 一个视频 × N 个种子 = N 个输出文件，命名保持 {原文件名}\_{种子别名}.{扩展名}
+
+### Integrity Verification
+
+- [ ] **MD5-01**: 处理前记录每个文件的 MD5 和文件大小
+- [ ] **MD5-02**: 处理后对比 MD5，差异数据写入处理日志，输出=输入时告警
 
 ## v2 Requirements
 
@@ -75,7 +100,7 @@ Deferred to future release. Tracked but not in current roadmap.
 | 插件系统                           | 安全沙箱插件 API 需数月开发，7 种内置操作已覆盖足够指纹修改面  |
 | AI 去重评分                        | 平台算法是黑箱且持续变化，评分会误导用户，且逆向工程有法律风险 |
 | 项目文件/工作区持久化              | 增加文件格式设计、脏状态追踪、向后兼容等大量工作量             |
-| macOS / Windows 打包               | 开发验证完成后单独处理                                         |
+| macOS / Windows 打包               | Phase 5 已纳入                                                  |
 | 系统托盘/后台处理                  | 增加托盘集成、后台进程管理复杂度                               |
 
 ## Traceability
@@ -87,30 +112,39 @@ Which phases cover which requirements. Updated during roadmap creation.
 | FFMPEG-01   | Phase 1 | Complete |
 | FFMPEG-02   | Phase 1 | Complete |
 | FFMPEG-03   | Phase 1 | Complete |
-| SEED-01     | Phase 2 | Pending |
-| SEED-02     | Phase 2 | Pending |
-| SEED-03     | Phase 2 | Pending |
-| SEED-04     | Phase 2 | Pending |
-| SEED-05     | Phase 2 | Pending |
-| SEED-06     | Phase 2 | Pending |
-| IMPORT-01   | Phase 2 | Pending |
-| IMPORT-02   | Phase 2 | Pending |
-| QUEUE-01    | Phase 2 | Pending |
-| QUEUE-02    | Phase 2 | Pending |
-| BATCH-01    | Phase 2 | Pending |
+| SEED-01     | Phase 2 | Complete |
+| SEED-02     | Phase 2 | Complete |
+| SEED-03     | Phase 2 | Complete |
+| SEED-04     | Phase 2 | Complete |
+| SEED-05     | Phase 2 | Complete |
+| SEED-06     | Phase 2 | Complete |
+| IMPORT-01   | Phase 2 | Complete |
+| IMPORT-02   | Phase 2 | Complete |
+| QUEUE-01    | Phase 2 | Complete |
+| QUEUE-02    | Phase 2 | Complete |
+| BATCH-01    | Phase 2 | Complete |
 | BATCH-02    | Phase 4 | Complete |
-| BATCH-03    | Phase 2 | Pending |
-| BATCH-04    | Phase 2 | Pending |
+| BATCH-03    | Phase 2 | Complete |
+| BATCH-04    | Phase 2 | Complete |
 | BATCH-05    | Phase 4 | Complete |
-| OUTPUT-01   | Phase 2 | Pending |
-| OUTPUT-02   | Phase 2 | Pending |
-| UI-01       | Phase 3 | Implemented |
-| UI-02       | Phase 3 | Implemented |
+| OUTPUT-01   | Phase 2 | Complete |
+| OUTPUT-02   | Phase 2 | Complete |
+| UI-01       | Phase 3 | Complete |
+| UI-02       | Phase 3 | Complete |
+| CROSS-01    | Phase 5 | Planned  |
+| CROSS-02    | Phase 5 | Planned  |
+| CROSS-03    | Phase 5 | Planned  |
+| PERF-01     | Phase 5 | Planned  |
+| PERF-02     | Phase 5 | Planned  |
+| MULTI-01    | Phase 5 | Planned  |
+| MULTI-02    | Phase 5 | Planned  |
+| MD5-01      | Phase 5 | Planned  |
+| MD5-02      | Phase 5 | Planned  |
 
 **Coverage:**
 
-- v1 requirements: 22 total
-- Mapped to phases: 22
+- v1 requirements: 22 total, 22 complete
+- v1.1 requirements (Phase 5): 9 total, 0 complete
 - Unmapped: 0
 
 ---

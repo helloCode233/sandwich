@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Phase 03 Research complete
-last_updated: "2026-05-14T01:40:11.490Z"
+last_updated: "2026-05-14T01:49:09.320Z"
 last_activity: 2026-05-14
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 20
-  completed_plans: 17
-  percent: 85
+  completed_plans: 18
+  percent: 90
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-12)
 ## Current Position
 
 Phase: 3 (vue-frontend) — EXECUTING
-Plan: 3 of 7
+Plan: 4 of 7
 Status: Ready to execute
 Last activity: 2026-05-14
 
-Progress: [█████████░] 85%
+Progress: [█████████░] 90%
 
 ## Accumulated Context
 
@@ -42,6 +42,9 @@ Recent decisions affecting current work:
 - Phase 03 CONTEXT.md contains 13 locked decisions (D-01 through D-13) covering layout, import, seeds display, empty states, feedback, batch controls, and progress scaffolding.
 - Phase 01 locked decisions (D-01 through D-39) remain binding: Naive UI dark theme (D-32), frontend infrastructure (D-33), i18n bilingual (D-13), Pinia (D-33), UnoCSS (D-06), eslint/prettier (D-36), window config 1200x800 (D-12).
 - [Phase ?]: Use separate batch-file-progress event (carrying PerFileProgress) instead of overloading batch-progress with union payload
+- [Phase ?]: test summary
+- [Phase ?]: perFileProgress.value = new Map(perFileProgress.value) after Map.set() because Vue 3 reactivity does not track Map mutations
+- [Phase ?]: cancelling.value = false in both stopProcessing (completion) and resetBatch (manual reset) to prevent stale cancelling UI state
 
 ### Pending Todos
 
@@ -61,7 +64,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-14T01:39:02.066Z
+Last session: 2026-05-14T01:47:26.589Z
 Stopped at: Phase 03 Research complete
 Resume file: None
 
@@ -70,3 +73,4 @@ Resume file: None
 | Phase | Plan | Duration | Tasks | Files | Completed |
 |-------|------|----------|-------|-------|-----------|
 | Phase 04 P02 | 177 | 2 tasks | 3 files |
+| Phase 04-integration-polish P03 | 2m | 2 tasks | 2 files |

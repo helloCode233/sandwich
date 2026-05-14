@@ -107,7 +107,7 @@ Plans:
 - [x] 04-02-PLAN.md — Frontend contracts: PerFileProgress TypeScript type + 17 new i18n keys in both locales
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 04-03-PLAN.md — Store + composable: perFileProgress map, cancelling state, 6 event listeners
+- [x] 04-03-PLAN.md — Store + composable: perFileProgress map, cancelling state, 6 event listeners
 
 **Wave 4** *(blocked on Wave 3 completion)*
 - [ ] 04-04-PLAN.md — UI: BatchBanner multi-state + BatchControls cancel confirmation + ImportZone disabled during processing

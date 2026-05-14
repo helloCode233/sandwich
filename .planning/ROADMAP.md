@@ -9,7 +9,7 @@ A four-phase horizontal-layers build: Foundation (FFmpeg lifecycle + scaffold) e
 - [x] **Phase 1: Foundation** - FFmpeg detection, one-click download, project scaffold, Tauri plugins (completed 2026-05-13)
 - [ ] **Phase 2: Rust Backend** - Domain services, FFmpeg command builder, processing pipeline, IPC commands
 - [x] **Phase 3: Vue Frontend** - Pinia stores, typed API wrappers, dual-panel UI, Naive UI dark theme (completed 2026-05-13)
-- [ ] **Phase 4: Integration & Polish** - Progress streaming, batch summary, cancel flow wiring, E2E validation
+- [x] **Phase 4: Integration & Polish** - Progress streaming, batch summary, cancel flow wiring, E2E validation (completed 2026-05-14)
 
 ## Phase Details
 
@@ -97,7 +97,7 @@ Plans:
 2. After processing finishes, user sees a completion summary panel showing how many files succeeded, how many failed, and per-file output paths
 3. User can cancel an in-progress batch from the UI; FFmpeg processes terminate gracefully and the app returns to a clean, ready-to-process state
 4. The full end-to-end workflow operates without breaking: generate seed -> drag in videos -> select seed -> click process -> watch live progress per file -> review completion summary
-   **Plans:** 1/5 plans executed
+   **Plans:** 5/5 plans complete
 
 Plans:
 **Wave 1**
@@ -123,4 +123,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | 1. Foundation           | 4/4            | Complete    | 2026-05-13 |
 | 2. Rust Backend         | 0/4            | Planned     | -         |
 | 3. Vue Frontend         | 7/7            | Complete    | 2026-05-13 |
-| 4. Integration & Polish | 1/5 | In Progress|  |
+| 4. Integration & Polish | 5/5 | Complete   | 2026-05-14 |

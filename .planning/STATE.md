@@ -4,7 +4,7 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Phase 03 Research complete
-last_updated: "2026-05-14T01:57:49.881Z"
+last_updated: "2026-05-14T01:59:38.370Z"
 last_activity: 2026-05-14
 progress:
   total_phases: 4
@@ -49,6 +49,9 @@ Recent decisions affecting current work:
 - [Phase ?]: BatchSummary is inline panel beneath BatchBanner, not a modal overlay — keeps queue area usable post-completion
 - [Phase ?]: BatchBanner v-if expanded to isProcessing || cancelling || isComplete so the banner serves as persistent top-of-panel status anchor across all non-idle states
 - [Phase ?]: Cancellation detection in BatchSummary derived from (succeeded + failed) < batchStore.progress.total rather than a dedicated wasCancelled flag
+- [Phase ?]: BatchBanner uses computed bannerState to derive processing/cancelling/complete from batchStore.cancelling and batchStore.isComplete
+- [Phase ?]: Cancel confirmation uses Naive UI dialog.warning() with onPositiveClick callback (matches existing clear-all pattern in QueueList)
+- [Phase ?]: ImportZone hidden via v-if on batchStore.isProcessing (prevents queue mutations during processing per RESEARCH Pitfall 5)
 
 ### Pending Todos
 
@@ -68,7 +71,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-14T01:57:39.830Z
+Last session: 2026-05-14T01:59:38.367Z
 Stopped at: Phase 03 Research complete
 Resume file: None
 
@@ -79,3 +82,4 @@ Resume file: None
 | Phase 04 P02 | 177 | 2 tasks | 3 files |
 | Phase 04-integration-polish P03 | 2m | 2 tasks | 2 files |
 | Phase 04-integration-polish P05 | 283 | 3 tasks | 3 files |
+| Phase 04-integration-polish P04-04 | 3m | 3 tasks | 3 files |

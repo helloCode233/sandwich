@@ -149,20 +149,30 @@ pub fn execute_single_file(
     }
 }
 
-/// Parse an FFmpeg time string (e.g., "00:03:29.04" or "123.45") to seconds.
+/// Parse an FFmpeg time string (e.g., "00:03:29.04", "01:30.50", or "123.45") to seconds.
 fn parse_time_to_seconds(time_str: &str) -> f64 {
-    // Try HH:MM:SS.mmm format first
     if time_str.contains(':') {
         let parts: Vec<&str> = time_str.split(':').collect();
-        if parts.len() == 3 {
-            let h: f64 = parts[0].parse().unwrap_or(0.0);
-            let m: f64 = parts[1].parse().unwrap_or(0.0);
-            let s: f64 = parts[2].parse().unwrap_or(0.0);
-            return h * 3600.0 + m * 60.0 + s;
+        match parts.len() {
+            3 => {
+                // HH:MM:SS.mm
+                let h: f64 = parts[0].parse().unwrap_or(0.0);
+                let m: f64 = parts[1].parse().unwrap_or(0.0);
+                let s: f64 = parts[2].parse().unwrap_or(0.0);
+                h * 3600.0 + m * 60.0 + s
+            }
+            2 => {
+                // MM:SS.mm (videos under 1 hour)
+                let m: f64 = parts[0].parse().unwrap_or(0.0);
+                let s: f64 = parts[1].parse().unwrap_or(0.0);
+                m * 60.0 + s
+            }
+            _ => time_str.parse().unwrap_or(0.0),
         }
+    } else {
+        // No colons: plain seconds as float
+        time_str.parse().unwrap_or(0.0)
     }
-    // Fallback: plain seconds as float
-    time_str.parse().unwrap_or(0.0)
 }
 
 /// Build the output file path with collision-safe naming.

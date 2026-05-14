@@ -110,8 +110,8 @@ Plans:
 - [x] 04-03-PLAN.md — Store + composable: perFileProgress map, cancelling state, 6 event listeners
 
 **Wave 4** *(blocked on Wave 3 completion)*
-- [ ] 04-04-PLAN.md — UI: BatchBanner multi-state + BatchControls cancel confirmation + ImportZone disabled during processing
-- [ ] 04-05-PLAN.md — UI: QueueList per-file progress bars + BatchSummary completion summary + MainLayout conditional rendering
+- [x] 04-04-PLAN.md — UI: BatchBanner multi-state + BatchControls cancel confirmation + ImportZone disabled during processing
+- [x] 04-05-PLAN.md — UI: QueueList per-file progress bars + BatchSummary completion summary + MainLayout conditional rendering
 
 ## Progress
 

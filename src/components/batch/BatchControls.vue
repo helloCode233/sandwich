@@ -1,7 +1,6 @@
 <script setup lang="ts">
-/* global console */
 import { ref, computed, onMounted } from 'vue';
-import { NSelect, NButton, NIcon, NText, NSpace } from 'naive-ui';
+import { NSelect, NButton, NIcon, NText, NSpace, useDialog } from 'naive-ui';
 import { Play, Square, FolderOpen } from 'lucide-vue-next';
 import { useMessage } from 'naive-ui';
 import { open } from '@tauri-apps/plugin-dialog';
@@ -17,6 +16,7 @@ const queueStore = useQueueStore();
 const batchStore = useBatchStore();
 const { startBatch, cancelBatch } = useBatch();
 const message = useMessage();
+const dialog = useDialog();
 const { t } = useI18n();
 
 const concurrency = ref<number>(1);
@@ -104,27 +104,31 @@ async function onStart() {
     message.warning(t('batch.alreadyRunning'));
     return;
   }
-
-  // Resolve output dir: replace ~ with HOME
-  let resolvedDir = outputDir.value;
-  if (resolvedDir.startsWith('~/')) {
-    // In Tauri, Rust resolves ~ automatically. We pass as-is.
+  if (!outputDir.value || outputDir.value.trim() === '') {
+    message.warning(t('batch.noOutputDir'));
+    return;
   }
 
-  const ok = await startBatch(seedStore.selectedSeedId, resolvedDir);
-  if (ok) {
-    // Progress will come via batch-progress events
-  } else {
+  const ok = await startBatch(seedStore.selectedSeedId, outputDir.value);
+  if (!ok) {
     message.error(t('notification.operationFailed', { error: 'Batch start failed' }));
   }
 }
 
-/** Cancel in-progress batch. */
-async function onCancel() {
-  const ok = await cancelBatch();
-  if (!ok) {
-    message.error(t('notification.operationFailed', { error: 'Cancel failed' }));
-  }
+/** Cancel in-progress batch with confirmation dialog. */
+function onCancel() {
+  dialog.warning({
+    title: t('batch.cancelConfirmTitle'),
+    content: t('batch.cancelConfirmBody'),
+    positiveText: t('batch.cancel'),
+    negativeText: t('batch.keepProcessing'),
+    onPositiveClick: async () => {
+      const ok = await cancelBatch();
+      if (!ok) {
+        message.error(t('notification.operationFailed', { error: 'Cancel failed' }));
+      }
+    },
+  });
 }
 
 // Concurrency options per D-11
@@ -189,7 +193,7 @@ onMounted(() => {
 
       <!-- Start / Cancel Button -->
       <NButton
-        v-if="!batchStore.isProcessing"
+        v-if="!batchStore.isProcessing && !batchStore.cancelling"
         type="primary"
         size="large"
         block
@@ -202,6 +206,9 @@ onMounted(() => {
           </NIcon>
         </template>
         {{ t('batch.start') }}
+      </NButton>
+      <NButton v-else-if="batchStore.cancelling" type="error" size="large" block disabled loading>
+        {{ t('batch.cancelling') }}
       </NButton>
       <NButton v-else type="error" size="large" block @click="onCancel">
         <template #icon>

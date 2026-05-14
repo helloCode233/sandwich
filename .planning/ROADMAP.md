@@ -114,9 +114,9 @@ Plans:
 - [x] 04-05-PLAN.md — UI: QueueList per-file progress bars + BatchSummary completion summary + MainLayout conditional rendering
 
 **Gap Closure** *(post-verification fixes)*
-- [ ] 04-06-PLAN.md — Fix parse_time_to_seconds MM:SS bug (progress stuck at 0% for short videos)
-- [ ] 04-07-PLAN.md — Fix BatchBanner wrong title for completed-with-failures (showed "Cancelled")
-- [ ] 04-08-PLAN.md — Fix missing initial batch-progress event (progress showed "0/1" during first file)
+- [x] 04-06-PLAN.md — Fix parse_time_to_seconds MM:SS bug (progress stuck at 0% for short videos)
+- [x] 04-07-PLAN.md — Fix BatchBanner wrong title for completed-with-failures (showed "Cancelled")
+- [x] 04-08-PLAN.md — Fix missing initial batch-progress event (progress showed "0/1" during first file)
 
 ## Progress
 

@@ -131,19 +131,23 @@ Plans:
 3. User can select multiple seeds (not just one) and each video in the queue produces one output per selected seed ({original}_{seed_alias}.{ext})
 4. User sees MD5 checksums before and after processing for every file in the batch summary, with clear pass/fail indication that the file was actually modified
 5. All existing v1 functionality continues to work — this phase is additive hardening, not a rewrite
-   **Plans:** TBD
+   **Plans:** 6 plans
 
 Plans:
-**Wave 1** *(cross-platform)*
+**Wave 1** *(cross-platform — parallel)*
 - [ ] 05-01-PLAN.md — Tauri build config for Windows (.msi/.exe) + Linux (.AppImage/.deb) targets
 - [ ] 05-02-PLAN.md — GitHub Actions CI matrix build (macOS/Windows/Linux) with artifact upload
 
-**Wave 2** *(performance)*
+**Wave 2** *(GPU — blocked on Wave 1 completion)*
 - [ ] 05-03-PLAN.md — GPU encoder detection (NVENC/VideoToolbox/VAAPI) + auto-select in executor
-- [ ] 05-04-PLAN.md — Parallel pipeline optimization (concurrency scheduling, streaming I/O, memory reduction)
 
-**Wave 3** *(multi-seed + MD5)*
+**Wave 3** *(pipeline — blocked on Wave 2 completion)*
+- [ ] 05-04-PLAN.md — GPU wiring into batch.rs + Mutex lock frequency reduction
+
+**Wave 4** *(multi-seed — blocked on Wave 3 completion)*
 - [ ] 05-05-PLAN.md — Multi-seed selection UI + Rust batch command accepting Vec<SeedId>
+
+**Wave 5** *(MD5 — blocked on Wave 4 completion)*
 - [ ] 05-06-PLAN.md — MD5 checksum recording (pre-process) + comparison (post-process) + summary integration
 
 ## Progress

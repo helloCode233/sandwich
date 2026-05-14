@@ -104,7 +104,7 @@ Plans:
 - [x] 04-01-PLAN.md — Rust: PerFileProgress struct + enriched executor emitting batch-file-progress event
 
 **Wave 2**
-- [ ] 04-02-PLAN.md — Frontend contracts: PerFileProgress TypeScript type + 17 new i18n keys in both locales
+- [x] 04-02-PLAN.md — Frontend contracts: PerFileProgress TypeScript type + 17 new i18n keys in both locales
 
 **Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 04-03-PLAN.md — Store + composable: perFileProgress map, cancelling state, 6 event listeners

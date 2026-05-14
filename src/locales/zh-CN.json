@@ -73,7 +73,15 @@
     "changeDir": "更改目录",
     "start": "开始处理",
     "cancel": "取消处理",
-    "cancelConfirm": "确定取消批处理？已完成处理的文件将保留。",
+    "cancelConfirmTitle": "取消批处理？",
+    "cancelConfirmBody": "已完成处理的文件将保留，正在处理的文件将被丢弃。",
+    "keepProcessing": "继续处理",
+    "cancelling": "取消中...",
+    "processingFile": "正在处理：{filename}",
+    "fileProgress": "帧 {current} / {total}",
+    "fileEta": "预计剩余 {minutes} 分钟",
+    "fileFailed": "{filename} 处理失败：{error}",
+    "noOutputDir": "请先选择输出目录",
     "noSeedSelected": "请先选择一个种子",
     "queueEmpty": "队列为空，请先导入视频",
     "alreadyRunning": "已有批处理正在进行中，请等待完成或取消",
@@ -81,7 +89,18 @@
     "progress": "{completed}/{total}",
     "completed": "批处理完成",
     "cancelled": "批处理已取消",
-    "defaultOutputDir": "~/Videos/sandwich-output/"
+    "defaultOutputDir": "~/Videos/sandwich-output/",
+    "summary": {
+      "completeTitle": "批处理完成",
+      "cancelledTitle": "批处理已取消",
+      "succeededSection": "成功（{count}）",
+      "failedSection": "失败（{count}）",
+      "outputPath": "{filename} → {outputPath}",
+      "fileError": "{filename}：{errorMessage}",
+      "clearResults": "清除结果",
+      "completeBody": "共 {total} 个文件，成功 {succeeded} 个，失败 {failed} 个",
+      "cancelledBody": "已取消，共 {total} 个文件，成功 {succeeded} 个，失败 {failed} 个"
+    }
   },
   "notification": {
     "lowDiskSpace": "磁盘空间不足（剩余不足 100 MB）",

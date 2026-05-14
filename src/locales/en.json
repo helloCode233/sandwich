@@ -73,7 +73,15 @@
     "changeDir": "Change Directory",
     "start": "Start Processing",
     "cancel": "Cancel Processing",
-    "cancelConfirm": "Cancel batch processing? Completed files will be preserved.",
+    "cancelConfirmTitle": "Cancel Batch Processing?",
+    "cancelConfirmBody": "Completed files will be preserved. In-progress files will be discarded.",
+    "keepProcessing": "Keep Processing",
+    "cancelling": "Cancelling...",
+    "processingFile": "Processing: {filename}",
+    "fileProgress": "Frame {current} / {total}",
+    "fileEta": "~{minutes} min remaining",
+    "fileFailed": "{filename} failed: {error}",
+    "noOutputDir": "Please select an output directory first",
     "noSeedSelected": "Please select a seed first",
     "queueEmpty": "Queue is empty. Import videos first",
     "alreadyRunning": "A batch is already in progress",
@@ -81,7 +89,18 @@
     "progress": "{completed}/{total}",
     "completed": "Batch Complete",
     "cancelled": "Batch Cancelled",
-    "defaultOutputDir": "~/Videos/sandwich-output/"
+    "defaultOutputDir": "~/Videos/sandwich-output/",
+    "summary": {
+      "completeTitle": "Batch Complete",
+      "cancelledTitle": "Batch Cancelled",
+      "succeededSection": "Succeeded ({count})",
+      "failedSection": "Failed ({count})",
+      "outputPath": "{filename} -> {outputPath}",
+      "fileError": "{filename}: {errorMessage}",
+      "clearResults": "Clear Results",
+      "completeBody": "{succeeded} succeeded, {failed} failed out of {total} files",
+      "cancelledBody": "Cancelled after {succeeded} succeeded, {failed} failed out of {total} files"
+    }
   },
   "notification": {
     "lowDiskSpace": "Low disk space (less than 100 MB available)",

@@ -18,3 +18,20 @@ export interface FileResult {
   seed: string;
   error: string;
 }
+
+/** Per-file frame-level progress from the Rust executor via batch-file-progress event.
+ *  Mirrors Rust struct PerFileProgress in src-tauri/src/models/batch.rs */
+export interface PerFileProgress {
+  /** Display filename being processed. */
+  file: string;
+  /** Percentage complete for this file (0-100). */
+  percent: number;
+  /** Current frame number being encoded (from ffmpeg-sidecar FfmpegProgress.frame). */
+  currentFrame: number;
+  /** Total frames in this file (duration_secs * fps from ffprobe metadata). */
+  totalFrames: number;
+  /** Frames per second encoding speed. */
+  fps: number;
+  /** Estimated remaining seconds for this file (clamped to >= 0). */
+  remainingSeconds: number;
+}

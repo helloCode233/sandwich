@@ -9,7 +9,7 @@ A four-phase horizontal-layers build: Foundation (FFmpeg lifecycle + scaffold) e
 - [x] **Phase 1: Foundation** - FFmpeg detection, one-click download, project scaffold, Tauri plugins (completed 2026-05-13)
 - [ ] **Phase 2: Rust Backend** - Domain services, FFmpeg command builder, processing pipeline, IPC commands
 - [x] **Phase 3: Vue Frontend** - Pinia stores, typed API wrappers, dual-panel UI, Naive UI dark theme (completed 2026-05-13)
-- [x] **Phase 4: Integration & Polish** - Progress streaming, batch summary, cancel flow wiring, E2E validation (completed 2026-05-14)
+- [x] **Phase 4: Integration & Polish** - Progress streaming, batch summary, cancel flow wiring, E2E validation (completed 2026-05-14, 3 gaps found)
 
 ## Phase Details
 
@@ -97,7 +97,7 @@ Plans:
 2. After processing finishes, user sees a completion summary panel showing how many files succeeded, how many failed, and per-file output paths
 3. User can cancel an in-progress batch from the UI; FFmpeg processes terminate gracefully and the app returns to a clean, ready-to-process state
 4. The full end-to-end workflow operates without breaking: generate seed -> drag in videos -> select seed -> click process -> watch live progress per file -> review completion summary
-   **Plans:** 5/5 plans complete
+   **Plans:** 8 plans (5 execution + 3 gap closure, 5/8 complete)
 
 Plans:
 **Wave 1**
@@ -113,6 +113,11 @@ Plans:
 - [x] 04-04-PLAN.md — UI: BatchBanner multi-state + BatchControls cancel confirmation + ImportZone disabled during processing
 - [x] 04-05-PLAN.md — UI: QueueList per-file progress bars + BatchSummary completion summary + MainLayout conditional rendering
 
+**Gap Closure** *(post-verification fixes)*
+- [ ] 04-06-PLAN.md — Fix parse_time_to_seconds MM:SS bug (progress stuck at 0% for short videos)
+- [ ] 04-07-PLAN.md — Fix BatchBanner wrong title for completed-with-failures (showed "Cancelled")
+- [ ] 04-08-PLAN.md — Fix missing initial batch-progress event (progress showed "0/1" during first file)
+
 ## Progress
 
 **Execution Order:**
@@ -123,4 +128,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | 1. Foundation           | 4/4            | Complete    | 2026-05-13 |
 | 2. Rust Backend         | 0/4            | Planned     | -         |
 | 3. Vue Frontend         | 7/7            | Complete    | 2026-05-13 |
-| 4. Integration & Polish | 5/5 | Complete   | 2026-05-14 |
+| 4. Integration & Polish | 5/8            | Gaps Found  | 2026-05-14 |

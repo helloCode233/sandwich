@@ -121,6 +121,7 @@ pub async fn start_batch(
     }
 
     // Initialize batch state (Pitfall 3: drop locks before FFmpeg spawn)
+    let initial_progress;
     {
         let app_state = state.lock().map_err(|e| format!("Lock error: {}", e))?;
         let mut batch_state =
@@ -133,7 +134,11 @@ pub async fn start_batch(
             failed: 0,
             current_file: None,
         };
+        initial_progress = batch_state.progress.clone();
     }
+
+    // Emit initial progress so frontend shows "0/n" immediately (not "0/1")
+    let _ = app.emit("batch-progress", initial_progress);
 
     // Persist output directory preference (D-05)
     persist_output_dir(&app, &output_dir)?;

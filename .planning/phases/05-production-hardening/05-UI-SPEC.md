@@ -65,7 +65,7 @@ Declared values (multiples of 4):
 | 3xl | 64px | Not used in current phase |
 
 Exceptions:
-- `6px`: icon-to-text gap in `.summary-row` (existing pattern from Phase 04, preserved for Phase 05 MD5 columns)
+- `8px`: icon-to-text gap in `.summary-row` (existing pattern from Phase 04, preserved for Phase 05 MD5 columns). Replaces Phase 04's `6px` gap — normalized to match sm token.
 - `12px`: `NSpace :size="12"` (Naive UI component prop, used in BatchControls control stack)
 
 Source: Pre-populated from existing `BatchControls.vue`, `BatchSummary.vue`, `MainLayout.vue` scoped styles. UnoCSS presetUno provides the 4px scale.
@@ -90,12 +90,14 @@ Source: Derived from existing `.summary-row` styles and D-15 requirements.
 | Label | 12px | 400 (regular) | 1.5 |
 | Heading | 16px | 600 (semibold) | 1.2 |
 | Mono (MD5) | 12px | 400 (regular) | 1.4 |
+| Detail | 11px | 400 (regular) | 1.4 |
 
 Implementation:
 - Body: `NText` with `class="text-sm"` (14px, regular weight)
 - Label: `NText` with `class="text-xs"` and `depth="2"` or `depth="3"` (12px)
 - Heading: `NText strong class="text-base"` (16px, semibold)
 - MD5 hash values: `NText depth="3" class="text-xs font-mono"` (12px, monospace for hex readability). Use UnoCSS `font-mono` utility.
+- Detail (seed alias, MD5 short values, output path in summary rows): `NText depth="3" class="text-[11px]"` (11px, regular). Used for secondary metadata in dense summary card layouts where 12px would reduce information density too much. Uno arbitrary value `text-[11px]`.
 
 Weight tokens: **400 (regular)** and **600 (semibold)**. No other weights used.
 
@@ -139,6 +141,29 @@ Source: Pre-populated from `BatchSummary.vue` scoped styles, `BatchBanner.vue` i
 
 ---
 
+## Visual Hierarchy
+
+**Focal point:** The BatchBanner progress bar (animated NProgress with `#2080f0` fill) is the primary visual anchor during active processing. Its color + motion draw the eye first.
+
+**Eye path during processing:**
+1. **BatchBanner progress bar** — motion + accent color (#2080f0), anchors the top of the panel
+2. **Per-file progress indicators** in QueueList — green (#18a058) NProgress bars, one per active file
+3. **Multi-seed selector** (BatchControls NSelect) — disabled during processing, visually recessed
+4. **Cancel button** — error-colored (#d03050), always visible as the escape hatch
+
+**Eye path post-completion:**
+1. **BatchSummary status icons** — color-coded (green CheckCircle / amber ShieldAlert / red XCircle) draw attention to results
+2. **MD5 comparison rows** — monospace hex values create visual rhythm; amber "Unchanged" labels stand out as anomalies
+3. **Summary body text** — provides numerical recap (succeeded/failed/unchanged counts)
+4. **Clear Results button** — secondary action, bottom-right, visually recessive
+
+**Hierarchy during idle state (unchanged from Phase 04):**
+1. Seed list (left panel) — compact cards with hover-reveal actions
+2. Import zone + video queue (right panel top) — dashed-border drop zone
+3. Batch controls (right panel bottom) — seed selector, concurrency, output dir, start button
+
+---
+
 ## Icon Contract
 
 | Icon | Source | Usage | Color |
@@ -170,6 +195,15 @@ Source: Existing pattern from `BatchSummary.vue`, `BatchControls.vue`. New icons
 | zh-CN | **开始处理** (unchanged from Phase 04) |
 
 The CTA label does not change. Multi-seed is a control enhancement, not a workflow change.
+
+### Cancel CTA
+
+| Locale | Button Label | i18n Key |
+|--------|-------------|----------|
+| en | **Cancel Processing** | `batch.cancel` |
+| zh-CN | **取消处理** | `batch.cancel` |
+
+The cancel button label and its confirmation dialog (title, body, positive/negative text) are unchanged from Phase 04. The button appears as a block-level `type="error"` NButton in BatchControls.vue during active processing.
 
 ### Multi-Seed Selection
 

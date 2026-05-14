@@ -109,7 +109,7 @@ async function onStart() {
     return;
   }
 
-  const ok = await startBatch(seedStore.selectedSeedId, outputDir.value);
+  const ok = await startBatch(seedStore.selectedSeedId, outputDir.value, queueStore.entryCount);
   if (!ok) {
     message.error(t('notification.operationFailed', { error: 'Batch start failed' }));
   }

@@ -1,10 +1,20 @@
 <script setup lang="ts">
-import { NButton, NIcon, NText, NTag, NScrollbar, useDialog, useMessage } from 'naive-ui';
+import {
+  NButton,
+  NIcon,
+  NText,
+  NTag,
+  NScrollbar,
+  NProgress,
+  useDialog,
+  useMessage,
+} from 'naive-ui';
 import { Clapperboard, Trash2, AlertCircle, CheckCircle, Plus } from 'lucide-vue-next';
 import { open } from '@tauri-apps/plugin-dialog';
 import { useQueueStore } from '@/stores/queue';
 import { useQueue } from '@/composables/useQueue';
 import { useI18n } from 'vue-i18n';
+import { useBatchStore } from '@/stores/batch';
 import type { VideoEntry } from '@/types/video';
 
 const store = useQueueStore();
@@ -12,6 +22,17 @@ const { importVideo, removeFromQueue, clearQueue } = useQueue();
 const dialog = useDialog();
 const message = useMessage();
 const { t } = useI18n();
+
+const batchStore = useBatchStore();
+
+function isCurrentFile(filename: string): boolean {
+  return batchStore.isProcessing && batchStore.progress.currentFile === filename;
+}
+
+function fileProgressFor(filename: string) {
+  if (!isCurrentFile(filename)) return null;
+  return batchStore.currentFileProgress;
+}
 
 const VIDEO_EXTENSIONS = ['mp4', 'mov', 'avi', 'mkv', 'webm', 'flv', 'wmv'];
 
@@ -105,7 +126,13 @@ async function onAddVideoClick() {
     <!-- Header: title + clear all -->
     <div class="flex items-center justify-between py-2 shrink-0">
       <NText strong class="text-sm"> {{ t('queue.title') }} ({{ store.entryCount }}) </NText>
-      <NButton v-if="store.entryCount > 0" size="tiny" quaternary type="error" @click="onClearAll">
+      <NButton
+        v-if="store.entryCount > 0 && !batchStore.isProcessing"
+        size="tiny"
+        quaternary
+        type="error"
+        @click="onClearAll"
+      >
         {{ t('queue.clearAll') }}
       </NButton>
     </div>
@@ -122,7 +149,12 @@ async function onAddVideoClick() {
         <NText depth="3" class="text-xs mt-1 block">
           {{ t('queue.emptyInstruction') }}
         </NText>
-        <NButton type="primary" class="mt-4" @click="onAddVideoClick">
+        <NButton
+          v-if="!batchStore.isProcessing"
+          type="primary"
+          class="mt-4"
+          @click="onAddVideoClick"
+        >
           <template #icon>
             <NIcon :size="16">
               <Plus />
@@ -161,10 +193,45 @@ async function onAddVideoClick() {
               <NText depth="3" class="text-xs mt-0.5 block">
                 {{ metadataLine(entry) }}
               </NText>
+              <div
+                v-if="isCurrentFile(entry.filename) && fileProgressFor(entry.filename)"
+                class="mt-2"
+              >
+                <NProgress
+                  type="line"
+                  :percentage="fileProgressFor(entry.filename)!.percent"
+                  indicator-placement="inside"
+                  :height="18"
+                  :color="fileProgressFor(entry.filename)!.percent === 100 ? '#18a058' : '#2080f0'"
+                />
+                <div class="flex justify-between mt-0.5">
+                  <NText depth="3" class="text-xs">
+                    {{
+                      t('batch.fileProgress', {
+                        current: fileProgressFor(entry.filename)!.currentFrame,
+                        total: fileProgressFor(entry.filename)!.totalFrames,
+                      })
+                    }}
+                  </NText>
+                  <NText depth="3" class="text-xs">
+                    {{
+                      t('batch.fileEta', {
+                        minutes: Math.ceil(fileProgressFor(entry.filename)!.remainingSeconds / 60),
+                      })
+                    }}
+                  </NText>
+                </div>
+              </div>
             </div>
 
             <!-- Remove button -->
-            <NButton size="tiny" quaternary type="error" @click="onRemove(index)">
+            <NButton
+              size="tiny"
+              quaternary
+              type="error"
+              :disabled="batchStore.isProcessing"
+              @click="onRemove(index)"
+            >
               <template #icon>
                 <NIcon :size="14">
                   <Trash2 />

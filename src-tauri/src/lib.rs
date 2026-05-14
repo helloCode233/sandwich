@@ -6,7 +6,8 @@ mod state;
 use commands::batch::{cancel_batch, get_batch_status, start_batch};
 use commands::download::{cancel_download, start_download};
 use commands::ffmpeg::{
-    check_latest_version, detect_ffmpeg, detect_ffmpeg_internal, get_ffmpeg_status, verify_ffmpeg,
+    check_latest_version, detect_ffmpeg, detect_ffmpeg_internal, get_default_ffmpeg_dir,
+    get_ffmpeg_status, verify_ffmpeg,
 };
 use commands::import::import_video;
 use commands::queue::{clear_queue, get_queue, remove_from_queue};
@@ -28,6 +29,7 @@ pub fn run() {
             start_download,
             cancel_download,
             verify_ffmpeg,
+            get_default_ffmpeg_dir,
             // Phase 2: Seed commands
             generate_seed,
             rename_seed,

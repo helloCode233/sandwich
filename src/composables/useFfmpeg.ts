@@ -73,6 +73,27 @@ export function useFfmpeg() {
     }
   }
 
+  /** Get the recommended default FFmpeg download directory from Rust. */
+  async function getDefaultDir(): Promise<string> {
+    return await invoke<string>('get_default_ffmpeg_dir');
+  }
+
+  /** Verify an existing FFmpeg installation without downloading. */
+  async function verifyExisting(path: string): Promise<boolean> {
+    store.status = 'verifying';
+    store.downloadError = null;
+    try {
+      const info = await invoke<FfmpegInfo>('verify_ffmpeg', { path });
+      store.setFfmpegInfo(info);
+      store.status = 'verified';
+      return true;
+    } catch (err) {
+      store.status = 'error';
+      store.downloadError = String(err);
+      return false;
+    }
+  }
+
   /** Cancel an active download. */
   async function cancelDownload(): Promise<void> {
     try {
@@ -97,6 +118,8 @@ export function useFfmpeg() {
     subscribeReady,
     selectDirectory,
     startDownload,
+    getDefaultDir,
+    verifyExisting,
     cancelDownload,
     unsubscribeAll,
   };

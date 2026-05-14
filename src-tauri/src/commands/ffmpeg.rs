@@ -2,7 +2,7 @@ use ffmpeg_sidecar::command::ffmpeg_is_installed;
 use ffmpeg_sidecar::version::{ffmpeg_version, ffmpeg_version_with_path};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_store::StoreExt;
 
 /// Returned to the frontend after FFmpeg detection.
@@ -265,4 +265,17 @@ pub async fn check_latest_version() -> Result<Option<FfmpegUpdateInfo>, String> 
     } else {
         Ok(None) // Up to date
     }
+}
+
+/// Tauri command: Return the recommended default directory for FFmpeg downloads.
+/// Uses the platform-specific app data directory (macOS: ~/Library/Application Support/…, etc.).
+/// The frontend can offer this as a one-click default alongside a custom directory picker.
+#[tauri::command]
+pub fn get_default_ffmpeg_dir(app: AppHandle) -> Result<String, String> {
+    let mut dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to resolve app data directory: {}", e))?;
+    dir.push("ffmpeg");
+    Ok(dir.to_string_lossy().to_string())
 }

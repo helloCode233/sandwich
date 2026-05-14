@@ -18,6 +18,11 @@
   "download": {
     "selectDir": "Choose FFmpeg Storage Directory",
     "chooseDir": "Choose Directory",
+    "useDefault": "Use Default Path (Recommended)",
+    "useDefaultDesc": "Download to app data directory, no configuration needed",
+    "useCustom": "Choose Custom Folder",
+    "useExisting": "Use Existing Installation",
+    "useExistingDesc": "Select a folder that already contains ffmpeg and ffprobe",
     "progress": "Download Progress",
     "downloading": "Downloading...",
     "verifying": "Verifying...",

@@ -25,14 +25,9 @@
     }
   },
   "plugins": {
-    "store": {},
-    "shell": {},
-    "dialog": {},
-    "fs": {
-      "scope": {
-        "allow": ["**"],
-        "deny": []
-      }
-    }
+    "store": null,
+    "shell": null,
+    "dialog": null,
+    "fs": null
   }
 }

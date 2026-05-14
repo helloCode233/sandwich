@@ -18,6 +18,11 @@
   "download": {
     "selectDir": "选择 FFmpeg 存储目录",
     "chooseDir": "选择目录",
+    "useDefault": "使用默认路径（推荐）",
+    "useDefaultDesc": "下载到应用数据目录，无需手动配置",
+    "useCustom": "选择自定义目录",
+    "useExisting": "使用已有安装",
+    "useExistingDesc": "选择已包含 ffmpeg 和 ffprobe 的文件夹",
     "progress": "下载进度",
     "downloading": "正在下载...",
     "verifying": "正在验证...",

@@ -12,8 +12,15 @@ const emit = defineEmits<{
 }>();
 
 const store = useFfmpegStore();
-const { subscribeProgress, selectDirectory, startDownload, cancelDownload, unsubscribeAll } =
-  useFfmpeg();
+const {
+  subscribeProgress,
+  selectDirectory,
+  startDownload,
+  getDefaultDir,
+  verifyExisting,
+  cancelDownload,
+  unsubscribeAll,
+} = useFfmpeg();
 const { t } = useI18n();
 
 /** Format bytes to human-readable string. */
@@ -35,13 +42,34 @@ function formatSpeed(bytesPerSec: number): string {
   return `${formatBytes(bytesPerSec)}/s`;
 }
 
-/** User clicks to choose a directory then start download. */
-async function onSelectAndDownload() {
+/** Use the default app-data directory: no picker, one-click download. */
+async function onUseDefault() {
+  try {
+    const dir = await getDefaultDir();
+    store.targetDir = dir;
+    await startDownload(dir);
+  } catch (err) {
+    store.status = 'error';
+    store.downloadError = String(err);
+  }
+}
+
+/** User chooses a custom directory then starts download. */
+async function onChooseCustom() {
   const dir = await selectDirectory();
   if (dir) {
+    store.targetDir = dir;
     await startDownload(dir);
-    // On success, 'ffmpeg-ready' event will update store to 'verified'
-    if (store.status === 'verified') {
+  }
+}
+
+/** User selects an existing directory with ffmpeg/ffprobe — verify only, no download. */
+async function onUseExisting() {
+  const dir = await selectDirectory();
+  if (dir) {
+    store.targetDir = dir;
+    const ok = await verifyExisting(dir);
+    if (ok) {
       emit('done');
     }
   }
@@ -51,11 +79,8 @@ async function onSelectAndDownload() {
 async function onRetry() {
   if (store.targetDir) {
     await startDownload(store.targetDir);
-    if (store.status === 'verified') {
-      emit('done');
-    }
   } else {
-    await onSelectAndDownload();
+    await onChooseCustom();
   }
 }
 
@@ -68,10 +93,11 @@ async function onCancel() {
 onMounted(async () => {
   await subscribeProgress();
 
-  // If we already have a targetDir (resume), auto-start
+  // If we already have a targetDir (resume), auto-start download
   if (store.targetDir && store.status === 'selecting-dir') {
     await startDownload(store.targetDir);
   }
+  // If status is 'verifying', verifyExisting was called — handled by its own flow
 });
 
 onUnmounted(() => {
@@ -83,20 +109,45 @@ onUnmounted(() => {
   <div class="h-screen flex items-center justify-center bg-[#101014]">
     <NCard :bordered="true" class="w-[500px] max-w-[95vw]">
       <NSpace vertical :size="16">
-        <!-- Step 1: Choose directory -->
+        <!-- Step 1: Choose directory / use default / use existing -->
         <template v-if="store.status === 'selecting-dir' || store.status === 'missing'">
-          <NText strong>{{ t('download.selectDir') }}</NText>
-          <NButton type="primary" size="large" block @click="onSelectAndDownload">
+          <NText strong>
+            {{ t('download.selectDir') }}
+          </NText>
+
+          <!-- Option A: Default path (recommended) -->
+          <NButton type="primary" size="large" block @click="onUseDefault">
+            {{ t('download.useDefault') }}
+          </NButton>
+          <NText depth="3" class="text-xs text-center -mt-2">
+            {{ t('download.useDefaultDesc') }}
+          </NText>
+
+          <!-- Option B: Custom folder download -->
+          <NButton size="medium" block @click="onChooseCustom">
             <template #icon>
               <NIcon><FolderOpen /></NIcon>
             </template>
-            {{ t('download.chooseDir') }}
+            {{ t('download.useCustom') }}
           </NButton>
+
+          <!-- Option C: Use existing installation -->
+          <NButton size="medium" block @click="onUseExisting">
+            <template #icon>
+              <NIcon><FolderOpen /></NIcon>
+            </template>
+            {{ t('download.useExisting') }}
+          </NButton>
+          <NText depth="3" class="text-xs text-center -mt-2">
+            {{ t('download.useExistingDesc') }}
+          </NText>
         </template>
 
         <!-- Step 2: Downloading / Verifying -->
         <template v-else-if="store.status === 'downloading' || store.status === 'verifying'">
-          <NText strong>{{ t('download.progress') }}</NText>
+          <NText strong>
+            {{ t('download.progress') }}
+          </NText>
           <NProgress
             type="line"
             :percentage="Math.round(store.downloadProgress.percent)"
@@ -132,7 +183,9 @@ onUnmounted(() => {
 
         <!-- Step 3: Complete (brief flash before auto-transition) -->
         <template v-else-if="store.status === 'verified'">
-          <NText type="success" strong>{{ t('download.complete') }}</NText>
+          <NText type="success" strong>
+            {{ t('download.complete') }}
+          </NText>
           <NProgress type="line" :percentage="100" :height="28" status="success" />
         </template>
 
@@ -141,7 +194,9 @@ onUnmounted(() => {
           <NIcon :size="48" color="#d03050">
             <XCircle />
           </NIcon>
-          <NText type="error">{{ store.downloadError || t('download.errorDefault') }}</NText>
+          <NText type="error">
+            {{ store.downloadError || t('download.errorDefault') }}
+          </NText>
 
           <!-- Show retry if under 3 attempts, otherwise show manual instructions -->
           <template v-if="store.retryCount < 3">
@@ -156,7 +211,9 @@ onUnmounted(() => {
             <NText depth="3" class="text-xs text-center whitespace-pre-wrap">
               {{ t('download.manualDownload', { dir: store.targetDir || '' }) }}
             </NText>
-            <NButton @click="emit('back')">{{ t('common.back') }}</NButton>
+            <NButton @click="emit('back')">
+              {{ t('common.back') }}
+            </NButton>
           </template>
         </template>
       </NSpace>

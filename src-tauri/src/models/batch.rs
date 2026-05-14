@@ -49,3 +49,22 @@ pub struct FileResult {
     /// Human-readable error message.
     pub error: String,
 }
+
+/// Per-file frame-level progress emitted during FFmpeg execution.
+/// Emitted via "batch-file-progress" event from executor.rs.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PerFileProgress {
+    /// Display filename being processed.
+    pub file: String,
+    /// Percentage complete for this file (0.0 - 100.0).
+    pub percent: f64,
+    /// Current frame number being encoded (from ffmpeg-sidecar FfmpegProgress.frame).
+    pub current_frame: u32,
+    /// Total frames in this file (computed from VideoEntry.metadata.duration_secs * fps).
+    pub total_frames: u32,
+    /// Frames per second encoding speed (from ffmpeg-sidecar FfmpegProgress.fps).
+    pub fps: f32,
+    /// Estimated remaining seconds for this file (computed from (total_duration - current_time) / speed).
+    pub remaining_seconds: f64,
+}

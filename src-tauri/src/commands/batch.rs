@@ -52,13 +52,26 @@ fn get_concurrency_preference(app: &AppHandle) -> u32 {
     1 // Default per D-08
 }
 
+/// Expand a leading tilde in a path to the user's home directory.
+/// Rust's Path/PathBuf and OS syscalls do not expand ~ — only shells do.
+fn expand_tilde(path: &str) -> String {
+    if path.starts_with('~') {
+        if let Ok(home) = std::env::var("HOME") {
+            return path.replacen('~', &home, 1);
+        }
+    }
+    path.to_string()
+}
+
 /// Persist output directory to sandwich-config.json (D-05, D-09).
 fn persist_output_dir(app: &AppHandle, dir: &str) -> Result<(), String> {
     let store = app
         .store("sandwich-config.json")
         .map_err(|e| format!("Failed to open config store: {}", e))?;
     store.set("output_dir", serde_json::Value::String(dir.to_string()));
-    store.save().map_err(|e| format!("Failed to save config: {}", e))?;
+    store
+        .save()
+        .map_err(|e| format!("Failed to save config: {}", e))?;
     Ok(())
 }
 
@@ -78,11 +91,15 @@ pub async fn start_batch(
     // Check batch is not already running
     {
         let app_state = state.lock().map_err(|e| format!("Lock error: {}", e))?;
-        let batch_state =
-            app_state.batch_state.lock().map_err(|e| format!("Batch state lock error: {}", e))?;
+        let batch_state = app_state
+            .batch_state
+            .lock()
+            .map_err(|e| format!("Batch state lock error: {}", e))?;
         if batch_state.status != BatchStatus::Idle {
-            return Err("A batch is already in progress. Cancel it first or wait for completion."
-                .to_string());
+            return Err(
+                "A batch is already in progress. Cancel it first or wait for completion."
+                    .to_string(),
+            );
         }
     }
 
@@ -124,8 +141,10 @@ pub async fn start_batch(
     let initial_progress;
     {
         let app_state = state.lock().map_err(|e| format!("Lock error: {}", e))?;
-        let mut batch_state =
-            app_state.batch_state.lock().map_err(|e| format!("Batch state lock error: {}", e))?;
+        let mut batch_state = app_state
+            .batch_state
+            .lock()
+            .map_err(|e| format!("Batch state lock error: {}", e))?;
         batch_state.status = BatchStatus::Running;
         batch_state.progress = BatchProgress {
             total: queue_snapshot.len(),
@@ -139,6 +158,9 @@ pub async fn start_batch(
 
     // Emit initial progress so frontend shows "0/n" immediately (not "0/1")
     let _ = app.emit("batch-progress", initial_progress);
+
+    // Expand tilde in output_dir (Rust Path does not expand ~)
+    let output_dir = expand_tilde(&output_dir);
 
     // Persist output directory preference (D-05)
     persist_output_dir(&app, &output_dir)?;
@@ -218,8 +240,10 @@ pub async fn start_batch(
     // Reset batch state
     {
         let app_state = state.lock().map_err(|e| format!("Lock error: {}", e))?;
-        let mut batch_state =
-            app_state.batch_state.lock().map_err(|e| format!("Batch state lock error: {}", e))?;
+        let mut batch_state = app_state
+            .batch_state
+            .lock()
+            .map_err(|e| format!("Batch state lock error: {}", e))?;
         batch_state.status = BatchStatus::Idle;
         batch_state.progress.current_file = None;
     }
@@ -230,7 +254,10 @@ pub async fn start_batch(
         *storage = None;
     }
 
-    let result = BatchResult { succeeded: succeeded_files, failed: failed_files };
+    let result = BatchResult {
+        succeeded: succeeded_files,
+        failed: failed_files,
+    };
 
     if was_cancelled {
         let _ = app.emit("batch-cancelled", result);
@@ -251,8 +278,10 @@ pub async fn cancel_batch(state: State<'_, Mutex<AppState>>, app: AppHandle) -> 
     // Verify batch is running
     {
         let app_state = state.lock().map_err(|e| format!("Lock error: {}", e))?;
-        let mut batch_state =
-            app_state.batch_state.lock().map_err(|e| format!("Batch state lock error: {}", e))?;
+        let mut batch_state = app_state
+            .batch_state
+            .lock()
+            .map_err(|e| format!("Batch state lock error: {}", e))?;
 
         if batch_state.status != BatchStatus::Running {
             return Err("No batch is currently running.".to_string());
@@ -274,12 +303,48 @@ pub async fn cancel_batch(state: State<'_, Mutex<AppState>>, app: AppHandle) -> 
     Ok(())
 }
 
+/// Tauri command: Open a directory in the system file manager.
+#[tauri::command]
+pub fn open_file_manager(path: String) -> Result<(), String> {
+    let expanded = if path.starts_with('~') {
+        std::env::var("HOME")
+            .map(|home| path.replacen('~', &home, 1))
+            .unwrap_or(path)
+    } else {
+        path
+    };
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(&expanded)
+            .spawn()
+            .map_err(|e| format!("Failed to open directory: {}", e))?;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(&expanded)
+            .spawn()
+            .map_err(|e| format!("Failed to open directory: {}", e))?;
+    }
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .arg(&expanded)
+            .spawn()
+            .map_err(|e| format!("Failed to open directory: {}", e))?;
+    }
+    Ok(())
+}
+
 /// Tauri command: Get current batch processing status.
 /// Returns the live BatchProgress even during processing.
 #[tauri::command]
 pub async fn get_batch_status(state: State<'_, Mutex<AppState>>) -> Result<BatchProgress, String> {
     let app_state = state.lock().map_err(|e| format!("Lock error: {}", e))?;
-    let batch_state =
-        app_state.batch_state.lock().map_err(|e| format!("Batch state lock error: {}", e))?;
+    let batch_state = app_state
+        .batch_state
+        .lock()
+        .map_err(|e| format!("Batch state lock error: {}", e))?;
     Ok(batch_state.progress.clone())
 }

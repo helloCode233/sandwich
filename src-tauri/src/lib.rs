@@ -3,7 +3,7 @@ mod ffmpeg;
 mod models;
 mod state;
 
-use commands::batch::{cancel_batch, get_batch_status, start_batch};
+use commands::batch::{cancel_batch, get_batch_status, open_file_manager, start_batch};
 use commands::download::{cancel_download, start_download};
 use commands::ffmpeg::{
     check_latest_version, detect_ffmpeg, detect_ffmpeg_internal, get_default_ffmpeg_dir,
@@ -46,6 +46,7 @@ pub fn run() {
             start_batch,
             cancel_batch,
             get_batch_status,
+            open_file_manager,
         ])
         .setup(|app| {
             // --- Phase 2: Initialize managed state ---

@@ -3,7 +3,8 @@ import { ref, computed, onMounted } from 'vue';
 import { NSelect, NButton, NIcon, NText, NSpace, useDialog } from 'naive-ui';
 import { Play, Square, FolderOpen } from 'lucide-vue-next';
 import { useMessage } from 'naive-ui';
-import { open } from '@tauri-apps/plugin-dialog';
+import { invoke } from '@tauri-apps/api/core';
+import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { Store } from '@tauri-apps/plugin-store';
 import { useSeedStore } from '@/stores/seed';
 import { useQueueStore } from '@/stores/queue';
@@ -70,7 +71,7 @@ async function onConcurrencyChange(value: number) {
 
 /** Open native directory picker for output directory per D-12. */
 async function onChangeOutputDir() {
-  const dir = await open({
+  const dir = await openDialog({
     directory: true,
     multiple: false,
     title: t('batch.outputDir'),
@@ -87,6 +88,17 @@ async function onChangeOutputDir() {
     } catch (err) {
       console.error('Failed to persist output directory:', err);
     }
+  }
+}
+
+/** Open the output directory in the system file manager. */
+async function onOpenOutputDir() {
+  if (!outputDir.value) return;
+  try {
+    await invoke('open_file_manager', { path: outputDir.value });
+  } catch (err) {
+    console.error('Failed to open output directory:', err);
+    message.error(t('notification.operationFailed', { error: String(err) }));
   }
 }
 
@@ -163,13 +175,21 @@ onMounted(() => {
       />
 
       <!-- Concurrency (D-11) -->
-      <NSelect
-        :value="concurrency"
-        :options="concurrencyOptions"
-        :placeholder="t('batch.concurrency')"
-        :disabled="batchStore.isProcessing"
-        @update:value="(v: number) => onConcurrencyChange(v)"
-      />
+      <div>
+        <NText depth="2" class="text-xs mb-1 block">
+          {{ t('batch.concurrency') }}
+        </NText>
+        <NSelect
+          :value="concurrency"
+          :options="concurrencyOptions"
+          :placeholder="t('batch.concurrency')"
+          :disabled="batchStore.isProcessing"
+          @update:value="(v: number) => onConcurrencyChange(v)"
+        />
+        <NText depth="3" class="text-[11px] mt-1">
+          {{ t('batch.concurrencyDesc') }}
+        </NText>
+      </div>
 
       <!-- Output Directory (D-12) -->
       <div class="flex items-center gap-2">
@@ -188,6 +208,13 @@ onMounted(() => {
             </NIcon>
           </template>
           {{ t('batch.changeDir') }}
+        </NButton>
+        <NButton
+          size="small"
+          quaternary
+          @click="onOpenOutputDir"
+        >
+          {{ t('batch.openDir') }}
         </NButton>
       </div>
 

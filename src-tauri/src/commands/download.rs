@@ -117,8 +117,15 @@ pub async fn start_download(app: AppHandle, target_dir: String) -> Result<(), St
                 let target_clone = target_path.clone();
                 let temp_clone = temp_dir.clone();
 
-                match download_single(&app_clone, url, &target_clone, &temp_clone, url_idx, attempt)
-                    .await
+                match download_single(
+                    &app_clone,
+                    url,
+                    &target_clone,
+                    &temp_clone,
+                    url_idx,
+                    attempt,
+                )
+                .await
                 {
                     Ok(_) => {
                         // This URL in the group succeeded; continue to next URL
@@ -257,7 +264,11 @@ async fn download_single(
     url_idx: usize,
     attempt: u32,
 ) -> Result<String, String> {
-    let archive_name = url.rsplit('/').next().unwrap_or("ffmpeg-archive").to_string();
+    let archive_name = url
+        .rsplit('/')
+        .next()
+        .unwrap_or("ffmpeg-archive")
+        .to_string();
     let archive_path = temp_dir.join(&archive_name);
 
     // Check for partial download (resume support, D-26)
@@ -283,7 +294,12 @@ async fn download_single(
     }
 
     let response = request.send().await.map_err(|e| {
-        format!("Network error [source {} attempt {}]: {}", url_idx + 1, attempt, e)
+        format!(
+            "Network error [source {} attempt {}]: {}",
+            url_idx + 1,
+            attempt,
+            e
+        )
     })?;
 
     let status = response.status();
@@ -365,7 +381,10 @@ async fn download_single(
 
         let chunk = chunk_result.map_err(|e| format!("Download stream error: {}", e))?;
 
-        file_writer.write_all(&chunk).await.map_err(|e| format!("Write error: {}", e))?;
+        file_writer
+            .write_all(&chunk)
+            .await
+            .map_err(|e| format!("Write error: {}", e))?;
 
         downloaded += chunk.len() as u64;
 
@@ -400,7 +419,10 @@ async fn download_single(
         }
     }
 
-    file_writer.flush().await.map_err(|e| format!("Flush error: {}", e))?;
+    file_writer
+        .flush()
+        .await
+        .map_err(|e| format!("Flush error: {}", e))?;
     drop(file_writer);
 
     // Track temp file for resume on next startup
@@ -479,10 +501,13 @@ fn select_download_urls() -> Vec<Vec<String>> {
     #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
     {
         return vec![
-            // Primary: osxexperts.net -- includes both ffmpeg and ffprobe in one archive
+            // Primary: evermeet.cx paired downloads (D-16: BOTH ffmpeg and ffprobe required)
+            vec![
+                "https://evermeet.cx/ffmpeg/getrelease/ffmpeg/zip".to_string(),
+                "https://evermeet.cx/ffmpeg/getrelease/ffprobe/zip".to_string(),
+            ],
+            // Mirror: osxexperts.net ARM build (single archive, DIFFERENT domain)
             vec!["https://www.osxexperts.net/ffmpeg80arm.zip".to_string()],
-            // Mirror: evermeet.cx -- DIFFERENT domain per D-21
-            vec!["https://evermeet.cx/ffmpeg/getrelease/ffmpeg/zip".to_string()],
         ];
     }
 
@@ -501,7 +526,11 @@ fn select_download_urls() -> Vec<Vec<String>> {
 
     #[cfg(target_os = "linux")]
     {
-        let arch = if cfg!(target_arch = "aarch64") { "linuxarm64" } else { "linux64" };
+        let arch = if cfg!(target_arch = "aarch64") {
+            "linuxarm64"
+        } else {
+            "linux64"
+        };
         return vec![
             // GitHub Releases (BtbN) -- provides both ffmpeg and ffprobe in one archive
             vec![format!(

@@ -83,6 +83,15 @@ pub async fn detect_ffmpeg_internal() -> FfmpegInfo {
     }
 }
 
+/// Build the ffmpeg binary path from a directory (i.e., `<dir>/ffmpeg` or `<dir>/ffmpeg.exe`).
+fn ffmpeg_bin_path(dir: &std::path::Path) -> std::path::PathBuf {
+    if cfg!(target_os = "windows") {
+        dir.join("ffmpeg.exe")
+    } else {
+        dir.join("ffmpeg")
+    }
+}
+
 /// Extract major version number from ffmpeg version string (e.g., "6.1.1" -> 6).
 fn extract_major_version(version: &str) -> u32 {
     version
@@ -105,8 +114,9 @@ pub async fn detect_ffmpeg(app: AppHandle) -> Result<FfmpegInfo, String> {
         && let Some(path_str) = cached_path.as_str()
     {
         let cached_path = PathBuf::from(path_str);
-        if cached_path.join("ffmpeg").exists() || cached_path.join("ffmpeg.exe").exists() {
-            match ffmpeg_version_with_path(path_str) {
+        let bin = ffmpeg_bin_path(&cached_path);
+        if bin.exists() {
+            match ffmpeg_version_with_path(&bin) {
                 Ok(version_str) => {
                     let major = extract_major_version(&version_str);
                     return Ok(FfmpegInfo {
@@ -143,7 +153,7 @@ pub async fn get_ffmpeg_status(app: AppHandle) -> Result<FfmpegInfo, String> {
             cached_path.join("ffmpeg")
         };
         if ffmpeg_bin.exists() {
-            match ffmpeg_version_with_path(path_str) {
+            match ffmpeg_version_with_path(&ffmpeg_bin) {
                 Ok(version_str) => {
                     let major = extract_major_version(&version_str);
                     return Ok(FfmpegInfo {
@@ -176,19 +186,48 @@ pub async fn get_ffmpeg_status(app: AppHandle) -> Result<FfmpegInfo, String> {
 /// Per D-28: on macOS, quarantine is removed BEFORE this call (handled in download.rs).
 #[tauri::command]
 pub async fn verify_ffmpeg(app: AppHandle, path: String) -> Result<FfmpegInfo, String> {
-    let version_str = ffmpeg_version_with_path(&path)
+    let bin = ffmpeg_bin_path(std::path::Path::new(&path));
+    let version_str = ffmpeg_version_with_path(&bin)
         .map_err(|e| format!("FFmpeg verification failed at {}: {}", path, e))?;
+
+    // Verify ffprobe is also present (required for video import/metadata extraction)
+    let ffprobe_bin = if cfg!(target_os = "windows") {
+        std::path::Path::new(&path).join("ffprobe.exe")
+    } else {
+        std::path::Path::new(&path).join("ffprobe")
+    };
+    if !ffprobe_bin.exists() {
+        return Err(format!(
+            "ffprobe not found at {}. The download may be incomplete.",
+            ffprobe_bin.display()
+        ));
+    }
+    std::process::Command::new(&ffprobe_bin)
+        .arg("-version")
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .output()
+        .map_err(|e| {
+            format!(
+                "ffprobe verification failed at {}: {}",
+                ffprobe_bin.display(),
+                e
+            )
+        })?;
 
     let major = extract_major_version(&version_str);
     let now = chrono::Utc::now().to_rfc3339();
 
     // Persist to store
-    let store =
-        app.store("ffmpeg-config.json").map_err(|e| format!("Failed to open store: {}", e))?;
+    let store = app
+        .store("ffmpeg-config.json")
+        .map_err(|e| format!("Failed to open store: {}", e))?;
     store.set("ffmpeg_path", serde_json::Value::String(path.clone()));
     store.set("version", serde_json::Value::String(version_str.clone()));
     store.set("download_time", serde_json::Value::String(now));
-    store.save().map_err(|e| format!("Failed to save store: {}", e))?;
+    store
+        .save()
+        .map_err(|e| format!("Failed to save store: {}", e))?;
 
     // Emit event that FFmpeg is ready
     let info = FfmpegInfo {
@@ -249,11 +288,16 @@ pub async fn check_latest_version() -> Result<Option<FfmpegUpdateInfo>, String> 
         html_url: String,
     }
 
-    let release: GitHubRelease =
-        response.json().await.map_err(|e| format!("Failed to parse GitHub response: {}", e))?;
+    let release: GitHubRelease = response
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse GitHub response: {}", e))?;
 
     // Extract version from tag (e.g., "ffmpeg-7.1.1" -> "7.1.1")
-    let latest_version_str = release.tag_name.trim_start_matches("ffmpeg-").trim_start_matches("v");
+    let latest_version_str = release
+        .tag_name
+        .trim_start_matches("ffmpeg-")
+        .trim_start_matches("v");
     let latest_ver = extract_major_version(latest_version_str);
 
     if latest_ver > current_ver {

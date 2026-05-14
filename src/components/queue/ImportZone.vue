@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import { NButton, NIcon, NText } from 'naive-ui';
 import { Upload, FolderOpen } from 'lucide-vue-next';
 import { useMessage } from 'naive-ui';
 import { open } from '@tauri-apps/plugin-dialog';
+import { getCurrentWindow } from '@tauri-apps/api/window';
+import type { UnlistenFn } from '@tauri-apps/api/event';
 import { useQueue } from '@/composables/useQueue';
 import { useBatchStore } from '@/stores/batch';
 import { useI18n } from 'vue-i18n';
@@ -15,55 +17,31 @@ const { t } = useI18n();
 
 const isDragging = ref(false);
 
+let unlistenDragDrop: UnlistenFn | null = null;
+
 /** Supported video file extensions for file dialog filter. */
 const VIDEO_EXTENSIONS = ['mp4', 'mov', 'avi', 'mkv', 'webm', 'flv', 'wmv'];
 
-/** Tauri v2 webview exposes the absolute file path on dropped File objects. */
-interface TauriFile extends File {
-  path?: string;
-}
-
-function onDragOver(e: DragEvent) {
-  e.preventDefault();
-  if (e.dataTransfer) {
-    e.dataTransfer.dropEffect = 'copy';
-  }
-  isDragging.value = true;
-}
-
-function onDragLeave(e: DragEvent) {
-  // Only set dragging to false if we actually left the zone (not entering a child)
-  if (
-    e.currentTarget === e.target ||
-    !(e.currentTarget as HTMLElement)?.contains(e.relatedTarget as Node)
-  ) {
-    isDragging.value = false;
-  }
-}
-
-async function onDrop(e: DragEvent) {
-  e.preventDefault();
-  isDragging.value = false;
-
-  const files = e.dataTransfer?.files;
-  if (!files || files.length === 0) return;
-
-  for (let i = 0; i < files.length; i++) {
-    const file = files[i] as TauriFile;
-    // Tauri v2 webview exposes absolute path on dropped File objects
-    const path = file.path;
-    if (path) {
-      await importFile(path);
-    } else {
-      // macOS fallback: if path not available, skip or warn
-      console.warn(
-        'Dropped file has no path property (macOS may require onDragDropEvent API):',
-        file.name,
-      );
-      message.warning('Unable to get file path. Please use the "Add Videos" button instead.');
+onMounted(async () => {
+  // Use Tauri's native drag-drop API which provides real file paths on all platforms
+  unlistenDragDrop = await getCurrentWindow().onDragDropEvent((event) => {
+    if (event.payload.type === 'enter' || event.payload.type === 'over') {
+      isDragging.value = true;
+    } else if (event.payload.type === 'drop') {
+      isDragging.value = false;
+      const paths = event.payload.paths;
+      for (const path of paths) {
+        importFile(path);
+      }
+    } else if (event.payload.type === 'leave') {
+      isDragging.value = false;
     }
-  }
-}
+  });
+});
+
+onUnmounted(() => {
+  unlistenDragDrop?.();
+});
 
 async function onAddFileClick() {
   const selected = await open({
@@ -88,7 +66,6 @@ async function importFile(filepath: string) {
   if (entry) {
     message.success(t('queue.imported', { filename: entry.filename }));
   } else {
-    // importVideo logs detailed error to console; show generic toast
     message.error(t('notification.operationFailed', { error: 'Import failed' }));
   }
 }
@@ -99,9 +76,6 @@ async function importFile(filepath: string) {
     v-if="!batchStore.isProcessing"
     class="import-zone"
     :class="{ 'import-zone--dragging': isDragging }"
-    @dragover="onDragOver"
-    @dragleave="onDragLeave"
-    @drop="onDrop"
   >
     <NIcon :size="48" :color="isDragging ? '#2080f0' : undefined">
       <Upload />

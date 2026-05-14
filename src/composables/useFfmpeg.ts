@@ -65,7 +65,7 @@ export function useFfmpeg() {
     store.downloadError = null;
     try {
       await invoke('start_download', { targetDir });
-      // On success, the 'ffmpeg-ready' event will update status to 'verified'
+      store.status = 'verified';
     } catch (err) {
       store.status = 'error';
       store.downloadError = String(err);

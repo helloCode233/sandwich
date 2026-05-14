@@ -58,7 +58,10 @@ pub fn build_pixel_shift_filter(op: &Operation) -> Result<Vec<String>, String> {
     let crop_filter = format!("crop=iw-{}:ih-{}:{}:{}", dx.abs(), dy.abs(), crop_x, crop_y);
     let pad_filter = format!("pad=iw+{}:ih+{}:{}:{}", dx.abs(), dy.abs(), pad_x, pad_y);
 
-    Ok(vec!["-vf".to_string(), format!("{},{}", crop_filter, pad_filter)])
+    Ok(vec![
+        "-vf".to_string(),
+        format!("{},{}", crop_filter, pad_filter),
+    ])
 }
 
 /// Build FFmpeg filter arguments for frame dropping.
@@ -132,13 +135,65 @@ pub fn build_filter_args(op: &Operation) -> Result<Vec<String>, String> {
     }
 }
 
+/// Classifies a filter argument by how it should be merged into the final command.
+pub enum FilterKind {
+    /// Video filter expression (without -vf prefix), to be comma-joined with others.
+    VideoFilter(String),
+    /// Audio filter expression (without -af prefix), to be comma-joined with others.
+    AudioFilter(String),
+    /// Non-filter arguments passed through directly to FFmpeg.
+    Other(Vec<String>),
+}
+
+/// Like `build_filter_args` but separates video/audio filter expressions from other args.
+/// This allows the executor to merge multiple -vf / -af into single comma-joined chains
+/// and resolve conflicts between -c copy (remux) and filtering operations.
+pub fn build_filter_args_separated(op: &Operation) -> Result<(FilterKind, Vec<String>), String> {
+    match op.op_type {
+        OperationType::MathOverlay => {
+            let args = build_math_overlay_filter(op)?;
+            // args = ["-vf", "geq=..."]
+            let expr = args.get(1).cloned().unwrap_or_default();
+            Ok((FilterKind::VideoFilter(expr), args))
+        }
+        OperationType::PixelShift => {
+            let args = build_pixel_shift_filter(op)?;
+            // args = ["-vf", "crop=...,pad=..."]
+            let expr = args.get(1).cloned().unwrap_or_default();
+            Ok((FilterKind::VideoFilter(expr), args))
+        }
+        OperationType::FrameDrop => {
+            let args = build_frame_drop_filter(op)?;
+            // args = ["-vf", "framestep=..."]
+            let expr = args.get(1).cloned().unwrap_or_default();
+            Ok((FilterKind::VideoFilter(expr), args))
+        }
+        OperationType::AudioTweak => {
+            let args = build_audio_tweak_filter(op)?;
+            // args = ["-af", "volume=..."] or similar
+            let expr = args.get(1).cloned().unwrap_or_default();
+            Ok((FilterKind::AudioFilter(expr), args))
+        }
+        _ => {
+            // GopModify, MetadataErase, Remux — pass through as Other
+            let args = build_filter_args(op)?;
+            Ok((FilterKind::Other(args.clone()), args))
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::models::seed::{Operation, OperationType};
 
     fn make_op(op_type: OperationType, params: serde_json::Value) -> Operation {
-        Operation { op_type, start_frame: 0, duration_frames: 0, params }
+        Operation {
+            op_type,
+            start_frame: 0,
+            duration_frames: 0,
+            params,
+        }
     }
 
     #[test]

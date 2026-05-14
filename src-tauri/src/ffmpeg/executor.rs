@@ -11,7 +11,7 @@ use ffmpeg_sidecar::event::LogLevel;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
-use crate::ffmpeg::filters::build_filter_args;
+use crate::ffmpeg::filters::{FilterKind, build_filter_args_separated};
 use crate::models::batch::PerFileProgress;
 use crate::models::seed::Seed;
 use crate::models::video::VideoEntry;
@@ -50,11 +50,48 @@ pub fn execute_single_file(
     let source_path = Path::new(&entry.filepath);
     let output_path = make_output_path(source_path, &seed.alias, Path::new(output_dir))?;
 
-    // Build filter arguments from all operations in the seed
-    let mut all_args: Vec<String> = Vec::new();
+    // Build and merge filter arguments from all operations in the seed.
+    // Pitfall: multiple video/audio filter ops each produced their own -vf/-af flag.
+    // FFmpeg only honors the last one; earlier expressions become orphaned args.
+    // Fix: collect video filter expressions into one comma-joined chain, same for audio.
+    let mut vf_exprs: Vec<String> = Vec::new();
+    let mut af_exprs: Vec<String> = Vec::new();
+    let mut other_args: Vec<String> = Vec::new();
+
     for op in &seed.operations {
-        let filter_args = build_filter_args(op)?;
-        all_args.extend(filter_args);
+        let (kind, args) = build_filter_args_separated(op)?;
+        match kind {
+            FilterKind::VideoFilter(expr) => vf_exprs.push(expr),
+            FilterKind::AudioFilter(expr) => af_exprs.push(expr),
+            FilterKind::Other(args) => other_args.extend(args),
+        }
+    }
+
+    // Assemble final args: merged -vf, merged -af, then other args
+    let mut all_args: Vec<String> = Vec::new();
+    if !vf_exprs.is_empty() {
+        all_args.push("-vf".to_string());
+        all_args.push(vf_exprs.join(","));
+    }
+    if !af_exprs.is_empty() {
+        all_args.push("-af".to_string());
+        all_args.push(af_exprs.join(","));
+    }
+    // If video or audio filters are present, -c copy (remux) is incompatible —
+    // filters require re-encoding. Skip -c copy pairs from other_args.
+    let has_filtering = !vf_exprs.is_empty() || !af_exprs.is_empty();
+    let mut i = 0;
+    while i < other_args.len() {
+        if has_filtering
+            && other_args[i] == "-c"
+            && i + 1 < other_args.len()
+            && other_args[i + 1] == "copy"
+        {
+            i += 2; // skip "-c copy"
+        } else {
+            all_args.push(other_args[i].clone());
+            i += 1;
+        }
     }
 
     // Determine ffmpeg binary path
@@ -86,7 +123,10 @@ pub fn execute_single_file(
     let filename = entry.filename.clone();
     let total_duration = entry.metadata.duration_secs;
 
-    for event in child.iter().map_err(|e| format!("FFmpeg iteration error: {}", e))? {
+    for event in child
+        .iter()
+        .map_err(|e| format!("FFmpeg iteration error: {}", e))?
+    {
         // Pitfall 5: Always use SeqCst for cancel flag visibility on ARM
         if cancel_flag.load(Ordering::SeqCst) {
             // D-10: Kill FFmpeg process on cancel
@@ -139,7 +179,9 @@ pub fn execute_single_file(
     }
 
     // Wait for process completion
-    let status = child.wait().map_err(|e| format!("FFmpeg wait error: {}", e))?;
+    let status = child
+        .wait()
+        .map_err(|e| format!("FFmpeg wait error: {}", e))?;
 
     if status.success() {
         Ok(output_path_str)

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted } from 'vue';
+import { onMounted, onUnmounted, watch } from 'vue';
 import { NCard, NButton, NProgress, NText, NSpace, NIcon } from 'naive-ui';
 import { XCircle, RefreshCw, FolderOpen } from 'lucide-vue-next';
 import { useFfmpegStore } from '@/stores/ffmpeg';
@@ -22,6 +22,16 @@ const {
   unsubscribeAll,
 } = useFfmpeg();
 const { t } = useI18n();
+
+/** When download+verify completes, notify parent to switch views. */
+watch(
+  () => store.status,
+  (newStatus) => {
+    if (newStatus === 'verified') {
+      emit('done');
+    }
+  },
+);
 
 /** Format bytes to human-readable string. */
 function formatBytes(bytes: number): string {

@@ -65,8 +65,12 @@ pub async fn import_video(
     // D-13: Check available disk space
     check_disk_space_for_output(&app)?;
 
-    let entry =
-        VideoEntry { filename, filepath: filepath.clone(), metadata, status: VideoStatus::Valid };
+    let entry = VideoEntry {
+        filename,
+        filepath: filepath.clone(),
+        metadata,
+        status: VideoStatus::Valid,
+    };
 
     // Add to queue (D-15: duplicates allowed — no dedup check)
     {
@@ -125,7 +129,14 @@ fn get_output_dir(app: &AppHandle) -> String {
     if let Ok(store) = app.store("sandwich-config.json") {
         if let Some(value) = store.get("output_dir") {
             if let Some(dir_str) = value.as_str() {
-                return dir_str.to_string();
+                let s = dir_str.to_string();
+                if s.starts_with('~') {
+                    // Expand legacy tilde-prefixed paths
+                    if let Ok(home) = std::env::var("HOME") {
+                        return s.replacen('~', &home, 1);
+                    }
+                }
+                return s;
             }
         }
     }
@@ -135,7 +146,11 @@ fn get_output_dir(app: &AppHandle) -> String {
     #[cfg(not(target_os = "windows"))]
     let home = std::env::var("HOME").unwrap_or_default();
 
-    Path::new(&home).join("Videos").join("sandwich-output").to_string_lossy().to_string()
+    Path::new(&home)
+        .join("Videos")
+        .join("sandwich-output")
+        .to_string_lossy()
+        .to_string()
 }
 
 /// Persist the video queue to tauri-plugin-store.
@@ -143,12 +158,15 @@ fn persist_queue_import(app: &AppHandle) -> Result<(), String> {
     let state = app.state::<Mutex<AppState>>();
     let app_state = state.lock().map_err(|e| format!("Lock error: {}", e))?;
 
-    let store =
-        app.store("queue.json").map_err(|e| format!("Failed to open queue store: {}", e))?;
+    let store = app
+        .store("queue.json")
+        .map_err(|e| format!("Failed to open queue store: {}", e))?;
     let json = serde_json::to_value(&*app_state.queue)
         .map_err(|e| format!("Serialization error: {}", e))?;
     store.set("queue", json);
-    store.save().map_err(|e| format!("Failed to save queue: {}", e))?;
+    store
+        .save()
+        .map_err(|e| format!("Failed to save queue: {}", e))?;
 
     Ok(())
 }

@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Phase 03 Research complete
-last_updated: "2026-05-14T01:16:17.840Z"
-last_activity: 2026-05-14 -- Phase 4 planning complete
+last_updated: "2026-05-14T01:32:55.778Z"
+last_activity: 2026-05-14
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 20
-  completed_plans: 15
-  percent: 75
+  completed_plans: 16
+  percent: 80
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-12)
 ## Current Position
 
 Phase: 3 (vue-frontend) — EXECUTING
-Plan: 1 of 7
+Plan: 2 of 7
 Status: Ready to execute
-Last activity: 2026-05-14 -- Phase 4 planning complete
+Last activity: 2026-05-14
 
-Progress: [████████░░] 50%
+Progress: [████████░░] 80%
 
 ## Accumulated Context
 
@@ -41,6 +41,7 @@ Recent decisions affecting current work:
 
 - Phase 03 CONTEXT.md contains 13 locked decisions (D-01 through D-13) covering layout, import, seeds display, empty states, feedback, batch controls, and progress scaffolding.
 - Phase 01 locked decisions (D-01 through D-39) remain binding: Naive UI dark theme (D-32), frontend infrastructure (D-33), i18n bilingual (D-13), Pinia (D-33), UnoCSS (D-06), eslint/prettier (D-36), window config 1200x800 (D-12).
+- [Phase ?]: Use separate batch-file-progress event (carrying PerFileProgress) instead of overloading batch-progress with union payload
 
 ### Pending Todos
 
@@ -60,6 +61,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-13T08:46:43.976Z
+Last session: 2026-05-14T01:32:45.927Z
 Stopped at: Phase 03 Research complete
-Resume file: .planning/phases/03-vue-frontend/03-RESEARCH.md
+Resume file: None

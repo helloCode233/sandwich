@@ -32,7 +32,7 @@ Requirements for initial release. Each maps to roadmap phases.
 ### Batch Processing
 
 - [ ] **BATCH-01**: 选择一个种子，应用到队列中所有视频
-- [ ] **BATCH-02**: 处理时显示逐文件进度（百分比、当前帧、预估剩余时间）
+- [x] **BATCH-02**: 处理时显示逐文件进度（百分比、当前帧、预估剩余时间）
 - [ ] **BATCH-03**: 支持取消正在进行的批处理
 - [ ] **BATCH-04**: 单文件失败隔离——一个失败不影响其余文件继续处理
 - [ ] **BATCH-05**: 批处理完成后展示结果摘要（成功/失败数）
@@ -98,7 +98,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | QUEUE-01    | Phase 2 | Pending |
 | QUEUE-02    | Phase 2 | Pending |
 | BATCH-01    | Phase 2 | Pending |
-| BATCH-02    | Phase 4 | Pending |
+| BATCH-02    | Phase 4 | Complete |
 | BATCH-03    | Phase 2 | Pending |
 | BATCH-04    | Phase 2 | Pending |
 | BATCH-05    | Phase 4 | Pending |

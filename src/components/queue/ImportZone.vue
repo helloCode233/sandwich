@@ -5,10 +5,12 @@ import { Upload, FolderOpen } from 'lucide-vue-next';
 import { useMessage } from 'naive-ui';
 import { open } from '@tauri-apps/plugin-dialog';
 import { useQueue } from '@/composables/useQueue';
+import { useBatchStore } from '@/stores/batch';
 import { useI18n } from 'vue-i18n';
 
 const { importVideo } = useQueue();
 const message = useMessage();
+const batchStore = useBatchStore();
 const { t } = useI18n();
 
 const isDragging = ref(false);
@@ -94,6 +96,7 @@ async function importFile(filepath: string) {
 
 <template>
   <div
+    v-if="!batchStore.isProcessing"
     class="import-zone"
     :class="{ 'import-zone--dragging': isDragging }"
     @dragover="onDragOver"

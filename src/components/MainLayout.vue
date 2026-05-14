@@ -10,6 +10,7 @@ import ImportZone from '@/components/queue/ImportZone.vue';
 import QueueList from '@/components/queue/QueueList.vue';
 import BatchControls from '@/components/batch/BatchControls.vue';
 import BatchBanner from '@/components/batch/BatchBanner.vue';
+import BatchSummary from '@/components/batch/BatchSummary.vue';
 
 const batchStore = useBatchStore();
 const seedComposable = useSeed();
@@ -85,7 +86,10 @@ onUnmounted(() => {
           <!-- Queue Area (upper section per D-02) -->
           <div class="queue-area">
             <ImportZone />
-            <BatchBanner v-if="batchStore.isProcessing" />
+            <BatchBanner
+              v-if="batchStore.isProcessing || batchStore.cancelling || batchStore.isComplete"
+            />
+            <BatchSummary v-if="batchStore.isComplete && batchStore.lastResult" />
             <QueueList />
           </div>
 

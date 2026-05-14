@@ -1,15 +1,21 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { useMessage } from 'naive-ui';
+import { useI18n } from 'vue-i18n';
 import { useBatchStore } from '@/stores/batch';
-import type { BatchProgress, BatchResult, FileResult } from '@/types/batch';
+import type { BatchProgress, BatchResult, FileResult, PerFileProgress } from '@/types/batch';
 
 let progressUnlisten: UnlistenFn | null = null;
 let fileErrorUnlisten: UnlistenFn | null = null;
+let fileProgressUnlisten: UnlistenFn | null = null;
+let cancellingUnlisten: UnlistenFn | null = null;
 let completeUnlisten: UnlistenFn | null = null;
 let cancelledUnlisten: UnlistenFn | null = null;
 
 export function useBatch() {
   const store = useBatchStore();
+  const message = useMessage();
+  const { t } = useI18n();
 
   /** Subscribe to batch events. No initial load — batch state is idle by default. */
   async function subscribe(): Promise<void> {
@@ -18,10 +24,12 @@ export function useBatch() {
     });
 
     fileErrorUnlisten = await listen<FileResult>('batch-file-error', (event) => {
-      // Store does not track individual file errors independently.
-      // The UI layer (composable consumer) should show useMessage() error toast.
-      // We log here; caller can attach additional listeners.
-      console.warn('Batch file error:', event.payload.file, event.payload.error);
+      message.error(
+        t('batch.fileFailed', {
+          filename: event.payload.file,
+          error: event.payload.error,
+        }),
+      );
     });
 
     completeUnlisten = await listen<BatchResult>('batch-complete', (event) => {
@@ -30,6 +38,14 @@ export function useBatch() {
 
     cancelledUnlisten = await listen<BatchResult>('batch-cancelled', (event) => {
       store.stopProcessing(event.payload);
+    });
+
+    fileProgressUnlisten = await listen<PerFileProgress>('batch-file-progress', (event) => {
+      store.setPerFileProgress(event.payload);
+    });
+
+    cancellingUnlisten = await listen<void>('batch-cancelling', () => {
+      store.setCancelling(true);
     });
   }
 
@@ -72,6 +88,8 @@ export function useBatch() {
   function unsubscribe(): void {
     progressUnlisten?.();
     fileErrorUnlisten?.();
+    fileProgressUnlisten?.();
+    cancellingUnlisten?.();
     completeUnlisten?.();
     cancelledUnlisten?.();
   }

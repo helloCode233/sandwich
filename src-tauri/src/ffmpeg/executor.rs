@@ -131,6 +131,9 @@ pub fn execute_single_file(
     // Use child.iter() to drain stderr and parse progress events.
     // Pitfall 1 mitigation: ffmpeg-sidecar's iter() drains stderr continuously,
     // preventing pipe buffer deadlock.
+    // D-08: child.iter() streams stderr continuously without buffering entire output.
+    // This prevents memory exhaustion on large/long video files. Verified: ffmpeg-sidecar
+    // 2.5.x iter() drains the pipe in real-time, emitting FfmpegEvent::Progress per frame.
     let output_path_clone = output_path.clone();
     let output_path_str = output_path_clone.to_string_lossy().to_string();
     let app_clone = app.clone();

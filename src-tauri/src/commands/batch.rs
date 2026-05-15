@@ -197,6 +197,7 @@ pub async fn start_batch(
         ) {
             Ok(output_path) => {
                 succeeded_files.push(output_path);
+                // D-07: Single lock acquisition for all progress updates
                 let app_state = state.lock().map_err(|e| format!("Lock error: {}", e))?;
                 let mut batch_state = app_state
                     .batch_state
@@ -204,6 +205,10 @@ pub async fn start_batch(
                     .map_err(|e| format!("Batch state lock error: {}", e))?;
                 batch_state.progress.succeeded += 1;
                 batch_state.progress.completed += 1;
+                let progress_snapshot = batch_state.progress.clone();
+                drop(batch_state);
+                drop(app_state);
+                let _ = app.emit("batch-progress", progress_snapshot);
             }
             Err(e) => {
                 // D-11: Single-file failure -- log and continue
@@ -220,6 +225,7 @@ pub async fn start_batch(
                     seed: seed.alias.clone(),
                     error: e,
                 });
+                // D-07: Single lock acquisition for all progress updates
                 let app_state = state.lock().map_err(|e| format!("Lock error: {}", e))?;
                 let mut batch_state = app_state
                     .batch_state
@@ -227,17 +233,11 @@ pub async fn start_batch(
                     .map_err(|e| format!("Batch state lock error: {}", e))?;
                 batch_state.progress.failed += 1;
                 batch_state.progress.completed += 1;
+                let progress_snapshot = batch_state.progress.clone();
+                drop(batch_state);
+                drop(app_state);
+                let _ = app.emit("batch-progress", progress_snapshot);
             }
-        }
-
-        // Emit progress to frontend
-        {
-            let app_state = state.lock().map_err(|e| format!("Lock error: {}", e))?;
-            let batch_state = app_state
-                .batch_state
-                .lock()
-                .map_err(|e| format!("Batch state lock error: {}", e))?;
-            let _ = app.emit("batch-progress", batch_state.progress.clone());
         }
     }
 

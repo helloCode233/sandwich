@@ -14,6 +14,7 @@ use tokio::sync::Mutex as TokioMutex;
 
 use crate::ffmpeg::executor::execute_single_file;
 use crate::models::batch::{BatchProgress, BatchResult, FileResult};
+use crate::models::gpu::GpuEncoder;
 use crate::state::{AppState, BatchStatus};
 
 /// Global batch cancel flag, modeled after download.rs's DOWNLOAD_STATE pattern.
@@ -111,6 +112,12 @@ pub async fn start_batch(
         *storage = Some(cancel_flag.clone());
     }
 
+    // Phase 5: PERF-01 — Extract GPU encoder from AppState (detected at startup)
+    let gpu_encoder: Option<GpuEncoder> = {
+        let app_state = state.lock().map_err(|e| format!("Lock error: {}", e))?;
+        app_state.gpu_encoder.clone()
+    };
+
     // Resolve seed and snapshot queue (clone out of Mutex before FFmpeg)
     let (seed, queue_snapshot) = {
         let app_state = state.lock().map_err(|e| format!("Lock error: {}", e))?;
@@ -179,8 +186,15 @@ pub async fn start_batch(
 
         // Execute FFmpeg -- cancel_flag passed as &AtomicBool (Arc deref, no lock needed)
         // D-11: single-file failure isolation -- Result handling continues loop
-        match execute_single_file(&app, entry, &seed, &ffmpeg_dir, &output_dir, &cancel_flag, None)
-        {
+        match execute_single_file(
+            &app,
+            entry,
+            &seed,
+            &ffmpeg_dir,
+            &output_dir,
+            &cancel_flag,
+            gpu_encoder.as_ref(),
+        ) {
             Ok(output_path) => {
                 succeeded_files.push(output_path);
                 let app_state = state.lock().map_err(|e| format!("Lock error: {}", e))?;

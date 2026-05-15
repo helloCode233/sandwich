@@ -10,7 +10,7 @@ A five-phase build: Foundation (FFmpeg lifecycle + scaffold) establishes the non
 - [x] **Phase 2: Rust Backend** - Domain services, FFmpeg command builder, processing pipeline, IPC commands (completed 2026-05-14)
 - [x] **Phase 3: Vue Frontend** - Pinia stores, typed API wrappers, dual-panel UI, Naive UI dark theme (completed 2026-05-13)
 - [x] **Phase 4: Integration & Polish** - Progress streaming, batch summary, cancel flow wiring, E2E validation (completed 2026-05-14)
-- [ ] **Phase 5: Production Hardening** - Cross-platform builds, GPU acceleration, multi-seed batch, MD5 integrity verification
+- [x] **Phase 5: Production Hardening** - Cross-platform builds, GPU acceleration, multi-seed batch, MD5 integrity verification (completed 2026-05-15)
 
 ## Phase Details
 
@@ -131,7 +131,7 @@ Plans:
 3. User can select multiple seeds (not just one) and each video in the queue produces one output per selected seed ({original}_{seed_alias}.{ext})
 4. User sees MD5 checksums before and after processing for every file in the batch summary, with clear pass/fail indication that the file was actually modified
 5. All existing v1 functionality continues to work — this phase is additive hardening, not a rewrite
-   **Plans:** 3/6 plans executed
+   **Plans:** 4/6 plans complete
 
 Plans:
 **Wave 1** *(cross-platform — parallel)*
@@ -142,7 +142,7 @@ Plans:
 - [x] 05-03-PLAN.md — GPU encoder detection (NVENC/VideoToolbox/VAAPI) + auto-select in executor
 
 **Wave 3** *(pipeline — blocked on Wave 2 completion)*
-- [ ] 05-04-PLAN.md — GPU wiring into batch.rs + Mutex lock frequency reduction
+- [x] 05-04-PLAN.md — GPU wiring into batch.rs + Mutex lock frequency reduction
 
 **Wave 4** *(multi-seed — blocked on Wave 3 completion)*
 - [ ] 05-05-PLAN.md — Multi-seed selection UI + Rust batch command accepting Vec<SeedId>
@@ -161,4 +161,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | 2. Rust Backend            | 4/4            | Complete    | 2026-05-14 |
 | 3. Vue Frontend            | 7/7            | Complete    | 2026-05-13 |
 | 4. Integration & Polish    | 8/8            | Complete    | 2026-05-14 |
-| 5. Production Hardening    | 3/6 | In Progress|  |
+| 5. Production Hardening    | 4/6 | Complete    | 2026-05-15 |

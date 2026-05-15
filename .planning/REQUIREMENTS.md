@@ -53,24 +53,24 @@ Active development. See ROADMAP.md Phase 5.
 
 ### Cross-Platform
 
-- [ ] **CROSS-01**: Windows 打包 — 生成 .msi 和 .exe 安装包
-- [ ] **CROSS-02**: Linux 打包 — 生成 .AppImage 和 .deb 安装包
-- [ ] **CROSS-03**: CI 矩阵构建（macOS/Windows/Linux），自动上传构建产物
+- [x] **CROSS-01**: Windows 打包 — 生成 .msi 和 .exe 安装包
+- [x] **CROSS-02**: Linux 打包 — 生成 .AppImage 和 .deb 安装包
+- [x] **CROSS-03**: CI 矩阵构建（macOS/Windows/Linux），自动上传构建产物
 
 ### Performance
 
-- [ ] **PERF-01**: GPU 硬件编码器自动检测与选择（macOS VideoToolbox / Windows NVENC+AMF / Linux VAAPI）
-- [ ] **PERF-02**: 并行 pipeline 优化 — 调度器减少空等、流式读写避免大内存分配
+- [x] **PERF-01**: GPU 硬件编码器自动检测与选择（macOS VideoToolbox / Windows NVENC+AMF / Linux VAAPI）
+- [x] **PERF-02**: 并行 pipeline 优化 — 调度器减少空等、流式读写避免大内存分配
 
 ### Multi-Seed Batch
 
-- [ ] **MULTI-01**: 多种子选择 UI（可勾选多个种子）
-- [ ] **MULTI-02**: 一个视频 × N 个种子 = N 个输出文件，命名保持 {原文件名}\_{种子别名}.{扩展名}
+- [x] **MULTI-01**: 多种子选择 UI（可勾选多个种子）
+- [x] **MULTI-02**: 一个视频 × N 个种子 = N 个输出文件，命名保持 {原文件名}\_{种子别名}.{扩展名}
 
 ### Integrity Verification
 
-- [ ] **MD5-01**: 处理前记录每个文件的 MD5 和文件大小
-- [ ] **MD5-02**: 处理后对比 MD5，差异数据写入处理日志，输出=输入时告警
+- [x] **MD5-01**: 处理前记录每个文件的 MD5 和文件大小
+- [x] **MD5-02**: 处理后对比 MD5，差异数据写入处理日志，输出=输入时告警
 
 ## v2 Requirements
 

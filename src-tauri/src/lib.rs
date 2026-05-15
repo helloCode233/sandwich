@@ -3,6 +3,7 @@ mod ffmpeg;
 mod models;
 mod state;
 
+use crate::ffmpeg::gpu::detect_gpu_encoder;
 use commands::batch::{cancel_batch, get_batch_status, open_file_manager, start_batch};
 use commands::download::{cancel_download, start_download};
 use commands::ffmpeg::{
@@ -98,6 +99,26 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 let info = detect_ffmpeg_internal().await;
                 let _ = handle.emit("ffmpeg-status", info);
+            });
+
+            // --- Phase 5: GPU encoder detection (PERF-01, D-04, D-05) ---
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                let ffmpeg_path = ffmpeg_sidecar::paths::ffmpeg_path();
+                let ffmpeg_dir = ffmpeg_path
+                    .parent()
+                    .map(|p: &std::path::Path| p.to_string_lossy().to_string())
+                    .unwrap_or_default();
+                let gpu_enc = detect_gpu_encoder(&ffmpeg_dir);
+                if let Some(ref enc) = gpu_enc {
+                    let _ = handle.emit("gpu-encoder-detected", enc);
+                } else {
+                    let _ = handle.emit("gpu-encoder-not-detected", ());
+                }
+                let app_state = handle.state::<std::sync::Mutex<state::AppState>>();
+                if let Ok(mut state) = app_state.lock() {
+                    state.gpu_encoder = gpu_enc;
+                }
             });
 
             // D-25: Non-blocking check for newer FFmpeg release (unchanged)

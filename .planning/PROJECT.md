@@ -10,33 +10,33 @@
 
 ## Requirements
 
-### Validated
+### Validated (Phase 1-5)
 
-(None yet — ship to validate)
+- [x] **SEED-01~06**: 自动生成种子 + 别名 + CRUD 管理 — Validated in Phase 2, 3
+- [x] **OP-01~02**: 操作链结构 + 7 种操作类型 — Validated in Phase 2
+- [x] **VIDEO-01~03**: 视频导入 + 队列管理 + 预览 — Validated in Phase 3
+- [x] **BATCH-01~05**: 批处理 + 进度 + 导出 + 取消 + 摘要 — Validated in Phase 3, 4
+- [x] **FFMPEG-01~03**: FFmpeg 检测 + 自动下载 + 版本匹配 — Validated in Phase 2
+- [x] **IMPORT-01~02**: 拖入/批量导入 — Validated in Phase 3
+- [x] **QUEUE-01~02**: 队列管理 + 排序 — Validated in Phase 3
+- [x] **OUTPUT-01~02**: 输出目录 + 命名 — Validated in Phase 3
+- [x] **UI-01~02**: 双面板布局 + 暗色主题 — Validated in Phase 3
+- [x] **CROSS-01~03**: Win/Linux 打包 + CI 矩阵 — Validated in Phase 5
+- [x] **PERF-01~02**: GPU 加速 + Pipeline 优化 — Validated in Phase 5
+- [x] **MULTI-01~02**: 多种子批处理 — Validated in Phase 5
+- [x] **MD5-01~02**: MD5 完整性校验 — Validated in Phase 5
 
 ### Active
 
-- [ ] **SEED-01**: 自动生成种子，包含多组随机操作链
-- [ ] **SEED-02**: 种子支持设置别名
-- [ ] **SEED-03**: 种子列表管理（查看、删除、复制）
-- [ ] **OP-01**: 每条操作链包含：操作类型 + 起始帧 + 持续帧数 + 参数
-- [ ] **OP-02**: 支持的操作类型：数学叠加（波纹/条纹/同心圆）、像素平移、抽帧、GOP 修改、元数据擦除、音频微调、重封装
-- [ ] **VIDEO-01**: 支持拖入/批量导入视频文件
-- [ ] **VIDEO-02**: 视频队列管理（添加、移除、排序）
-- [ ] **VIDEO-03**: 视频预览播放
-- [ ] **BATCH-01**: 选择一个种子→应用到队列中所有视频
-- [ ] **BATCH-02**: 显示处理进度
-- [ ] **BATCH-03**: 处理后的视频导出到指定目录
-- [ ] **FFMPEG-01**: 启动时检测 FFmpeg 是否存在
-- [ ] **FFMPEG-02**: FFmpeg 缺失时自动下载
-- [ ] **UI-01**: 左侧面板 — 种子列表
-- [ ] **UI-02**: 右侧面板 — 视频队列和预览
+(None — all v1.1 requirements shipped)
 
-### Out of Scope
+### Out of Scope / Deferred
 
-- 不同视频使用不同种子（当前：一个种子处理所有视频）
-- 种子手动编辑（当前：仅自动生成）
-- macOS / Windows 打包（当前：仅开发验证）
+- 种子手动编辑 → v2
+- 视频队列拖拽排序 (PROD-01) → v2
+- 缩略图预览 (PROD-02) → v2
+- 代码签名/商店上架 → 后续独立阶段
+- GPU 编码器手动选择 UI → 按需添加
 
 ## Context
 
@@ -54,12 +54,14 @@
 
 ## Key Decisions
 
-| Decision                   | Rationale                  | Outcome   |
-| -------------------------- | -------------------------- | --------- |
-| Tauri 替代 Ratatui TUI     | 用户偏好切换               | — Pending |
-| Vue 3 前端                 | 用户指定                   | — Pending |
-| 自动生成种子（非手动编排） | 用户指定                   | — Pending |
-| 一个种子处理所有视频       | 暂定，后续支持复杂对应关系 | — Pending |
+| Decision                   | Rationale                  | Outcome             |
+| -------------------------- | -------------------------- | ------------------- |
+| Tauri 替代 Ratatui TUI     | 用户偏好切换               | — Shipped (Phase 1-5) |
+| Vue 3 前端                 | 用户指定                   | — Shipped (Phase 1-5) |
+| 自动生成种子（非手动编排） | 用户指定                   | — Shipped (Phase 2) |
+| 多种子批处理               | Phase 5 升级               | — Shipped (Phase 5)  |
+| GPU 全自动（非手动选择）   | Phase 5 设计决策           | — Shipped (Phase 5)  |
+| ffmpeg-sidecar 自动下载    | 避免 ~80MB 安装包体积       | — Shipped (Phase 2)  |
 
 ## Evolution
 
@@ -82,4 +84,4 @@ This document evolves at phase transitions and milestone boundaries.
 
 ---
 
-_Last updated: 2026-05-12 after initialization_
+_Last updated: 2026-05-15 — Phase 5 (Production Hardening) complete. v1.1 shipped._

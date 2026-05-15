@@ -2,6 +2,7 @@ use std::sync::Mutex;
 use std::sync::atomic::AtomicBool;
 
 use crate::models::batch::BatchProgress;
+use crate::models::gpu::GpuEncoder;
 use crate::models::seed::Seed;
 use crate::models::video::VideoEntry;
 
@@ -14,6 +15,9 @@ pub struct AppState {
     pub queue: Vec<VideoEntry>,
     /// Batch processing state (idle when not processing).
     pub batch_state: Mutex<BatchState>,
+    /// Detected GPU encoder (None = CPU only). Set at startup via ffmpeg -encoders probe.
+    /// Per D-06: used internally for auto-selection; no manual user override.
+    pub gpu_encoder: Option<GpuEncoder>,
 }
 
 impl Default for AppState {
@@ -22,6 +26,7 @@ impl Default for AppState {
             seeds: Vec::new(),
             queue: Vec::new(),
             batch_state: Mutex::new(BatchState::default()),
+            gpu_encoder: None,
         }
     }
 }

@@ -13,6 +13,7 @@ use tauri::{AppHandle, Emitter};
 
 use crate::ffmpeg::filters::{FilterKind, build_filter_args_separated};
 use crate::models::batch::PerFileProgress;
+use crate::models::gpu::GpuEncoder;
 use crate::models::seed::Seed;
 use crate::models::video::VideoEntry;
 
@@ -25,6 +26,7 @@ use crate::models::video::VideoEntry;
 /// * `ffmpeg_path` - Directory containing the ffmpeg binary (from Phase 1 store)
 /// * `output_dir` - Directory to write the output file
 /// * `cancel_flag` - Shared AtomicBool; checked before and during FFmpeg execution
+/// * `gpu_encoder` - Optional GPU encoder detected at startup; None means CPU (libx264)
 ///
 /// # Returns
 /// * `Ok(output_path)` on success — the path to the completed output file
@@ -40,6 +42,7 @@ pub fn execute_single_file(
     ffmpeg_path: &str,
     output_dir: &str,
     cancel_flag: &AtomicBool,
+    gpu_encoder: Option<&GpuEncoder>,
 ) -> Result<String, String> {
     // Check cancellation before starting
     if cancel_flag.load(Ordering::SeqCst) {
@@ -94,6 +97,17 @@ pub fn execute_single_file(
         }
     }
 
+    // Inject GPU encoder or CPU fallback (Phase 5: PERF-01, D-04, D-05)
+    let codec = gpu_encoder.map(|e| e.encoder_name()).unwrap_or("libx264");
+    let mut final_args = vec![
+        "-c:v".to_string(),
+        codec.to_string(),
+        "-preset".to_string(),
+        if gpu_encoder.is_some() { "fast" } else { "medium" }.to_string(),
+    ];
+    final_args.extend(all_args);
+    let all_args = final_args; // shadow with injected encoder args
+
     // Determine ffmpeg binary path
     let ffmpeg_bin = Path::new(ffmpeg_path).join(if cfg!(target_os = "windows") {
         "ffmpeg.exe"
@@ -123,10 +137,7 @@ pub fn execute_single_file(
     let filename = entry.filename.clone();
     let total_duration = entry.metadata.duration_secs;
 
-    for event in child
-        .iter()
-        .map_err(|e| format!("FFmpeg iteration error: {}", e))?
-    {
+    for event in child.iter().map_err(|e| format!("FFmpeg iteration error: {}", e))? {
         // Pitfall 5: Always use SeqCst for cancel flag visibility on ARM
         if cancel_flag.load(Ordering::SeqCst) {
             // D-10: Kill FFmpeg process on cancel
@@ -179,9 +190,7 @@ pub fn execute_single_file(
     }
 
     // Wait for process completion
-    let status = child
-        .wait()
-        .map_err(|e| format!("FFmpeg wait error: {}", e))?;
+    let status = child.wait().map_err(|e| format!("FFmpeg wait error: {}", e))?;
 
     if status.success() {
         Ok(output_path_str)

@@ -131,15 +131,15 @@ Plans:
 3. User can select multiple seeds (not just one) and each video in the queue produces one output per selected seed ({original}_{seed_alias}.{ext})
 4. User sees MD5 checksums before and after processing for every file in the batch summary, with clear pass/fail indication that the file was actually modified
 5. All existing v1 functionality continues to work — this phase is additive hardening, not a rewrite
-   **Plans:** 6 plans
+   **Plans:** 3/6 plans executed
 
 Plans:
 **Wave 1** *(cross-platform — parallel)*
-- [ ] 05-01-PLAN.md — Tauri build config for Windows (.msi/.exe) + Linux (.AppImage/.deb) targets
-- [ ] 05-02-PLAN.md — GitHub Actions CI matrix build (macOS/Windows/Linux) with artifact upload
+- [x] 05-01-PLAN.md — Tauri build config for Windows (.msi/.exe) + Linux (.AppImage/.deb) targets
+- [x] 05-02-PLAN.md — GitHub Actions CI matrix build (macOS/Windows/Linux) with artifact upload
 
 **Wave 2** *(GPU — blocked on Wave 1 completion)*
-- [ ] 05-03-PLAN.md — GPU encoder detection (NVENC/VideoToolbox/VAAPI) + auto-select in executor
+- [x] 05-03-PLAN.md — GPU encoder detection (NVENC/VideoToolbox/VAAPI) + auto-select in executor
 
 **Wave 3** *(pipeline — blocked on Wave 2 completion)*
 - [ ] 05-04-PLAN.md — GPU wiring into batch.rs + Mutex lock frequency reduction
@@ -161,4 +161,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | 2. Rust Backend            | 4/4            | Complete    | 2026-05-14 |
 | 3. Vue Frontend            | 7/7            | Complete    | 2026-05-13 |
 | 4. Integration & Polish    | 8/8            | Complete    | 2026-05-14 |
-| 5. Production Hardening    | 0/6            | Planned     | -          |
+| 5. Production Hardening    | 3/6 | In Progress|  |

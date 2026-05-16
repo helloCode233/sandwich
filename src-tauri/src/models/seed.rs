@@ -1,5 +1,64 @@
 use serde::{Deserialize, Serialize};
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Verify OperationType has exactly 20 variants (7 existing + 13 new in Phase 6).
+    #[test]
+    fn operation_type_has_20_variants() {
+        let variants = &[
+            OperationType::MathOverlay,
+            OperationType::PixelShift,
+            OperationType::FrameDrop,
+            OperationType::GopModify,
+            OperationType::MetadataErase,
+            OperationType::AudioTweak,
+            OperationType::Remux,
+        ];
+        assert_eq!(variants.len(), 20, "OperationType must have exactly 20 variants");
+    }
+
+    /// Verify StrengthTier serializes to camelCase correctly.
+    #[test]
+    fn strength_tier_serialization() {
+        assert_eq!(
+            serde_json::to_string(&StrengthTier::Conservative).unwrap(),
+            r#""conservative""#
+        );
+        assert_eq!(serde_json::to_string(&StrengthTier::Standard).unwrap(), r#""standard""#);
+        assert_eq!(serde_json::to_string(&StrengthTier::Aggressive).unwrap(), r#""aggressive""#);
+    }
+
+    /// Verify Seed deserializes successfully when strength_tier is missing (serde default).
+    #[test]
+    fn seed_deserialize_missing_strength_tier() {
+        let json = r#"{
+            "id": "seed-1",
+            "alias": "test",
+            "operations": [],
+            "createdAt": "2026-01-01T00:00:00Z"
+        }"#;
+        let seed: Seed = serde_json::from_str(json).unwrap();
+        assert_eq!(seed.strength_tier, StrengthTier::Standard);
+    }
+
+    /// Verify Seed with strength_tier round-trips through serde_json correctly.
+    #[test]
+    fn seed_strength_tier_round_trip() {
+        let seed = Seed {
+            id: "s1".into(),
+            alias: "aggro-seed".into(),
+            operations: vec![],
+            created_at: "2026-01-01T00:00:00Z".into(),
+            strength_tier: StrengthTier::Aggressive,
+        };
+        let json = serde_json::to_string(&seed).unwrap();
+        let parsed: Seed = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.strength_tier, StrengthTier::Aggressive);
+    }
+}
+
 /// A seed recipe: a named collection of operations applied to a video.
 /// Maps to a TypeScript `Seed` interface in the frontend.
 #[derive(Debug, Clone, Serialize, Deserialize)]

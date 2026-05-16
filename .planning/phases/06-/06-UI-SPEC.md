@@ -31,21 +31,20 @@ created: 2026-05-16
 
 ## Spacing Scale
 
-Declared values (multiples of 4, driven by UnoCSS presetUno 4px base unit):
+Declared values (all multiples of 4 from the standard set: 4, 8, 16, 24, 32, 48, 64):
 
 | Token | Value | Usage |
 |-------|-------|-------|
-| xs | 4px | Icon gaps, inline padding (`gap-1`) |
+| xs | 4px | Icon gaps, compact inline padding (`gap-1`) |
 | sm | 8px | Compact element spacing (`gap-2`) |
-| md | 12px | Default element internal spacing (`gap-3`, `py-3`) |
-| lg | 16px | Section padding (`px-4`, `space-y-4`) |
-| xl | 24px | Layout gaps, card gaps (`gap-6`) |
-| 2xl | 32px | Major section breaks |
-| 3xl | 48px | Icon + text empty state vertical spacing |
-| 4xl | 64px | Page-level spacing |
+| md | 16px | Default element spacing, general-purpose padding (`gap-4`, `p-4`) |
+| lg | 24px | Section padding, card gaps (`gap-6`, `p-6`) |
+| xl | 32px | Layout gaps, panel-level spacing (`gap-8`) |
+| 2xl | 48px | Major section breaks, icon+text empty state vertical spacing |
+| 3xl | 64px | Page-level spacing |
 
 Exceptions:
-- 6px (`gap-1.5`): used in existing SeedCard for tight icon-to-text spacing in operation tags area. Tolerated for compact desktop UI density.
+- 12px (`gap-3`, `py-3`, `px-3`): Extensively used in existing components (SeedList header padding, QueueList item internal spacing, BatchControls footer padding) for compact desktop UI density. This is the UnoCSS/Tailwind intermediate step between 8px and 16px, providing readable density without crampedness. Preserved for backward compatibility with existing component patterns.
 - 2px (`border-2`): used for selected seed card border thickness. Visual-only, not a layout spacing value.
 
 **Source:** Existing codebase patterns verified across SeedCard.vue, QueueList.vue, BatchControls.vue, MainLayout.vue. All use UnoCSS utility classes with Tailwind-compatible spacing scale (1 = 4px).
@@ -91,6 +90,22 @@ Naive UI dark theme palette. Values verified against all `.vue` component color 
 Accent reserved for: Primary buttons (Start, Generate), selected state indicators (seed card border, icon highlight), progress bar active segments, resize handle on hover, drag-zone border on dragover. **Never** used for decorative elements, secondary buttons, or non-interactive text.
 
 **Source:** All 7 color values extracted from grep across all `.vue` component files. Naive UI dark theme `:theme="darkTheme"` on NConfigProvider in App.vue (line 56). Custom overrides in component `<style scoped>` blocks (e.g., `bg-[#1a1a1f]`, `border-[#2a2a36]`).
+
+---
+
+## Visual Hierarchy
+
+### Focal Point
+
+The primary visual anchor depends on application state:
+
+| State | Focal Point | Rationale |
+|-------|-------------|-----------|
+| First launch (empty queue, no seeds) | **SeedList header with "Generate Seed" primary button** in the left panel | The Generate button is the entry point to the core workflow -- without a seed, no processing is possible. It uses accent color `#2080f0` as `type="primary"`, the only colored button on screen against the dark `#101014` dominant surface. All other controls are secondary or disabled. |
+| Queue populated, ready to process | **BatchControls footer "Start Processing" primary button** in the right panel | Once seeds exist and videos are queued, the Start button becomes the primary action driver. It is anchored at the bottom of the right panel (sticky), always visible regardless of queue scroll position, and uses accent color `#2080f0` exclusively. |
+| Batch running | **NProgress bar on the active queue item** | During processing, the animated progress bar on the currently-processing file row draws attention to ongoing work. Accent color `#2080f0` on the active bar segment. |
+
+The accent color `#2080f0` is never shared simultaneously across competing focal points -- when the Start button is primary, the Generate button uses a secondary type, and vice versa.
 
 ---
 

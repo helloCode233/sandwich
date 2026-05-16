@@ -681,4 +681,146 @@ mod tests {
         assert!(args[1].contains(":ih*0.995"));
         assert!(args[1].contains(":flags=lanczos"));
     }
+
+    // --- Phase 6: dispatch tests (Task 2) ---
+
+    #[test]
+    fn test_dispatch_hue_rotate() {
+        let op = make_op(
+            OperationType::HueRotate,
+            serde_json::json!({"hueAngle": 45.0, "saturation": 1.2}),
+        );
+        let args = build_filter_args(&op).unwrap();
+        assert!(args[0] == "-vf");
+        assert!(args[1].contains("hue=h=45"));
+    }
+
+    #[test]
+    fn test_separated_hue_rotate_returns_video_filter() {
+        let op = make_op(
+            OperationType::HueRotate,
+            serde_json::json!({"hueAngle": 30.0, "saturation": 1.0}),
+        );
+        let (kind, _args) = build_filter_args_separated(&op).unwrap();
+        match kind {
+            FilterKind::VideoFilter(expr) => assert!(expr.contains("hue=h=30")),
+            other => panic!("Expected VideoFilter, got {:?}", std::mem::discriminant(&other)),
+        }
+    }
+
+    #[test]
+    fn test_separated_gop_modify_returns_other() {
+        let op = make_op(OperationType::GopModify, serde_json::json!({"gopSize": 60}));
+        let (kind, _args) = build_filter_args_separated(&op).unwrap();
+        match kind {
+            FilterKind::Other(_) => {} // expected
+            other => panic!("Expected FilterKind::Other, got {:?}", std::mem::discriminant(&other)),
+        }
+    }
+
+    #[test]
+    fn test_dispatch_all_20_types() {
+        let all_types: [OperationType; 20] = [
+            OperationType::MathOverlay,
+            OperationType::PixelShift,
+            OperationType::FrameDrop,
+            OperationType::GopModify,
+            OperationType::MetadataErase,
+            OperationType::AudioTweak,
+            OperationType::Remux,
+            OperationType::HueRotate,
+            OperationType::SaturationAdjust,
+            OperationType::BrightnessContrast,
+            OperationType::ColorBalance,
+            OperationType::FilmGrain,
+            OperationType::GaussianBlur,
+            OperationType::Sharpen,
+            OperationType::MicroRotate,
+            OperationType::TinyScale,
+            OperationType::Flip,
+            OperationType::SolidColorOverlay,
+            OperationType::GradientOverlay,
+            OperationType::WatermarkBlend,
+        ];
+        for t in &all_types {
+            let op = make_op(
+                *t,
+                serde_json::json!({
+                    "pattern": "ripple", "opacity": 0.08, "frequency": 80.0,
+                    "dx": 0, "dy": 0, "interval": 30, "gopSize": 60,
+                    "effect": "volume", "db": 0.5,
+                    "hueAngle": 30.0, "saturation": 1.0,
+                    "contrast": 1.0, "brightness": 0.0, "gamma": 1.0,
+                    "rs": 0.0, "gs": 0.0, "bs": 0.0,
+                    "strength": 15, "flags": "t+u",
+                    "sigma": 1.5,
+                    "amount": 1.0, "radius": 3.0,
+                    "angle": 0.5,
+                    "scaleFactor": 1.0,
+                    "direction": "horizontal",
+                    "hue": 0.0, "lightness": 0.5, "mix": 0.08,
+                    "type": "linear",
+                }),
+            );
+            let result = build_filter_args(&op);
+            assert!(result.is_ok(), "Failed for {:?}: {:?}", t, result.err());
+        }
+    }
+
+    #[test]
+    fn test_separated_all_20_types() {
+        let all_types: [OperationType; 20] = [
+            OperationType::MathOverlay,
+            OperationType::PixelShift,
+            OperationType::FrameDrop,
+            OperationType::GopModify,
+            OperationType::MetadataErase,
+            OperationType::AudioTweak,
+            OperationType::Remux,
+            OperationType::HueRotate,
+            OperationType::SaturationAdjust,
+            OperationType::BrightnessContrast,
+            OperationType::ColorBalance,
+            OperationType::FilmGrain,
+            OperationType::GaussianBlur,
+            OperationType::Sharpen,
+            OperationType::MicroRotate,
+            OperationType::TinyScale,
+            OperationType::Flip,
+            OperationType::SolidColorOverlay,
+            OperationType::GradientOverlay,
+            OperationType::WatermarkBlend,
+        ];
+        for t in &all_types {
+            let op = make_op(
+                *t,
+                serde_json::json!({
+                    "pattern": "ripple", "opacity": 0.08, "frequency": 80.0,
+                    "dx": 0, "dy": 0, "interval": 30, "gopSize": 60,
+                    "effect": "volume", "db": 0.5,
+                    "hueAngle": 30.0, "saturation": 1.0,
+                    "contrast": 1.0, "brightness": 0.0, "gamma": 1.0,
+                    "rs": 0.0, "gs": 0.0, "bs": 0.0,
+                    "strength": 15, "flags": "t+u",
+                    "sigma": 1.5,
+                    "amount": 1.0, "radius": 3.0,
+                    "angle": 0.5,
+                    "scaleFactor": 1.0,
+                    "direction": "horizontal",
+                    "hue": 0.0, "lightness": 0.5, "mix": 0.08,
+                    "type": "linear",
+                }),
+            );
+            let result = build_filter_args_separated(&op);
+            assert!(result.is_ok(), "Failed for {:?}: {:?}", t, result.err());
+        }
+    }
+
+    #[test]
+    fn test_dispatch_flip_horizontal() {
+        let op = make_op(OperationType::Flip, serde_json::json!({"direction": "horizontal"}));
+        let args = build_filter_args(&op).unwrap();
+        assert!(args[0] == "-vf");
+        assert!(args[1] == "hflip");
+    }
 }

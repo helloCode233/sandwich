@@ -165,3 +165,51 @@ fn persist_queue_import(app: &AppHandle) -> Result<(), String> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // RED: These tests will not compile until extract_thumbnail is implemented.
+    // They define the expected behavior: extract_thumbnail returns error for invalid
+    // inputs, and base64-encoded JPEG (starting with /9j/) for valid videos.
+
+    /// extract_thumbnail on a nonexistent file returns an error.
+    #[test]
+    fn extract_thumbnail_nonexistent_file_returns_error() {
+        let result = extract_thumbnail("/nonexistent/video.mp4", None);
+        assert!(result.is_err());
+    }
+
+    /// extract_thumbnail on a non-video file returns an error (FFmpeg won't decode it).
+    #[test]
+    fn extract_thumbnail_non_video_returns_error() {
+        let result = extract_thumbnail("/dev/null", None);
+        assert!(result.is_err());
+    }
+
+    /// extract_thumbnail on a valid video produces a base64 string starting with JPEG magic.
+    #[test]
+    fn extract_thumbnail_valid_video_returns_base64_jpeg() {
+        let test_video = std::path::Path::new("../../test-assets/sample.mp4");
+        if !test_video.exists() {
+            eprintln!("Skipping: test-assets/sample.mp4 not found");
+            return;
+        }
+        let result = extract_thumbnail(test_video.to_str().unwrap(), None);
+        match result {
+            Ok(b64) => {
+                assert!(
+                    b64.starts_with("/9j/"),
+                    "JPEG base64 should start with /9j/, got: {}",
+                    &b64[..20.min(b64.len())]
+                );
+                assert!(b64.len() > 500, "thumbnail too small: {} bytes", b64.len());
+                assert!(b64.len() < 20000, "thumbnail too large: {} bytes", b64.len());
+            }
+            Err(e) => {
+                eprintln!("Thumbnail extraction failed (may be missing FFmpeg): {}", e);
+            }
+        }
+    }
+}

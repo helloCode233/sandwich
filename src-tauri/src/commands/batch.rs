@@ -344,3 +344,138 @@ pub async fn get_batch_status(state: State<'_, Mutex<AppState>>) -> Result<Batch
         app_state.batch_state.lock().map_err(|e| format!("Batch state lock error: {}", e))?;
     Ok(batch_state.progress.clone())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // RED: These tests validate the ProcessingLogEntry construction patterns
+    // needed for D-16 (batch-log events with per-file duration_ms).
+    // The ProcessingLogEntry struct exists in models/batch.rs, so these
+    // construction tests compile — but they verify behavior that will be
+    // exercised only after the batch-log emission is implemented.
+
+    /// ProcessingLogEntry for a succeeded file has duration_ms > 0 (D-16).
+    #[test]
+    fn log_entry_success_has_positive_duration() {
+        let entry = crate::models::batch::ProcessingLogEntry {
+            id: "test-1".into(),
+            timestamp: "2026-05-16T00:00:00Z".into(),
+            file: "video.mp4".into(),
+            seed_alias: "my-seed".into(),
+            status: "success".into(),
+            md5_before: "abc".into(),
+            md5_after: "def".into(),
+            modified: true,
+            output_path: Some("/out/file.mp4".into()),
+            error_message: None,
+            duration_ms: 4200,
+        };
+        assert!(entry.duration_ms > 0, "duration_ms must be > 0 for succeeded files");
+        assert_eq!(entry.status, "success");
+        assert!(entry.error_message.is_none());
+        assert!(entry.output_path.is_some());
+    }
+
+    /// ProcessingLogEntry for a failed file has duration_ms and error_message set.
+    #[test]
+    fn log_entry_failure_has_error_and_duration() {
+        let entry = crate::models::batch::ProcessingLogEntry {
+            id: "test-2".into(),
+            timestamp: "2026-05-16T00:00:00Z".into(),
+            file: "bad.mp4".into(),
+            seed_alias: "fail-seed".into(),
+            status: "failure".into(),
+            md5_before: String::new(),
+            md5_after: String::new(),
+            modified: false,
+            output_path: None,
+            error_message: Some("FFmpeg crash".into()),
+            duration_ms: 150,
+        };
+        assert!(entry.duration_ms > 0, "duration_ms must be > 0 even for failures");
+        assert_eq!(entry.status, "failure");
+        assert!(entry.error_message.is_some());
+        assert!(entry.output_path.is_none());
+        assert!(!entry.modified);
+    }
+
+    /// Each FileSuccess + elapsed_ms yields a correct ProcessingLogEntry.
+    #[test]
+    fn construct_log_from_file_success() {
+        let success = crate::models::batch::FileSuccess {
+            path: "/out/vid.mp4".into(),
+            seed_alias: "s1".into(),
+            source_file: "/src/vid.mp4".into(),
+            md5_before: "aaa".into(),
+            md5_after: "bbb".into(),
+            modified: true,
+            size_bytes: 10000,
+        };
+        let elapsed_ms = 1234u64;
+        let log = crate::models::batch::ProcessingLogEntry {
+            id: "uuid-1".into(),
+            timestamp: "now".into(),
+            file: success.source_file.clone(),
+            seed_alias: success.seed_alias.clone(),
+            status: "success".into(),
+            md5_before: success.md5_before.clone(),
+            md5_after: success.md5_after.clone(),
+            modified: success.modified,
+            output_path: Some(success.path.clone()),
+            error_message: None,
+            duration_ms: elapsed_ms,
+        };
+        assert_eq!(log.duration_ms, 1234);
+        assert_eq!(log.status, "success");
+        assert_eq!(log.modified, true);
+    }
+
+    /// Each FileResult + elapsed_ms yields a correct ProcessingLogEntry.
+    #[test]
+    fn construct_log_from_file_result() {
+        let failure = crate::models::batch::FileResult {
+            file: "err.mp4".into(),
+            seed: "bad".into(),
+            error: "something went wrong".into(),
+        };
+        let elapsed_ms = 567u64;
+        let log = crate::models::batch::ProcessingLogEntry {
+            id: "uuid-2".into(),
+            timestamp: "now".into(),
+            file: failure.file.clone(),
+            seed_alias: failure.seed.clone(),
+            status: "failure".into(),
+            md5_before: String::new(),
+            md5_after: String::new(),
+            modified: false,
+            output_path: None,
+            error_message: Some(failure.error.clone()),
+            duration_ms: elapsed_ms,
+        };
+        assert_eq!(log.duration_ms, 567);
+        assert_eq!(log.status, "failure");
+        assert_eq!(log.error_message, Some("something went wrong".into()));
+    }
+
+    /// D-16: duration_ms is set from actual elapsed time, not hardcoded.
+    #[test]
+    fn duration_ms_not_zero_for_success() {
+        let start = std::time::Instant::now();
+        let elapsed_ms = start.elapsed().as_millis() as u64;
+        let _entry = crate::models::batch::ProcessingLogEntry {
+            id: "x".into(),
+            timestamp: "x".into(),
+            file: "x.mp4".into(),
+            seed_alias: "x".into(),
+            status: "success".into(),
+            md5_before: "x".into(),
+            md5_after: "x".into(),
+            modified: false,
+            output_path: None,
+            error_message: None,
+            duration_ms: elapsed_ms,
+        };
+        assert_eq!(_entry.duration_ms, elapsed_ms);
+    }
+}

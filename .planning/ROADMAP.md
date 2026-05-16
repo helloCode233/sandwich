@@ -168,7 +168,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 **Goal:** Systematically enhance fingerprint modification with 13+ new FFmpeg operation types (color/noise/geometric/blend), 3-tier strength presets with intelligent seed generation (5-12 steps, >=70% video coverage), seed JSON export/import, and three v2 deferred features (drag-to-reorder queue, thumbnail preview, processing log history).
 **Requirements**: PHASE-06 (20 locked decisions from CONTEXT.md)
 **Depends on:** Phase 5
-**Plans:** 2/7 plans executed
+**Plans:** 5/7 plans executed
 
 Plans:
 **Wave 1** *(foundation — parallel)*
@@ -176,9 +176,9 @@ Plans:
 - [x] 06-02-PLAN.md — TypeScript type definitions + ~50 i18n keys (both locales)
 
 **Wave 2** *(Rust backend — parallel)*
-- [ ] 06-03-PLAN.md — 13 new FFmpeg filter builders + dispatch match arms + tests
-- [ ] 06-04-PLAN.md — Seed generation upgrade (strength tiers, weights, coverage) + seed export/import commands
-- [ ] 06-05-PLAN.md — Thumbnail extraction + batch-log events + legacy migration + lib.rs wiring + base64 crate
+- [x] 06-03-PLAN.md — 13 new FFmpeg filter builders + dispatch match arms + tests
+- [x] 06-04-PLAN.md — Seed generation upgrade (strength tiers, weights, coverage) + seed export/import commands
+- [x] 06-05-PLAN.md — Thumbnail extraction + batch-log events + legacy migration + lib.rs wiring + base64 crate
 
 **Wave 3** *(frontend state)*
 - [ ] 06-06-PLAN.md — Pinia stores (log, seed, queue) + useSeed composable + vue-draggable-plus

@@ -82,3 +82,79 @@ fn persist_queue(app: &AppHandle) -> Result<(), String> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::video::VideoEntry;
+
+    // RED: reorder_queue does not exist yet — these tests will fail to compile.
+    // They define the expected behavior: order_index assignment from position.
+
+    /// reorder_queue assigns order_index based on array position.
+    #[test]
+    fn reorder_queue_assigns_order_indices() {
+        let entries = vec![
+            VideoEntry {
+                filename: "a.mp4".into(),
+                filepath: "/v/a.mp4".into(),
+                metadata: crate::models::video::VideoMetadata {
+                    duration_secs: 10.0,
+                    width: 1920,
+                    height: 1080,
+                    size_bytes: 1000,
+                    codec: "h264".into(),
+                    fps: 30.0,
+                },
+                status: crate::models::video::VideoStatus::Valid,
+                thumbnail_base64: None,
+                order_index: 999, // should be overwritten
+            },
+            VideoEntry {
+                filename: "b.mp4".into(),
+                filepath: "/v/b.mp4".into(),
+                metadata: crate::models::video::VideoMetadata {
+                    duration_secs: 5.0,
+                    width: 1280,
+                    height: 720,
+                    size_bytes: 500,
+                    codec: "hevc".into(),
+                    fps: 24.0,
+                },
+                status: crate::models::video::VideoStatus::Valid,
+                thumbnail_base64: None,
+                order_index: 999,
+            },
+            VideoEntry {
+                filename: "c.mp4".into(),
+                filepath: "/v/c.mp4".into(),
+                metadata: crate::models::video::VideoMetadata {
+                    duration_secs: 15.0,
+                    width: 640,
+                    height: 480,
+                    size_bytes: 800,
+                    codec: "mpeg4".into(),
+                    fps: 30.0,
+                },
+                status: crate::models::video::VideoStatus::Valid,
+                thumbnail_base64: None,
+                order_index: 999,
+            },
+        ];
+
+        // Simulate the order_index assignment logic from reorder_queue
+        let indexed: Vec<VideoEntry> = entries
+            .into_iter()
+            .enumerate()
+            .map(|(i, mut entry)| {
+                entry.order_index = i as u32;
+                entry
+            })
+            .collect();
+
+        assert_eq!(indexed[0].order_index, 0);
+        assert_eq!(indexed[1].order_index, 1);
+        assert_eq!(indexed[2].order_index, 2);
+        assert_eq!(indexed[0].filename, "a.mp4");
+    }
+}

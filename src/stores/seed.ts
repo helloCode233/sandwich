@@ -4,22 +4,21 @@ import type { Seed } from '@/types/seed';
 
 export const useSeedStore = defineStore('seed', () => {
   const seeds = ref<Seed[]>([]);
-  const selectedSeedId = ref<string | null>(null);
+  const selectedSeedIds = ref<string[]>([]);
   /** Currently selected strength tier for seed generation (D-07).
    *  Persisted in component; not stored in Rust backend per-seed until generation. */
   const strengthTier = ref<'conservative' | 'standard' | 'aggressive'>('standard');
 
-  const selectedSeed = computed(
-    () => seeds.value.find((s) => s.id === selectedSeedId.value) ?? null,
+  const selectedSeeds = computed(() =>
+    seeds.value.filter((s) => selectedSeedIds.value.includes(s.id)),
   );
   const seedCount = computed(() => seeds.value.length);
+  const hasSelection = computed(() => selectedSeedIds.value.length > 0);
 
-  /** Replace entire seed list. Clears selection if selected seed removed. */
+  /** Replace entire seed list. Clears selection if a selected seed was removed. */
   function setSeeds(list: Seed[]) {
     seeds.value = list;
-    if (selectedSeedId.value && !list.find((s) => s.id === selectedSeedId.value)) {
-      selectedSeedId.value = null;
-    }
+    selectedSeedIds.value = selectedSeedIds.value.filter((id) => list.some((s) => s.id === id));
   }
 
   function addSeed(seed: Seed) {
@@ -28,22 +27,38 @@ export const useSeedStore = defineStore('seed', () => {
 
   function removeSeed(id: string) {
     seeds.value = seeds.value.filter((s) => s.id !== id);
-    if (selectedSeedId.value === id) selectedSeedId.value = null;
+    selectedSeedIds.value = selectedSeedIds.value.filter((sid) => sid !== id);
   }
 
-  function selectSeed(id: string | null) {
-    selectedSeedId.value = id;
+  function toggleSeed(id: string) {
+    const idx = selectedSeedIds.value.indexOf(id);
+    if (idx >= 0) {
+      selectedSeedIds.value.splice(idx, 1);
+    } else {
+      selectedSeedIds.value.push(id);
+    }
+  }
+
+  function selectAll() {
+    selectedSeedIds.value = seeds.value.map((s) => s.id);
+  }
+
+  function deselectAll() {
+    selectedSeedIds.value = [];
   }
 
   return {
     seeds,
-    selectedSeedId,
-    selectedSeed,
+    selectedSeedIds,
+    selectedSeeds,
     seedCount,
+    hasSelection,
     setSeeds,
     addSeed,
     removeSeed,
-    selectSeed,
+    toggleSeed,
+    selectAll,
+    deselectAll,
     strengthTier,
   };
 });

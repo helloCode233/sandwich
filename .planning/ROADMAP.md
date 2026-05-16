@@ -145,10 +145,10 @@ Plans:
 - [x] 05-04-PLAN.md — GPU wiring into batch.rs + Mutex lock frequency reduction
 
 **Wave 4** *(multi-seed — blocked on Wave 3 completion)*
-- [ ] 05-05-PLAN.md — Multi-seed selection UI + Rust batch command accepting Vec<SeedId>
+- [x] 05-05-PLAN.md — Multi-seed selection UI + Rust batch command accepting Vec<SeedId>
 
 **Wave 5** *(MD5 — blocked on Wave 4 completion)*
-- [ ] 05-06-PLAN.md — MD5 checksum recording (pre-process) + comparison (post-process) + summary integration
+- [x] 05-06-PLAN.md — MD5 checksum recording (pre-process) + comparison (post-process) + summary integration
 
 ## Progress
 
@@ -161,4 +161,27 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | 2. Rust Backend            | 4/4            | Complete    | 2026-05-14 |
 | 3. Vue Frontend            | 7/7            | Complete    | 2026-05-13 |
 | 4. Integration & Polish    | 8/8            | Complete    | 2026-05-14 |
-| 5. Production Hardening    | 4/6 | Complete    | 2026-05-15 |
+| 5. Production Hardening    | 6/6 | Complete    | 2026-05-16 |
+
+### Phase 6: 增强指纹修改
+
+**Goal:** Systematically enhance fingerprint modification with 13+ new FFmpeg operation types (color/noise/geometric/blend), 3-tier strength presets with intelligent seed generation (5-12 steps, >=70% video coverage), seed JSON export/import, and three v2 deferred features (drag-to-reorder queue, thumbnail preview, processing log history).
+**Requirements**: PHASE-06 (20 locked decisions from CONTEXT.md)
+**Depends on:** Phase 5
+**Plans:** 7 plans (3 waves)
+
+Plans:
+**Wave 1** *(foundation — parallel)*
+- [ ] 06-01-PLAN.md — Rust model extensions (OperationType 20 variants, StrengthTier, Seed/VideoEntry/batch structs)
+- [ ] 06-02-PLAN.md — TypeScript type definitions + ~50 i18n keys (both locales)
+
+**Wave 2** *(Rust backend — parallel)*
+- [ ] 06-03-PLAN.md — 13 new FFmpeg filter builders + dispatch match arms + tests
+- [ ] 06-04-PLAN.md — Seed generation upgrade (strength tiers, weights, coverage) + seed export/import commands
+- [ ] 06-05-PLAN.md — Thumbnail extraction + batch-log events + legacy migration + lib.rs wiring + base64 crate
+
+**Wave 3** *(frontend state)*
+- [ ] 06-06-PLAN.md — Pinia stores (log, seed, queue) + useSeed composable + vue-draggable-plus
+
+**Wave 4** *(frontend UI)*
+- [ ] 06-07-PLAN.md — SeedCard + BatchControls + QueueList (VueDraggable + thumbnails) + LogPanel + MainLayout NTabs

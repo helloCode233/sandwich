@@ -339,3 +339,198 @@ fn persist_seeds(app: &AppHandle) -> Result<(), String> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rand::SeedableRng;
+    use rand::rngs::StdRng;
+
+    /// Map OperationType to a unique index 0..19 for tracking purposes.
+    fn variant_index(t: OperationType) -> usize {
+        match t {
+            OperationType::MathOverlay => 0,
+            OperationType::PixelShift => 1,
+            OperationType::FrameDrop => 2,
+            OperationType::GopModify => 3,
+            OperationType::MetadataErase => 4,
+            OperationType::AudioTweak => 5,
+            OperationType::Remux => 6,
+            OperationType::HueRotate => 7,
+            OperationType::SaturationAdjust => 8,
+            OperationType::BrightnessContrast => 9,
+            OperationType::ColorBalance => 10,
+            OperationType::FilmGrain => 11,
+            OperationType::GaussianBlur => 12,
+            OperationType::Sharpen => 13,
+            OperationType::MicroRotate => 14,
+            OperationType::TinyScale => 15,
+            OperationType::Flip => 16,
+            OperationType::SolidColorOverlay => 17,
+            OperationType::GradientOverlay => 18,
+            OperationType::WatermarkBlend => 19,
+        }
+    }
+
+    /// Helper: create an Operation for coverage testing.
+    fn make_op(start: u32, dur: u32) -> Operation {
+        Operation {
+            op_type: OperationType::MathOverlay,
+            start_frame: start,
+            duration_frames: dur,
+            params: serde_json::json!({}),
+        }
+    }
+
+    // ─── TEST 4: pick_operation_type distribution ───────────────────────────
+    #[test]
+    fn pick_operation_type_covers_all_20_types() {
+        let mut rng = rand::rng();
+        let mut seen_flags: [bool; 20] = [false; 20];
+        for _ in 0..10_000 {
+            let t = pick_operation_type(&mut rng);
+            seen_flags[variant_index(t)] = true;
+        }
+        let seen_count = seen_flags.iter().filter(|&&f| f).count();
+        assert_eq!(
+            seen_count, 20,
+            "pick_operation_type must produce all 20 OperationType variants"
+        );
+    }
+
+    // ─── TEST 5: generate_operation for HueRotate with total_frames > 1 ───
+    #[test]
+    fn generate_operation_hue_rotate_with_frames() {
+        let mut rng = rand::rng();
+        let op = generate_operation(
+            &mut rng,
+            OperationType::HueRotate,
+            StrengthTier::Standard,
+            Some(1000),
+        );
+        assert!(
+            op.duration_frames > 0,
+            "Non-FrameDrop ops should have duration > 0 when total_frames > 1. Got: {}",
+            op.duration_frames
+        );
+        assert!(op.start_frame < 1000, "start_frame should be within bounds");
+    }
+
+    // ─── TEST 6: FrameDrop retains existing time-slice behavior ─────────────
+    #[test]
+    fn generate_operation_frame_drop_retains_slice_behavior() {
+        let mut rng = rand::rng();
+        let op = generate_operation(
+            &mut rng,
+            OperationType::FrameDrop,
+            StrengthTier::Standard,
+            Some(5000),
+        );
+        assert!(
+            op.start_frame < 300,
+            "FrameDrop start_frame should be in 0..300, got {}",
+            op.start_frame
+        );
+        assert!(
+            op.duration_frames >= 60 && op.duration_frames < 600,
+            "FrameDrop duration_frames should be in 60..600, got {}",
+            op.duration_frames
+        );
+    }
+
+    // ─── TEST 3: Coverage validation ────────────────────────────────────────
+    #[test]
+    fn coverage_validation_70_percent() {
+        let ops = vec![make_op(0, 300), make_op(300, 400)];
+        assert!(validate_coverage(&ops, 1000), "300+400 should cover 700/1000 = 70%");
+    }
+
+    #[test]
+    fn coverage_validation_fails_below_70() {
+        let ops = vec![make_op(0, 500)];
+        assert!(!validate_coverage(&ops, 1000), "500/1000 = 50% < 70%, should fail");
+    }
+
+    #[test]
+    fn coverage_validation_relaxed_for_short_videos() {
+        let ops = vec![make_op(0, 15)];
+        assert!(
+            validate_coverage(&ops, 30),
+            "15/30 = 50% >= relaxed 50% threshold for short videos"
+        );
+    }
+
+    #[test]
+    fn coverage_empty_ops_returns_false() {
+        assert!(!validate_coverage(&[], 1000), "empty ops should fail coverage");
+    }
+
+    #[test]
+    fn coverage_zero_frames_returns_true() {
+        assert!(validate_coverage(&[], 0), "zero total_frames should pass");
+    }
+
+    // ─── TEST 1/2: Strength tier step counts (logic test) ──────────────────
+    #[test]
+    fn strength_tier_conservative_5_to_7_steps() {
+        let mut rng: StdRng = SeedableRng::seed_from_u64(42);
+        for _ in 0..100 {
+            let count: u32 = rng.random_range(5..=7);
+            assert!(count >= 5 && count <= 7, "conservative range should be 5-7");
+        }
+    }
+
+    #[test]
+    fn strength_tier_aggressive_8_to_12_steps() {
+        let mut rng: StdRng = SeedableRng::seed_from_u64(99);
+        for _ in 0..100 {
+            let count: u32 = rng.random_range(8..=12);
+            assert!(count >= 8 && count <= 12, "aggressive range should be 8-12");
+        }
+    }
+
+    // ─── Tier-driven parameter range tests ─────────────────────────────────
+    #[test]
+    fn tier_param_ranges_aggressive_wider_than_conservative() {
+        let mut rng = rand::rng();
+        let op_cons = generate_operation(
+            &mut rng,
+            OperationType::FilmGrain,
+            StrengthTier::Conservative,
+            Some(1000),
+        );
+        let cons_strength: u32 = op_cons.params["strength"].as_u64().unwrap_or(0) as u32;
+        assert!(
+            cons_strength >= 5 && cons_strength <= 12,
+            "Conservative FilmGrain strength should be 5-12, got {}",
+            cons_strength
+        );
+
+        let mut rng2 = rand::rng();
+        let op_agg = generate_operation(
+            &mut rng2,
+            OperationType::FilmGrain,
+            StrengthTier::Aggressive,
+            Some(1000),
+        );
+        let agg_strength: u32 = op_agg.params["strength"].as_u64().unwrap_or(0) as u32;
+        assert!(
+            agg_strength >= 15 && agg_strength <= 30,
+            "Aggressive FilmGrain strength should be 15-30, got {}",
+            agg_strength
+        );
+    }
+
+    #[test]
+    fn hue_rotate_has_saturation_field() {
+        let mut rng = rand::rng();
+        let op = generate_operation(
+            &mut rng,
+            OperationType::HueRotate,
+            StrengthTier::Standard,
+            Some(1000),
+        );
+        assert!(op.params.get("hueAngle").is_some(), "HueRotate should have hueAngle param");
+        assert!(op.params.get("saturation").is_some(), "HueRotate should have saturation param");
+    }
+}

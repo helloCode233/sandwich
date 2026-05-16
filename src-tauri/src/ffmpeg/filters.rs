@@ -64,12 +64,18 @@ pub fn build_pixel_shift_filter(op: &Operation) -> Result<Vec<String>, String> {
 /// Build FFmpeg filter arguments for frame dropping.
 /// SEED-04: interval >= 15.
 pub fn build_frame_drop_filter(op: &Operation) -> Result<Vec<String>, String> {
-    let interval: u32 = op.params["interval"].as_u64().unwrap_or(30) as u32;
+    // Micro-timing jitter via setpts — replaces framestep which caused slideshow
+    // (framestep kept 1/N frames; at N=15 → 2fps — 视频变成图片放映).
+    let offset: f64 = op.params["offset"].as_f64().unwrap_or(0.002);
+    let period: u32 = op.params["period"].as_u64().unwrap_or(60) as u32;
 
-    // Clamp to safety constraint per SEED-04
-    let interval = interval.max(15);
+    // Safety backstop: offset 0.0001..0.01s, period >= 15 frames
+    let offset = offset.clamp(0.0001, 0.01);
+    let period = period.max(15);
 
-    Ok(vec!["-vf".to_string(), format!("framestep={}", interval)])
+    let filter =
+        format!("setpts=PTS+sin(N*2*PI/{period})*{offset}/TB", period = period, offset = offset);
+    Ok(vec!["-vf".to_string(), filter])
 }
 
 /// Build FFmpeg arguments for GOP modification.
@@ -401,7 +407,7 @@ pub fn build_filter_args_separated(op: &Operation) -> Result<(FilterKind, Vec<St
         }
         OperationType::FrameDrop => {
             let args = build_frame_drop_filter(op)?;
-            // args = ["-vf", "framestep=..."]
+            // args = ["-vf", "setpts=..."]
             let expr = args.get(1).cloned().unwrap_or_default();
             Ok((FilterKind::VideoFilter(expr), args))
         }
@@ -541,15 +547,48 @@ mod tests {
     }
 
     #[test]
-    fn test_frame_drop_min_interval() {
+    fn test_frame_drop_setpts_jitter() {
+        // Normal params: offset and period within safe range
         let op = make_op(
             OperationType::FrameDrop,
             serde_json::json!({
-                "interval": 2
+                "offset": 0.003,
+                "period": 45
             }),
         );
         let args = build_frame_drop_filter(&op).unwrap();
-        assert!(args[1].contains("framestep=15"));
+        assert!(args[1].contains("setpts="), "Should use setpts filter, got: {}", args[1]);
+        assert!(args[1].contains("sin"), "Should include sin() oscillation");
+        assert!(args[1].contains("0.003"), "Should use the passed offset value");
+        assert!(args[1].contains("45"), "Should use the passed period value");
+    }
+
+    #[test]
+    fn test_frame_drop_clamps_offset_too_small() {
+        // offset below minimum → clamped to 0.0001
+        let op = make_op(
+            OperationType::FrameDrop,
+            serde_json::json!({
+                "offset": 0.0,
+                "period": 30
+            }),
+        );
+        let args = build_frame_drop_filter(&op).unwrap();
+        assert!(args[1].contains("0.0001"), "Should clamp offset up to 0.0001, got: {}", args[1]);
+    }
+
+    #[test]
+    fn test_frame_drop_clamps_period_too_low() {
+        // period below minimum → clamped to 15
+        let op = make_op(
+            OperationType::FrameDrop,
+            serde_json::json!({
+                "offset": 0.002,
+                "period": 2
+            }),
+        );
+        let args = build_frame_drop_filter(&op).unwrap();
+        assert!(args[1].contains("15"), "Should clamp period to >=15, got: {}", args[1]);
     }
 
     #[test]

@@ -172,7 +172,8 @@ pub async fn generate_seed(
 }
 
 /// Generate random frame range for an operation (D-09).
-/// For FrameDrop: retains existing time-slice behavior (start 0..300, dur 60..600).
+/// For FrameDrop: retains time-slice behavior (start 0..300, dur 60..600)
+/// — applies setpts micro-jitter to this segment only.
 /// For all other ops: random start within video bounds, random duration covering at least 1 frame.
 fn random_frame_range(rng: &mut impl Rng, op_type: OperationType, total_frames: u32) -> (u32, u32) {
     match op_type {
@@ -246,10 +247,21 @@ fn generate_operation(
             let dy = rng.random_range(min..=max);
             serde_json::json!({ "dx": dx, "dy": dy })
         }
-        // ── FrameDrop (existing, unchanged) ─────────────────────────────────
+        // ── FrameDrop: setpts micro-timing jitter (D-01, D-02, D-04) ────
+        // Replaces framestep decimation which caused slideshow (画面变成图片放映).
+        // setpts sin() oscillation alters frame timestamps imperceptibly
+        // while preserving all frames for smooth playback.
         OperationType::FrameDrop => {
-            let interval = rng.random_range(15..=60); // SEED-04: >= 15
-            serde_json::json!({ "interval": interval })
+            let (offset_min, offset_max) = match strength_tier {
+                StrengthTier::Conservative => (0.0005, 0.001),
+                StrengthTier::Standard => (0.001, 0.003),
+                StrengthTier::Aggressive => (0.003, 0.006),
+            };
+            let period = rng.random_range(30..=120);
+            serde_json::json!({
+                "offset": rng.random_range(offset_min..=offset_max),
+                "period": period,
+            })
         }
         // ── GOP modify (existing) ───────────────────────────────────────────
         OperationType::GopModify => {
@@ -675,9 +687,9 @@ mod tests {
         assert!(op.start_frame < 1000, "start_frame should be within bounds");
     }
 
-    // ─── TEST 6: FrameDrop retains existing time-slice behavior ─────────────
+    // ─── TEST 6: FrameDrop uses setpts micro-jitter, not framestep ────────
     #[test]
-    fn generate_operation_frame_drop_retains_slice_behavior() {
+    fn generate_operation_frame_drop_uses_setpts_jitter() {
         let mut rng = rand::rng();
         let op = generate_operation(
             &mut rng,
@@ -685,6 +697,7 @@ mod tests {
             StrengthTier::Standard,
             Some(5000),
         );
+        // FrameDrop still has time-slice behavior for apply-to range
         assert!(
             op.start_frame < 300,
             "FrameDrop start_frame should be in 0..300, got {}",
@@ -695,6 +708,15 @@ mod tests {
             "FrameDrop duration_frames should be in 60..600, got {}",
             op.duration_frames
         );
+        // Verify setpts params (not framestep interval)
+        let offset = op.params["offset"].as_f64().unwrap();
+        assert!(
+            offset >= 0.001 && offset <= 0.003,
+            "Standard tier offset should be 0.001..0.003, got {}",
+            offset
+        );
+        let period = op.params["period"].as_u64().unwrap();
+        assert!(period >= 30 && period <= 120, "Period should be 30..120, got {}", period);
     }
 
     // ─── TEST 3: Coverage validation ────────────────────────────────────────

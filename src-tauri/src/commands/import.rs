@@ -70,6 +70,8 @@ pub async fn import_video(
         filepath: filepath.clone(),
         metadata,
         status: VideoStatus::Valid,
+        thumbnail_base64: None,
+        order_index: 0,
     };
 
     // Add to queue (D-15: duplicates allowed — no dedup check)
@@ -146,11 +148,7 @@ fn get_output_dir(app: &AppHandle) -> String {
     #[cfg(not(target_os = "windows"))]
     let home = std::env::var("HOME").unwrap_or_default();
 
-    Path::new(&home)
-        .join("Videos")
-        .join("sandwich-output")
-        .to_string_lossy()
-        .to_string()
+    Path::new(&home).join("Videos").join("sandwich-output").to_string_lossy().to_string()
 }
 
 /// Persist the video queue to tauri-plugin-store.
@@ -158,15 +156,12 @@ fn persist_queue_import(app: &AppHandle) -> Result<(), String> {
     let state = app.state::<Mutex<AppState>>();
     let app_state = state.lock().map_err(|e| format!("Lock error: {}", e))?;
 
-    let store = app
-        .store("queue.json")
-        .map_err(|e| format!("Failed to open queue store: {}", e))?;
+    let store =
+        app.store("queue.json").map_err(|e| format!("Failed to open queue store: {}", e))?;
     let json = serde_json::to_value(&*app_state.queue)
         .map_err(|e| format!("Serialization error: {}", e))?;
     store.set("queue", json);
-    store
-        .save()
-        .map_err(|e| format!("Failed to save queue: {}", e))?;
+    store.save().map_err(|e| format!("Failed to save queue: {}", e))?;
 
     Ok(())
 }

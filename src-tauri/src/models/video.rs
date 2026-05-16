@@ -63,6 +63,14 @@ pub struct VideoEntry {
     pub metadata: VideoMetadata,
     /// Validity status per D-06.
     pub status: VideoStatus,
+    /// Base64-encoded JPEG thumbnail (first frame, 120px wide). None if extraction failed.
+    /// D-15: extracted during import, stored for display.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thumbnail_base64: Option<String>,
+    /// Display order index for drag-and-drop reordering (D-14).
+    /// 0-based; persisted to maintain user's preferred queue order.
+    #[serde(default)]
+    pub order_index: u32,
 }
 
 /// Video metadata extracted via ffprobe.

@@ -133,6 +133,37 @@ pub struct FileSuccess {
     pub size_bytes: u64,
 }
 
+/// Persisted processing log entry for the history panel (D-16 / PROD-03).
+/// Accumulated in a separate processing-log.json store file (max 500 entries).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProcessingLogEntry {
+    /// Unique identifier (UUID v4).
+    pub id: String,
+    /// ISO 8601 timestamp of completion.
+    pub timestamp: String,
+    /// Source filename (not full path).
+    pub file: String,
+    /// Seed alias used for this processing run.
+    pub seed_alias: String,
+    /// "success" or "failure".
+    pub status: String,
+    /// MD5 hash before processing (hex string).
+    pub md5_before: String,
+    /// MD5 hash after processing (hex string).
+    pub md5_after: String,
+    /// true if md5_before != md5_after (file was modified).
+    pub modified: bool,
+    /// Output file path (null if failed before output).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output_path: Option<String>,
+    /// Error message (null if success).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error_message: Option<String>,
+    /// Processing duration in milliseconds.
+    pub duration_ms: u64,
+}
+
 /// Per-file frame-level progress emitted during FFmpeg execution.
 /// Emitted via "batch-file-progress" event from executor.rs.
 #[derive(Debug, Clone, Serialize)]

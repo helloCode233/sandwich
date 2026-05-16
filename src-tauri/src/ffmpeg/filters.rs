@@ -332,6 +332,10 @@ pub fn build_watermark_blend_filter(op: &Operation) -> Result<Vec<String>, Strin
             "geq=lum='lum(X,Y)*(1+{op}*if(mod(floor((X+Y)/40),2),1,-1))':cb='cb(X,Y)':cr='cr(X,Y)'",
             op = opacity
         ),
+        "ripple" => format!(
+            "geq=lum='lum(X,Y)*(1+{op}*sin(2*PI*X/W/8)*cos(2*PI*Y/H/8))':cb='cb(X,Y)':cr='cr(X,Y)'",
+            op = opacity
+        ),
         _ => return Err(format!("Unknown watermark blend pattern: {}", pattern)),
     };
 
@@ -688,6 +692,7 @@ mod tests {
         assert!(args[0] == "-vf");
         assert!(args[1].contains("unsharp="));
         assert!(args[1].contains("luma_amount=1"));
+        assert!(args[1].contains("luma_msize_x=3"));
     }
 
     #[test]
@@ -739,13 +744,14 @@ mod tests {
         let args = build_gradient_overlay_filter(&op).unwrap();
         assert!(args[0] == "-vf");
         assert!(args[1].contains("geq="));
+        assert!(args[1].contains("r='r(X,Y)'"));
     }
 
     #[test]
     fn test_watermark_blend_basic() {
         let op = make_op(
             OperationType::WatermarkBlend,
-            serde_json::json!({"pattern": "grid", "opacity": 0.08}),
+            serde_json::json!({"pattern": "ripple", "opacity": 0.08}),
         );
         let args = build_watermark_blend_filter(&op).unwrap();
         assert!(args[0] == "-vf");

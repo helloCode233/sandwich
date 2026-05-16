@@ -5,6 +5,8 @@ export interface Seed {
   alias: string;
   operations: Operation[];
   createdAt: string; // ISO 8601 — serde: created_at -> createdAt
+  /** Strength tier used when generating this seed (D-07). Optional for backward compat with old seeds. */
+  strengthTier?: 'conservative' | 'standard' | 'aggressive';
 }
 
 export interface Operation {
@@ -21,4 +23,21 @@ export type OperationType =
   | 'gopModify'
   | 'metadataErase'
   | 'audioTweak'
-  | 'remux';
+  | 'remux'
+  // Phase 6: Color processing (4)
+  | 'hueRotate'
+  | 'saturationAdjust'
+  | 'brightnessContrast'
+  | 'colorBalance'
+  // Phase 6: Noise texture (3)
+  | 'filmGrain'
+  | 'gaussianBlur'
+  | 'sharpen'
+  // Phase 6: Geometric fine-tuning (3)
+  | 'microRotate'
+  | 'tinyScale'
+  | 'flip'
+  // Phase 6: Blend overlay (3)
+  | 'solidColorOverlay'
+  | 'gradientOverlay'
+  | 'watermarkBlend';

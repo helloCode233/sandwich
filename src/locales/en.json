@@ -46,7 +46,22 @@
     "deleteConfirm": "Delete seed \"{alias}\"? This cannot be undone.",
     "deleted": "Seed deleted",
     "aliasPlaceholder": "Enter seed alias",
-    "aliasEmpty": "Alias cannot be empty"
+    "aliasEmpty": "Alias cannot be empty",
+    "strengthTier": "Strength Tier",
+    "strength": {
+      "conservative": "Conservative",
+      "standard": "Standard",
+      "aggressive": "Aggressive"
+    },
+    "export": "Export",
+    "import": "Import",
+    "exported": "Seed exported",
+    "imported": "Seed \"{alias}\" imported",
+    "importFailed": "Import failed: {error}",
+    "importInvalidJson": "Invalid file. Select a .json seed file.",
+    "importBadSchema": "Invalid seed data. The file may be corrupted or from an incompatible version.",
+    "importTooManyOps": "Seed contains too many operations (max 20). Import rejected.",
+    "migrated": "{count} seeds upgraded"
   },
   "queue": {
     "title": "Video Queue",
@@ -60,7 +75,9 @@
     "imported": "\"{filename}\" imported",
     "removed": "\"{filename}\" removed",
     "invalid": "File invalid",
-    "valid": "Valid"
+    "valid": "Valid",
+    "reorder": "Drag to reorder",
+    "thumbnail": "Thumbnail"
   },
   "import": {
     "dropHere": "Drop videos here",
@@ -97,6 +114,8 @@
     "completed": "Batch Complete",
     "cancelled": "Batch Cancelled",
     "defaultOutputDir": "~/Videos/sandwich-output/",
+    "strengthTierLabel": "Strength",
+    "strengthTierDesc": "Controls operation parameter ranges and step count",
     "summary": {
       "completeTitle": "Batch Complete",
       "cancelledTitle": "Batch Cancelled",
@@ -109,8 +128,47 @@
       "cancelledBody": "Cancelled after {succeeded} succeeded, {failed} failed out of {total} files"
     }
   },
+  "log": {
+    "title": "Processing Log",
+    "empty": "No logs yet",
+    "searchPlaceholder": "Search file/seed...",
+    "all": "All",
+    "success": "Success",
+    "failure": "Failure",
+    "noResults": "No entries match your filters",
+    "duration": "{minutes}m {seconds}s",
+    "status": "Status",
+    "outputPath": "Output Path",
+    "clearConfirm": "Clear all logs?",
+    "cleared": "Logs cleared",
+    "modified": "Modified",
+    "unchanged": "Unchanged",
+    "error": "Error"
+  },
   "notification": {
     "lowDiskSpace": "Low disk space (less than 100 MB available)",
     "operationFailed": "Operation failed: {error}"
+  },
+  "operationTypes": {
+    "mathOverlay": "Math Overlay",
+    "pixelShift": "Pixel Shift",
+    "frameDrop": "Frame Drop",
+    "gopModify": "GOP Modify",
+    "metadataErase": "Metadata Erase",
+    "audioTweak": "Audio Tweak",
+    "remux": "Remux",
+    "hueRotate": "Hue Rotate",
+    "saturationAdjust": "Saturation Adjust",
+    "brightnessContrast": "Brightness/Contrast",
+    "colorBalance": "Color Balance",
+    "filmGrain": "Film Grain",
+    "gaussianBlur": "Gaussian Blur",
+    "sharpen": "Sharpen",
+    "microRotate": "Micro Rotate",
+    "tinyScale": "Tiny Scale",
+    "flip": "Flip",
+    "solidColorOverlay": "Solid Color Overlay",
+    "gradientOverlay": "Gradient Overlay",
+    "watermarkBlend": "Watermark Blend"
   }
 }

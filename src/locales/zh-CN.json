@@ -46,7 +46,22 @@
     "deleteConfirm": "确定删除种子「{alias}」？此操作不可撤销。",
     "deleted": "种子已删除",
     "aliasPlaceholder": "输入种子别名",
-    "aliasEmpty": "别名不能为空"
+    "aliasEmpty": "别名不能为空",
+    "strengthTier": "强度档位",
+    "strength": {
+      "conservative": "保守",
+      "standard": "标准",
+      "aggressive": "激进"
+    },
+    "export": "导出",
+    "import": "导入",
+    "exported": "种子已导出",
+    "imported": "种子「{alias}」已导入",
+    "importFailed": "导入失败：{error}",
+    "importInvalidJson": "无效的文件，请选择 .json 种子文件",
+    "importBadSchema": "种子数据无效，文件可能已损坏或来自不兼容版本",
+    "importTooManyOps": "种子包含过多操作（最多 20 个），已拒绝导入",
+    "migrated": "{count} 个种子已升级"
   },
   "queue": {
     "title": "视频队列",
@@ -60,7 +75,9 @@
     "imported": "「{filename}」已导入",
     "removed": "已移除「{filename}」",
     "invalid": "文件已失效",
-    "valid": "有效"
+    "valid": "有效",
+    "reorder": "拖拽排序",
+    "thumbnail": "缩略图"
   },
   "import": {
     "dropHere": "拖拽视频到此处",
@@ -97,6 +114,8 @@
     "completed": "批处理完成",
     "cancelled": "批处理已取消",
     "defaultOutputDir": "~/Videos/sandwich-output/",
+    "strengthTierLabel": "处理强度",
+    "strengthTierDesc": "控制操作参数范围和步数",
     "summary": {
       "completeTitle": "批处理完成",
       "cancelledTitle": "批处理已取消",
@@ -109,8 +128,47 @@
       "cancelledBody": "已取消，共 {total} 个文件，成功 {succeeded} 个，失败 {failed} 个"
     }
   },
+  "log": {
+    "title": "处理日志",
+    "empty": "暂无日志",
+    "searchPlaceholder": "搜索文件名/种子...",
+    "all": "全部",
+    "success": "成功",
+    "failure": "失败",
+    "noResults": "没有符合条件的记录",
+    "duration": "{minutes}分{seconds}秒",
+    "status": "状态",
+    "outputPath": "输出路径",
+    "clearConfirm": "确定清空所有日志？",
+    "cleared": "日志已清空",
+    "modified": "已修改",
+    "unchanged": "未修改",
+    "error": "错误"
+  },
   "notification": {
     "lowDiskSpace": "磁盘空间不足（剩余不足 100 MB）",
     "operationFailed": "操作失败：{error}"
+  },
+  "operationTypes": {
+    "mathOverlay": "数学叠加",
+    "pixelShift": "像素平移",
+    "frameDrop": "抽帧",
+    "gopModify": "GOP修改",
+    "metadataErase": "元数据擦除",
+    "audioTweak": "音频微调",
+    "remux": "重封装",
+    "hueRotate": "色相旋转",
+    "saturationAdjust": "饱和度调整",
+    "brightnessContrast": "亮度对比度",
+    "colorBalance": "色彩平衡",
+    "filmGrain": "颗粒噪点",
+    "gaussianBlur": "高斯模糊",
+    "sharpen": "锐化",
+    "microRotate": "微旋转",
+    "tinyScale": "微缩放",
+    "flip": "翻转",
+    "solidColorOverlay": "纯色叠加",
+    "gradientOverlay": "渐变叠加",
+    "watermarkBlend": "水印混合"
   }
 }

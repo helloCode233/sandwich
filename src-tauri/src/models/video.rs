@@ -1,5 +1,55 @@
 use serde::{Deserialize, Serialize};
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Verify VideoEntry deserializes when new Phase 6 fields are missing (serde default).
+    #[test]
+    fn video_entry_deserialize_missing_new_fields() {
+        let json = r#"{
+            "filename": "test.mp4",
+            "filepath": "/videos/test.mp4",
+            "metadata": {
+                "durationSecs": 10.0,
+                "width": 1920,
+                "height": 1080,
+                "sizeBytes": 5000000,
+                "codec": "h264",
+                "fps": 30.0
+            },
+            "status": "valid"
+        }"#;
+        let entry: VideoEntry = serde_json::from_str(json).unwrap();
+        assert_eq!(entry.thumbnail_base64, None);
+        assert_eq!(entry.order_index, 0);
+    }
+
+    /// Verify VideoEntry with thumbnail and order_index round-trips through serde_json.
+    #[test]
+    fn video_entry_thumbnail_order_round_trip() {
+        let entry = VideoEntry {
+            filename: "clip.mp4".into(),
+            filepath: "/videos/clip.mp4".into(),
+            metadata: VideoMetadata {
+                duration_secs: 5.0,
+                width: 1280,
+                height: 720,
+                size_bytes: 2000000,
+                codec: "hevc".into(),
+                fps: 24.0,
+            },
+            status: VideoStatus::Valid,
+            thumbnail_base64: Some("abc123base64".into()),
+            order_index: 5,
+        };
+        let json = serde_json::to_string(&entry).unwrap();
+        let parsed: VideoEntry = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.thumbnail_base64, Some("abc123base64".into()));
+        assert_eq!(parsed.order_index, 5);
+    }
+}
+
 /// A video entry in the processing queue.
 /// Maps to a TypeScript `VideoEntry` interface in the frontend.
 #[derive(Debug, Clone, Serialize, Deserialize)]

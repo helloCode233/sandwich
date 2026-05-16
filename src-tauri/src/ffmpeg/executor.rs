@@ -169,6 +169,7 @@ pub fn execute_single_file(
                     "batch-file-progress",
                     PerFileProgress {
                         file: filename.clone(),
+                        seed_alias: seed.alias.clone(),
                         percent,
                         current_frame: progress.frame,
                         total_frames,

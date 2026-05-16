@@ -6,6 +6,7 @@
 use std::path::Path;
 use std::sync::Mutex;
 
+use base64::Engine;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_store::StoreExt;
 
@@ -65,12 +66,28 @@ pub async fn import_video(
     // D-13: Check available disk space
     check_disk_space_for_output(&app)?;
 
+    // Extract thumbnail: first frame, scaled to 120px wide, JPEG output to stdout
+    let thumbnail_base64 = match extract_thumbnail(&filepath, ffmpeg_dir.as_deref()) {
+        Ok(b64) => Some(b64),
+        Err(e) => {
+            // Graceful degradation: import succeeds even if thumbnail fails
+            let _ = app.emit(
+                "thumbnail-extraction-warning",
+                serde_json::json!({
+                    "file": filename,
+                    "error": e,
+                }),
+            );
+            None
+        }
+    };
+
     let entry = VideoEntry {
         filename,
         filepath: filepath.clone(),
         metadata,
         status: VideoStatus::Valid,
-        thumbnail_base64: None,
+        thumbnail_base64,
         order_index: 0,
     };
 
@@ -100,6 +117,57 @@ fn get_stored_ffmpeg_dir(app: &AppHandle) -> Option<String> {
         }
     }
     None
+}
+
+/// Extract first frame as 120px-wide JPEG, return as base64 string.
+/// Uses ffmpeg-sidecar's take_stdout() to capture JPEG bytes from stdout.
+/// Output is ~2-8KB — safe for in-memory handling and store persistence.
+fn extract_thumbnail(video_path: &str, ffmpeg_dir: Option<&str>) -> Result<String, String> {
+    use std::io::Read;
+    use std::path::Path;
+
+    let ffmpeg_bin_path = if let Some(dir) = ffmpeg_dir {
+        Path::new(dir).join("ffmpeg")
+    } else {
+        ffmpeg_sidecar::paths::ffmpeg_path()
+    };
+
+    let bin_path_string = ffmpeg_bin_path.to_string_lossy().into_owned();
+
+    let mut child = ffmpeg_sidecar::command::FfmpegCommand::new_with_path(&bin_path_string)
+        .input(video_path)
+        .args([
+            "-ss",
+            "1", // seek to 1 second in
+            "-vframes",
+            "1", // extract single frame
+            "-vf",
+            "scale=120:-1", // scale width to 120px, height auto
+            "-f",
+            "image2pipe", // output raw image to stdout
+            "-vcodec",
+            "mjpeg", // JPEG encoding
+            "-",     // stdout
+        ])
+        .spawn()
+        .map_err(|e| format!("Thumbnail spawn failed: {}", e))?;
+
+    // Read stdout (JPEG bytes) before waiting to avoid deadlock
+    let mut jpeg_bytes = Vec::new();
+    if let Some(mut stdout) = child.take_stdout() {
+        stdout
+            .read_to_end(&mut jpeg_bytes)
+            .map_err(|e| format!("Failed to read thumbnail stdout: {}", e))?;
+    }
+
+    // Wait for process completion (also drains stderr to avoid zombie)
+    child.wait().map_err(|e| format!("Thumbnail wait failed: {}", e))?;
+
+    if jpeg_bytes.is_empty() {
+        return Err("Thumbnail output was empty".to_string());
+    }
+
+    Ok(base64::engine::general_purpose::STANDARD.encode(&jpeg_bytes))
 }
 
 /// Check available disk space. Per D-13: no hard limit, but warn if low.

@@ -1,21 +1,26 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
-import { NLayout, NLayoutSider, NLayoutContent, NLayoutFooter } from 'naive-ui';
+import { NLayout, NLayoutSider, NLayoutContent, NLayoutFooter, NTabs, NTabPane } from 'naive-ui';
 import { useBatchStore } from '@/stores/batch';
 import { useSeed } from '@/composables/useSeed';
 import { useQueue } from '@/composables/useQueue';
 import { useBatch } from '@/composables/useBatch';
+import { useI18n } from 'vue-i18n';
 import SeedList from '@/components/seed/SeedList.vue';
 import ImportZone from '@/components/queue/ImportZone.vue';
 import QueueList from '@/components/queue/QueueList.vue';
 import BatchControls from '@/components/batch/BatchControls.vue';
 import BatchBanner from '@/components/batch/BatchBanner.vue';
 import BatchSummary from '@/components/batch/BatchSummary.vue';
+import LogPanel from '@/components/log/LogPanel.vue';
 
 const batchStore = useBatchStore();
 const seedComposable = useSeed();
 const queueComposable = useQueue();
 const batchComposable = useBatch();
+const { t } = useI18n();
+
+const rightPanelTab = ref<'queue' | 'log'>('queue');
 
 // Panel sizing (D-01: default 50/50, draggable divider)
 const leftWidth = ref(Math.floor(window.innerWidth / 2));
@@ -83,15 +88,29 @@ onUnmounted(() => {
       <!-- Right Panel: Queue + Batch Controls -->
       <n-layout-content :native-scrollbar="false">
         <div class="right-panel">
-          <!-- Queue Area (upper section per D-02) -->
-          <div class="queue-area">
-            <ImportZone />
-            <BatchBanner
-              v-if="batchStore.isProcessing || batchStore.cancelling || batchStore.isComplete"
-            />
-            <BatchSummary v-if="batchStore.isComplete && batchStore.lastResult" />
-            <QueueList />
-          </div>
+          <NTabs
+            v-model:value="rightPanelTab"
+            type="line"
+            size="small"
+            class="queue-area-tabs flex-1 flex flex-col min-h-0"
+          >
+            <!-- Queue Tab -->
+            <NTabPane name="queue" :tab="t('queue.title')">
+              <div class="queue-area">
+                <ImportZone />
+                <BatchBanner
+                  v-if="batchStore.isProcessing || batchStore.cancelling || batchStore.isComplete"
+                />
+                <BatchSummary v-if="batchStore.isComplete && batchStore.lastResult" />
+                <QueueList />
+              </div>
+            </NTabPane>
+
+            <!-- History Tab (D-16, D-18) -->
+            <NTabPane name="log" :tab="t('log.title')">
+              <LogPanel />
+            </NTabPane>
+          </NTabs>
 
           <!-- Batch Controls (lower section per D-02, sticky footer) -->
           <n-layout-footer class="batch-footer">
@@ -134,5 +153,21 @@ onUnmounted(() => {
   flex-shrink: 0;
   border-top: 1px solid var(--n-border-color);
   background-color: var(--n-color);
+}
+
+.queue-area-tabs {
+  min-height: 0;
+}
+.queue-area-tabs :deep(.n-tabs-pane-wrapper) {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.queue-area-tabs :deep(.n-tab-pane) {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 </style>

@@ -5,6 +5,9 @@ import type { Seed } from '@/types/seed';
 export const useSeedStore = defineStore('seed', () => {
   const seeds = ref<Seed[]>([]);
   const selectedSeedId = ref<string | null>(null);
+  /** Currently selected strength tier for seed generation (D-07).
+   *  Persisted in component; not stored in Rust backend per-seed until generation. */
+  const strengthTier = ref<'conservative' | 'standard' | 'aggressive'>('standard');
 
   const selectedSeed = computed(
     () => seeds.value.find((s) => s.id === selectedSeedId.value) ?? null,
@@ -41,5 +44,6 @@ export const useSeedStore = defineStore('seed', () => {
     addSeed,
     removeSeed,
     selectSeed,
+    strengthTier,
   };
 });

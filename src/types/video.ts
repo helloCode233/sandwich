@@ -5,6 +5,10 @@ export interface VideoEntry {
   filepath: string; // stays filepath (one word, no transform)
   metadata: VideoMetadata;
   status: VideoStatus;
+  /** Base64-encoded JPEG thumbnail (first frame, 120px wide). Undefined if extraction failed (D-15). */
+  thumbnailBase64?: string;
+  /** 0-based display order for drag-and-drop reordering (D-14). */
+  orderIndex?: number;
 }
 
 export interface VideoMetadata {

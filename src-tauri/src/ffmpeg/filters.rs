@@ -348,8 +348,23 @@ pub fn build_filter_args(op: &Operation) -> Result<Vec<String>, String> {
         OperationType::MetadataErase => build_metadata_erase_filter(op),
         OperationType::AudioTweak => build_audio_tweak_filter(op),
         OperationType::Remux => build_remux_filter(op),
-        // Phase 6 new operation types — filter builders to be implemented in plan 06-02.
-        _ => Err(format!("Filter not yet implemented for operation type: {:?}", op.op_type)),
+        // Phase 6: Color processing (D-01, D-02)
+        OperationType::HueRotate => build_hue_rotate_filter(op),
+        OperationType::SaturationAdjust => build_saturation_adjust_filter(op),
+        OperationType::BrightnessContrast => build_brightness_contrast_filter(op),
+        OperationType::ColorBalance => build_color_balance_filter(op),
+        // Phase 6: Noise texture
+        OperationType::FilmGrain => build_film_grain_filter(op),
+        OperationType::GaussianBlur => build_gaussian_blur_filter(op),
+        OperationType::Sharpen => build_sharpen_filter(op),
+        // Phase 6: Geometric fine-tuning
+        OperationType::MicroRotate => build_micro_rotate_filter(op),
+        OperationType::TinyScale => build_tiny_scale_filter(op),
+        OperationType::Flip => build_flip_filter(op),
+        // Phase 6: Blend overlay
+        OperationType::SolidColorOverlay => build_solid_color_overlay_filter(op),
+        OperationType::GradientOverlay => build_gradient_overlay_filter(op),
+        OperationType::WatermarkBlend => build_watermark_blend_filter(op),
     }
 }
 
@@ -391,6 +406,72 @@ pub fn build_filter_args_separated(op: &Operation) -> Result<(FilterKind, Vec<St
             // args = ["-af", "volume=..."] or similar
             let expr = args.get(1).cloned().unwrap_or_default();
             Ok((FilterKind::AudioFilter(expr), args))
+        }
+        // Phase 6: All color/noise/geometric/blend ops are VideoFilter
+        OperationType::HueRotate => {
+            let args = build_hue_rotate_filter(op)?;
+            let expr = args.get(1).cloned().unwrap_or_default();
+            Ok((FilterKind::VideoFilter(expr), args))
+        }
+        OperationType::SaturationAdjust => {
+            let args = build_saturation_adjust_filter(op)?;
+            let expr = args.get(1).cloned().unwrap_or_default();
+            Ok((FilterKind::VideoFilter(expr), args))
+        }
+        OperationType::BrightnessContrast => {
+            let args = build_brightness_contrast_filter(op)?;
+            let expr = args.get(1).cloned().unwrap_or_default();
+            Ok((FilterKind::VideoFilter(expr), args))
+        }
+        OperationType::ColorBalance => {
+            let args = build_color_balance_filter(op)?;
+            let expr = args.get(1).cloned().unwrap_or_default();
+            Ok((FilterKind::VideoFilter(expr), args))
+        }
+        OperationType::FilmGrain => {
+            let args = build_film_grain_filter(op)?;
+            let expr = args.get(1).cloned().unwrap_or_default();
+            Ok((FilterKind::VideoFilter(expr), args))
+        }
+        OperationType::GaussianBlur => {
+            let args = build_gaussian_blur_filter(op)?;
+            let expr = args.get(1).cloned().unwrap_or_default();
+            Ok((FilterKind::VideoFilter(expr), args))
+        }
+        OperationType::Sharpen => {
+            let args = build_sharpen_filter(op)?;
+            let expr = args.get(1).cloned().unwrap_or_default();
+            Ok((FilterKind::VideoFilter(expr), args))
+        }
+        OperationType::MicroRotate => {
+            let args = build_micro_rotate_filter(op)?;
+            let expr = args.get(1).cloned().unwrap_or_default();
+            Ok((FilterKind::VideoFilter(expr), args))
+        }
+        OperationType::TinyScale => {
+            let args = build_tiny_scale_filter(op)?;
+            let expr = args.get(1).cloned().unwrap_or_default();
+            Ok((FilterKind::VideoFilter(expr), args))
+        }
+        OperationType::Flip => {
+            let args = build_flip_filter(op)?;
+            let expr = args.get(1).cloned().unwrap_or_default();
+            Ok((FilterKind::VideoFilter(expr), args))
+        }
+        OperationType::SolidColorOverlay => {
+            let args = build_solid_color_overlay_filter(op)?;
+            let expr = args.get(1).cloned().unwrap_or_default();
+            Ok((FilterKind::VideoFilter(expr), args))
+        }
+        OperationType::GradientOverlay => {
+            let args = build_gradient_overlay_filter(op)?;
+            let expr = args.get(1).cloned().unwrap_or_default();
+            Ok((FilterKind::VideoFilter(expr), args))
+        }
+        OperationType::WatermarkBlend => {
+            let args = build_watermark_blend_filter(op)?;
+            let expr = args.get(1).cloned().unwrap_or_default();
+            Ok((FilterKind::VideoFilter(expr), args))
         }
         _ => {
             // GopModify, MetadataErase, Remux — pass through as Other

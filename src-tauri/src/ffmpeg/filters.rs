@@ -119,6 +119,225 @@ pub fn build_remux_filter(_op: &Operation) -> Result<Vec<String>, String> {
     Ok(vec!["-c".to_string(), "copy".to_string()])
 }
 
+// =========================================================================
+// Phase 6: Color Processing (D-01, D-02) — 4 new filter builder functions
+// =========================================================================
+
+/// Build FFmpeg filter arguments for hue rotation.
+/// Strength tier: conservative +/-15deg, standard +/-45deg, aggressive +/-90deg.
+/// Safety backstop: hue angle clamped to [-90, 90], saturation [0.5, 1.5].
+pub fn build_hue_rotate_filter(op: &Operation) -> Result<Vec<String>, String> {
+    let hue_angle: f64 = op.params["hueAngle"].as_f64().unwrap_or(0.0);
+    let saturation: f64 = op.params["saturation"].as_f64().unwrap_or(1.0);
+
+    let hue_angle = hue_angle.clamp(-90.0, 90.0);
+    let saturation = saturation.clamp(0.5, 1.5);
+
+    let filter = format!("hue=h={}:s={}", hue_angle, saturation);
+    Ok(vec!["-vf".to_string(), filter])
+}
+
+/// Build FFmpeg filter arguments for saturation adjustment via `eq` filter.
+/// Strength tier affects saturation, contrast, and brightness ranges.
+/// Safety backstop: sat [0.5, 2.0], contrast [0.8, 1.3], brightness [-0.3, 0.3].
+pub fn build_saturation_adjust_filter(op: &Operation) -> Result<Vec<String>, String> {
+    let saturation: f64 = op.params["saturation"].as_f64().unwrap_or(1.0);
+    let contrast: f64 = op.params["contrast"].as_f64().unwrap_or(1.0);
+    let brightness: f64 = op.params["brightness"].as_f64().unwrap_or(0.0);
+
+    let saturation = saturation.clamp(0.5, 2.0);
+    let contrast = contrast.clamp(0.8, 1.3);
+    let brightness = brightness.clamp(-0.3, 0.3);
+
+    let filter =
+        format!("eq=saturation={}:contrast={}:brightness={}", saturation, contrast, brightness);
+    Ok(vec!["-vf".to_string(), filter])
+}
+
+/// Build FFmpeg filter arguments for brightness/contrast adjustment via `eq` filter.
+/// Safety backstop: brightness [-0.3, 0.3], contrast [0.7, 1.5], gamma [0.8, 1.3].
+pub fn build_brightness_contrast_filter(op: &Operation) -> Result<Vec<String>, String> {
+    let brightness: f64 = op.params["brightness"].as_f64().unwrap_or(0.0);
+    let contrast: f64 = op.params["contrast"].as_f64().unwrap_or(1.0);
+    let gamma: f64 = op.params["gamma"].as_f64().unwrap_or(1.0);
+
+    let brightness = brightness.clamp(-0.3, 0.3);
+    let contrast = contrast.clamp(0.7, 1.5);
+    let gamma = gamma.clamp(0.8, 1.3);
+
+    let filter = format!("eq=brightness={}:contrast={}:gamma={}", brightness, contrast, gamma);
+    Ok(vec!["-vf".to_string(), filter])
+}
+
+/// Build FFmpeg filter arguments for color balance adjustment.
+/// Adjusts red/green/blue shadow channels via `colorbalance` filter.
+/// Safety backstop: rs, gs, bs all clamped to [-0.3, 0.3].
+pub fn build_color_balance_filter(op: &Operation) -> Result<Vec<String>, String> {
+    let rs: f64 = op.params["rs"].as_f64().unwrap_or(0.0);
+    let gs: f64 = op.params["gs"].as_f64().unwrap_or(0.0);
+    let bs: f64 = op.params["bs"].as_f64().unwrap_or(0.0);
+
+    let rs = rs.clamp(-0.3, 0.3);
+    let gs = gs.clamp(-0.3, 0.3);
+    let bs = bs.clamp(-0.3, 0.3);
+
+    let filter = format!("colorbalance=rs={}:gs={}:bs={}", rs, gs, bs);
+    Ok(vec!["-vf".to_string(), filter])
+}
+
+// =========================================================================
+// Phase 6: Noise Texture (D-01, D-02) — 3 new filter builder functions
+// =========================================================================
+
+/// Build FFmpeg filter arguments for film grain via `noise` filter.
+/// Safety backstop: strength clamped to [5, 30].
+pub fn build_film_grain_filter(op: &Operation) -> Result<Vec<String>, String> {
+    let strength: u32 = op.params["strength"].as_u64().unwrap_or(15) as u32;
+    let flags = op.params["flags"].as_str().unwrap_or("t+u");
+
+    let strength = strength.clamp(5, 30);
+
+    let filter = format!("noise=alls={}:allf={}", strength, flags);
+    Ok(vec!["-vf".to_string(), filter])
+}
+
+/// Build FFmpeg filter arguments for Gaussian blur via `gblur` filter.
+/// Safety backstop: sigma clamped to [0.5, 3.0].
+pub fn build_gaussian_blur_filter(op: &Operation) -> Result<Vec<String>, String> {
+    let sigma: f64 = op.params["sigma"].as_f64().unwrap_or(1.5);
+
+    let sigma = sigma.clamp(0.5, 3.0);
+
+    let filter = format!("gblur=sigma={}", sigma);
+    Ok(vec!["-vf".to_string(), filter])
+}
+
+/// Build FFmpeg filter arguments for sharpen via `unsharp` filter.
+/// Uses fixed luma matrix size 3x3 for subtle sharpening.
+/// Safety backstop: amount [0.5, 2.0], radius [1.0, 5.0].
+pub fn build_sharpen_filter(op: &Operation) -> Result<Vec<String>, String> {
+    let amount: f64 = op.params["amount"].as_f64().unwrap_or(1.0);
+    let _radius: f64 = op.params["radius"].as_f64().unwrap_or(3.0);
+
+    let amount = amount.clamp(0.5, 2.0);
+
+    let filter = format!("unsharp=luma_msize_x=3:luma_msize_y=3:luma_amount={}", amount);
+    Ok(vec!["-vf".to_string(), filter])
+}
+
+// =========================================================================
+// Phase 6: Geometric Fine-Tuning (D-01) — 3 new filter builder functions
+// =========================================================================
+
+/// Build FFmpeg filter arguments for micro-rotation via `rotate` filter.
+/// Converts degrees to radians. Preserves original dimensions via ow/oh.
+/// Safety backstop: angle clamped to [-1.0, 1.0] degrees per D-01.
+pub fn build_micro_rotate_filter(op: &Operation) -> Result<Vec<String>, String> {
+    let angle_deg: f64 = op.params["angle"].as_f64().unwrap_or(0.0);
+
+    let angle_deg = angle_deg.clamp(-1.0, 1.0);
+    let radians = angle_deg * std::f64::consts::PI / 180.0;
+
+    let filter = format!("rotate={}:ow=iw:oh=ih", radians);
+    Ok(vec!["-vf".to_string(), filter])
+}
+
+/// Build FFmpeg filter arguments for tiny scaling via `scale` filter.
+/// Uses lanczos flags for high-quality resampling.
+/// Safety backstop: scaleFactor clamped to [0.99, 1.01] per D-01.
+pub fn build_tiny_scale_filter(op: &Operation) -> Result<Vec<String>, String> {
+    let scale_factor: f64 = op.params["scaleFactor"].as_f64().unwrap_or(1.0);
+
+    let scale_factor = scale_factor.clamp(0.99, 1.01);
+
+    let filter = format!("scale=iw*{}:ih*{}:flags=lanczos", scale_factor, scale_factor);
+    Ok(vec!["-vf".to_string(), filter])
+}
+
+/// Build FFmpeg filter arguments for horizontal or vertical flip.
+/// Validates direction against known variants; errors on unknown values.
+pub fn build_flip_filter(op: &Operation) -> Result<Vec<String>, String> {
+    let direction = op.params["direction"].as_str().unwrap_or("horizontal");
+
+    let filter = match direction {
+        "horizontal" => "hflip",
+        "vertical" => "vflip",
+        _ => return Err(format!("Unknown flip direction: {}", direction)),
+    };
+
+    Ok(vec!["-vf".to_string(), filter.to_string()])
+}
+
+// =========================================================================
+// Phase 6: Blend Overlay (D-01) — 3 new filter builder functions
+// =========================================================================
+
+/// Build FFmpeg filter arguments for semi-transparent solid color overlay.
+/// Uses `colorize` filter. Opacity (mix) clamped to [0.01, 0.15] per D-01.
+pub fn build_solid_color_overlay_filter(op: &Operation) -> Result<Vec<String>, String> {
+    let hue: f64 = op.params["hue"].as_f64().unwrap_or(0.0);
+    let saturation: f64 = op.params["saturation"].as_f64().unwrap_or(0.5);
+    let lightness: f64 = op.params["lightness"].as_f64().unwrap_or(0.5);
+    let mix: f64 = op.params["mix"].as_f64().unwrap_or(0.08);
+
+    let mix = mix.clamp(0.01, 0.15);
+
+    let filter = format!(
+        "colorize=hue={}:saturation={}:lightness={}:mix={}",
+        hue, saturation, lightness, mix
+    );
+    Ok(vec!["-vf".to_string(), filter])
+}
+
+/// Build FFmpeg filter arguments for gradient overlay.
+/// Uses `geq` filter with alpha-based gradient expressions.
+/// Opacity clamped to [0.01, 0.15] per D-01.
+/// Note: Gradient quality may need visual tuning per RESEARCH experimentation note.
+pub fn build_gradient_overlay_filter(op: &Operation) -> Result<Vec<String>, String> {
+    let gradient_type = op.params["type"].as_str().unwrap_or("linear");
+    let opacity: f64 = op.params["opacity"].as_f64().unwrap_or(0.08);
+
+    let opacity = opacity.clamp(0.01, 0.15);
+
+    let filter = match gradient_type {
+        "linear" => format!(
+            "geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='alpha(X,Y)*(1-{op})+128*{op}*X/W'",
+            op = opacity
+        ),
+        "radial" => format!(
+            "geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='alpha(X,Y)*(1-{op})+128*{op}*(1-hypot(X-W/2,Y-H/2)/hypot(W/2,H/2))'",
+            op = opacity
+        ),
+        _ => return Err(format!("Unknown gradient overlay type: {}", gradient_type)),
+    };
+
+    Ok(vec!["-vf".to_string(), filter])
+}
+
+/// Build FFmpeg filter arguments for subtle watermark-like pattern blend.
+/// Uses `geq` filter for pattern-based luminance modulation at low opacity.
+/// Opacity clamped to [0.01, 0.15] per D-01.
+pub fn build_watermark_blend_filter(op: &Operation) -> Result<Vec<String>, String> {
+    let pattern = op.params["pattern"].as_str().unwrap_or("grid");
+    let opacity: f64 = op.params["opacity"].as_f64().unwrap_or(0.08);
+
+    let opacity = opacity.clamp(0.01, 0.15);
+
+    let filter = match pattern {
+        "grid" => format!(
+            "geq=lum='lum(X,Y)*(1+{op}*if(mod(floor(X/40)+floor(Y/40),2),1,-1))':cb='cb(X,Y)':cr='cr(X,Y)'",
+            op = opacity
+        ),
+        "diagonal" => format!(
+            "geq=lum='lum(X,Y)*(1+{op}*if(mod(floor((X+Y)/40),2),1,-1))':cb='cb(X,Y)':cr='cr(X,Y)'",
+            op = opacity
+        ),
+        _ => return Err(format!("Unknown watermark blend pattern: {}", pattern)),
+    };
+
+    Ok(vec!["-vf".to_string(), filter])
+}
+
 /// Dispatch to the correct filter builder based on OperationType.
 pub fn build_filter_args(op: &Operation) -> Result<Vec<String>, String> {
     match op.op_type {

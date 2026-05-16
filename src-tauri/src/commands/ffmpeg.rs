@@ -85,11 +85,7 @@ pub async fn detect_ffmpeg_internal() -> FfmpegInfo {
 
 /// Build the ffmpeg binary path from a directory (i.e., `<dir>/ffmpeg` or `<dir>/ffmpeg.exe`).
 fn ffmpeg_bin_path(dir: &std::path::Path) -> std::path::PathBuf {
-    if cfg!(target_os = "windows") {
-        dir.join("ffmpeg.exe")
-    } else {
-        dir.join("ffmpeg")
-    }
+    if cfg!(target_os = "windows") { dir.join("ffmpeg.exe") } else { dir.join("ffmpeg") }
 }
 
 /// Extract major version number from ffmpeg version string (e.g., "6.1.1" -> 6).
@@ -207,27 +203,18 @@ pub async fn verify_ffmpeg(app: AppHandle, path: String) -> Result<FfmpegInfo, S
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .output()
-        .map_err(|e| {
-            format!(
-                "ffprobe verification failed at {}: {}",
-                ffprobe_bin.display(),
-                e
-            )
-        })?;
+        .map_err(|e| format!("ffprobe verification failed at {}: {}", ffprobe_bin.display(), e))?;
 
     let major = extract_major_version(&version_str);
     let now = chrono::Utc::now().to_rfc3339();
 
     // Persist to store
-    let store = app
-        .store("ffmpeg-config.json")
-        .map_err(|e| format!("Failed to open store: {}", e))?;
+    let store =
+        app.store("ffmpeg-config.json").map_err(|e| format!("Failed to open store: {}", e))?;
     store.set("ffmpeg_path", serde_json::Value::String(path.clone()));
     store.set("version", serde_json::Value::String(version_str.clone()));
     store.set("download_time", serde_json::Value::String(now));
-    store
-        .save()
-        .map_err(|e| format!("Failed to save store: {}", e))?;
+    store.save().map_err(|e| format!("Failed to save store: {}", e))?;
 
     // Emit event that FFmpeg is ready
     let info = FfmpegInfo {
@@ -288,16 +275,11 @@ pub async fn check_latest_version() -> Result<Option<FfmpegUpdateInfo>, String> 
         html_url: String,
     }
 
-    let release: GitHubRelease = response
-        .json()
-        .await
-        .map_err(|e| format!("Failed to parse GitHub response: {}", e))?;
+    let release: GitHubRelease =
+        response.json().await.map_err(|e| format!("Failed to parse GitHub response: {}", e))?;
 
     // Extract version from tag (e.g., "ffmpeg-7.1.1" -> "7.1.1")
-    let latest_version_str = release
-        .tag_name
-        .trim_start_matches("ffmpeg-")
-        .trim_start_matches("v");
+    let latest_version_str = release.tag_name.trim_start_matches("ffmpeg-").trim_start_matches("v");
     let latest_ver = extract_major_version(latest_version_str);
 
     if latest_ver > current_ver {

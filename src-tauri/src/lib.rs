@@ -1,17 +1,19 @@
 mod commands;
 mod ffmpeg;
+mod migrations;
 mod models;
 mod state;
 
 use crate::ffmpeg::gpu::detect_gpu_encoder;
 use commands::batch::{cancel_batch, get_batch_status, open_file_manager, start_batch};
 use commands::download::{cancel_download, start_download};
+use commands::export_seed::{export_seed, import_seed};
 use commands::ffmpeg::{
     check_latest_version, detect_ffmpeg, detect_ffmpeg_internal, get_default_ffmpeg_dir,
     get_ffmpeg_status, verify_ffmpeg,
 };
 use commands::import::import_video;
-use commands::queue::{clear_queue, get_queue, remove_from_queue};
+use commands::queue::{clear_queue, get_queue, remove_from_queue, reorder_queue};
 use commands::seed::{copy_seed, delete_seed, generate_seed, list_seeds, rename_seed};
 use tauri::Emitter;
 use tauri::Manager;
@@ -43,11 +45,15 @@ pub fn run() {
             get_queue,
             remove_from_queue,
             clear_queue,
+            reorder_queue,
             // Phase 2: Batch commands
             start_batch,
             cancel_batch,
             get_batch_status,
             open_file_manager,
+            // Phase 6: Seed export/import (D-10, D-12)
+            export_seed,
+            import_seed,
         ])
         .setup(|app| {
             // --- Phase 2: Initialize managed state ---
@@ -118,6 +124,23 @@ pub fn run() {
                 let app_state = handle.state::<std::sync::Mutex<state::AppState>>();
                 if let Ok(mut state) = app_state.lock() {
                     state.gpu_encoder = gpu_enc;
+                }
+            });
+
+            // --- Phase 6: Legacy seed migration (D-19) ---
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                use migrations::seed_v2;
+                match seed_v2::migrate_seeds(&handle) {
+                    Ok(0) => {} // no migration needed or already done
+                    Ok(n) => {
+                        let _ = handle.emit("seeds-migrated", serde_json::json!({ "count": n }));
+                    }
+                    Err(e) => {
+                        eprintln!("Seed migration error: {}", e);
+                        let _ =
+                            handle.emit("seeds-migration-error", serde_json::json!({ "error": e }));
+                    }
                 }
             });
 

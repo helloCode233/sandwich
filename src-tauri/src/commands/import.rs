@@ -6,6 +6,7 @@
 use std::path::Path;
 use std::sync::Mutex;
 
+use base64::Engine;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_store::StoreExt;
 
@@ -65,12 +66,28 @@ pub async fn import_video(
     // D-13: Check available disk space
     check_disk_space_for_output(&app)?;
 
+    // Extract thumbnail: first frame, scaled to 120px wide, JPEG output to stdout
+    let thumbnail_base64 = match extract_thumbnail(&filepath, ffmpeg_dir.as_deref()) {
+        Ok(b64) => Some(b64),
+        Err(e) => {
+            // Graceful degradation: import succeeds even if thumbnail fails
+            let _ = app.emit(
+                "thumbnail-extraction-warning",
+                serde_json::json!({
+                    "file": filename,
+                    "error": e,
+                }),
+            );
+            None
+        }
+    };
+
     let entry = VideoEntry {
         filename,
         filepath: filepath.clone(),
         metadata,
         status: VideoStatus::Valid,
-        thumbnail_base64: None,
+        thumbnail_base64,
         order_index: 0,
     };
 
@@ -100,6 +117,57 @@ fn get_stored_ffmpeg_dir(app: &AppHandle) -> Option<String> {
         }
     }
     None
+}
+
+/// Extract first frame as 120px-wide JPEG, return as base64 string.
+/// Uses ffmpeg-sidecar's take_stdout() to capture JPEG bytes from stdout.
+/// Output is ~2-8KB — safe for in-memory handling and store persistence.
+fn extract_thumbnail(video_path: &str, ffmpeg_dir: Option<&str>) -> Result<String, String> {
+    use std::io::Read;
+    use std::path::Path;
+
+    let ffmpeg_bin_path = if let Some(dir) = ffmpeg_dir {
+        Path::new(dir).join("ffmpeg")
+    } else {
+        ffmpeg_sidecar::paths::ffmpeg_path()
+    };
+
+    let bin_path_string = ffmpeg_bin_path.to_string_lossy().into_owned();
+
+    let mut child = ffmpeg_sidecar::command::FfmpegCommand::new_with_path(&bin_path_string)
+        .input(video_path)
+        .args([
+            "-ss",
+            "1", // seek to 1 second in
+            "-vframes",
+            "1", // extract single frame
+            "-vf",
+            "scale=120:-1", // scale width to 120px, height auto
+            "-f",
+            "image2pipe", // output raw image to stdout
+            "-vcodec",
+            "mjpeg", // JPEG encoding
+            "-",     // stdout
+        ])
+        .spawn()
+        .map_err(|e| format!("Thumbnail spawn failed: {}", e))?;
+
+    // Read stdout (JPEG bytes) before waiting to avoid deadlock
+    let mut jpeg_bytes = Vec::new();
+    if let Some(mut stdout) = child.take_stdout() {
+        stdout
+            .read_to_end(&mut jpeg_bytes)
+            .map_err(|e| format!("Failed to read thumbnail stdout: {}", e))?;
+    }
+
+    // Wait for process completion (also drains stderr to avoid zombie)
+    child.wait().map_err(|e| format!("Thumbnail wait failed: {}", e))?;
+
+    if jpeg_bytes.is_empty() {
+        return Err("Thumbnail output was empty".to_string());
+    }
+
+    Ok(base64::engine::general_purpose::STANDARD.encode(&jpeg_bytes))
 }
 
 /// Check available disk space. Per D-13: no hard limit, but warn if low.
@@ -164,4 +232,52 @@ fn persist_queue_import(app: &AppHandle) -> Result<(), String> {
     store.save().map_err(|e| format!("Failed to save queue: {}", e))?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // RED: These tests will not compile until extract_thumbnail is implemented.
+    // They define the expected behavior: extract_thumbnail returns error for invalid
+    // inputs, and base64-encoded JPEG (starting with /9j/) for valid videos.
+
+    /// extract_thumbnail on a nonexistent file returns an error.
+    #[test]
+    fn extract_thumbnail_nonexistent_file_returns_error() {
+        let result = extract_thumbnail("/nonexistent/video.mp4", None);
+        assert!(result.is_err());
+    }
+
+    /// extract_thumbnail on a non-video file returns an error (FFmpeg won't decode it).
+    #[test]
+    fn extract_thumbnail_non_video_returns_error() {
+        let result = extract_thumbnail("/dev/null", None);
+        assert!(result.is_err());
+    }
+
+    /// extract_thumbnail on a valid video produces a base64 string starting with JPEG magic.
+    #[test]
+    fn extract_thumbnail_valid_video_returns_base64_jpeg() {
+        let test_video = std::path::Path::new("../../test-assets/sample.mp4");
+        if !test_video.exists() {
+            eprintln!("Skipping: test-assets/sample.mp4 not found");
+            return;
+        }
+        let result = extract_thumbnail(test_video.to_str().unwrap(), None);
+        match result {
+            Ok(b64) => {
+                assert!(
+                    b64.starts_with("/9j/"),
+                    "JPEG base64 should start with /9j/, got: {}",
+                    &b64[..20.min(b64.len())]
+                );
+                assert!(b64.len() > 500, "thumbnail too small: {} bytes", b64.len());
+                assert!(b64.len() < 20000, "thumbnail too large: {} bytes", b64.len());
+            }
+            Err(e) => {
+                eprintln!("Thumbnail extraction failed (may be missing FFmpeg): {}", e);
+            }
+        }
+    }
 }

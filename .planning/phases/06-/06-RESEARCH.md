@@ -687,32 +687,22 @@ ffmpeg -i input.mp4 -vf "rotate=0.5*PI/180:ow=iw:oh=ih" output.mp4
 | A6 | Standard ffmpeg-sidecar auto-download binaries include the `atadenoise` filter | Standard Stack | If not included, the TemporalDenoise operation would need an alternative filter like `hqdn3d` (high quality denoise 3D) which IS universally available. Fallback exists |
 | A7 | Naive UI NTabs component supports lazy rendering of tab content (log panel tab) -- panel content only renders when tab is active | Architecture Patterns | If NTabs doesn't support lazy rendering, the log panel computed properties would execute even when viewing queue tab, causing unnecessary computation. Mitigation: use `v-if` on tab content based on active tab |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Thumbnail extraction during import: async or blocking?**
-   - What we know: Thumbnail extraction requires a separate ffmpeg process (~100-500ms). Import is already async (Tauri command). Running thumbnail extraction synchronously within the import command blocks other imports.
-   - What's unclear: Whether to extract thumbnails inline during import or spawn a background task that emits a separate event when thumbnail is ready.
-   - Recommendation: Extract inline during import -- the 100-500ms delay is acceptable for single-file import. For batch import (multiple files), extract sequentially. If UX feedback indicates slowness, optimize in a later phase with parallel extraction.
+1. **Thumbnail extraction during import: async or blocking?** (RESOLVED: inline)
+   - Resolved: Extract inline during import. The 100-500ms delay is acceptable for single-file import. For batch import (multiple files), extract sequentially. If UX feedback indicates slowness, optimize in a later phase with parallel extraction. Implemented in Plan 06-05 Task 1 (import.rs extract_thumbnail called synchronously within import_video).
 
-2. **Coverage algorithm: per-seed or global?**
-   - What we know: D-09 requires >=70% coverage of video duration. Operations have start_frame and duration_frames.
-   - What's unclear: Is the 70% coverage per individual seed, or across all seeds applied to a video? D-09 context suggests per-seed coverage.
-   - Recommendation: Per-seed coverage. Each seed independently must cover >=70% of the video. This gives each seed independent fingerprint diversity.
+2. **Coverage algorithm: per-seed or global?** (RESOLVED: per-seed)
+   - Resolved: Per-seed coverage. Each seed independently must cover >=70% of the video. This gives each seed independent fingerprint diversity. Implemented in Plan 06-04 Task 1 (validate_coverage function called once per seed during generate_seed).
 
-3. **Log history persistence format**
-   - What we know: D-16 requires logs persisted to store. Log entries accumulate over time (potentially hundreds for heavy users).
-   - What's unclear: Whether to store logs in the same tauri-plugin-store JSON file or a separate dedicated log file.
-   - Recommendation: Separate `processing-log.json` store file. Keeps queue.json and seeds.json at manageable sizes. Implement a max entry cap (e.g., 500 most recent entries) with automatic truncation to prevent unbounded growth.
+3. **Log history persistence format** (RESOLVED: Pinia store with 500-entry cap)
+   - Resolved: Pinia store (logStore) with 500-entry cap and automatic truncation. Frontend accumulates entries from batch-log events in memory. Entries are capped at 500 most recent, oldest evicted. Implemented in Plan 06-06 Task 2 (logStore addEntry with slice(0, 500)).
 
-4. **Drag handle vs. entire row draggable**
-   - What we know: D-14 specifies HTML5 drag-and-drop for reordering.
-   - What's unclear: Whether the entire queue row should be draggable or only a specific drag handle icon. Entire-row drag conflicts with future interactions (e.g., clicking to select, thumbnail double-click to preview).
-   - Recommendation: Use a dedicated drag handle icon (grip-vertical) on the left edge of each queue row. This avoids conflicts with selection, thumbnail interaction, and remove button clicks. The `handle=".drag-handle"` prop on VueDraggable enforces this.
+4. **Drag handle vs. entire row draggable** (RESOLVED: dedicated grip handle)
+   - Resolved: Use a dedicated drag handle icon (grip-vertical) on the left edge of each queue row. This avoids conflicts with selection, thumbnail interaction, and remove button clicks. The `handle=".drag-handle"` prop on VueDraggable enforces this. Implemented in Plan 06-07 Task 2.
 
-5. **Strength tier UI placement**
-   - What we know: D-03 requires a one-click global strength selector. D-18 references left panel with strength selector.
-   - What's unclear: Whether the strength selector should be in the left panel (near seed generation) or in BatchControls (where batch processing settings live).
-   - Recommendation: Place in BatchControls (right panel area), ABOVE the seed selector, as a horizontal radio group or segmented button. Rationale: Strength affects seed generation, but users think of it as a "processing intensity" setting -- it's conceptually closer to batch control than seed management. The seed generation button in the left panel reads the selected strength tier from a shared store value.
+5. **Strength tier UI placement** (RESOLVED: BatchControls, above seed selector)
+   - Resolved: Place in BatchControls (right panel area), ABOVE the seed selector. Strength affects seed generation, but users think of it as a "processing intensity" setting -- conceptually closer to batch control than seed management. The seed generation button reads the selected strength tier from a shared store value. Implemented in Plan 06-07 Task 1.
 
 ## Environment Availability
 

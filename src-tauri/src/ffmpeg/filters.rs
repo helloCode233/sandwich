@@ -296,4 +296,170 @@ mod tests {
             assert!(result.is_ok(), "Failed for {:?}: {:?}", t, result.err());
         }
     }
+
+    // --- Phase 6: new filter builder tests (Task 1) ---
+
+    #[test]
+    fn test_hue_rotate_basic() {
+        let op = make_op(
+            OperationType::HueRotate,
+            serde_json::json!({"hueAngle": 45.0, "saturation": 1.2}),
+        );
+        let args = build_hue_rotate_filter(&op).unwrap();
+        assert!(args[0] == "-vf");
+        assert!(args[1].contains("hue=h=45"));
+        assert!(args[1].contains(":s=1.2"));
+    }
+
+    #[test]
+    fn test_hue_rotate_clamps() {
+        let op = make_op(
+            OperationType::HueRotate,
+            serde_json::json!({"hueAngle": 200.0, "saturation": 1.0}),
+        );
+        let args = build_hue_rotate_filter(&op).unwrap();
+        // Clamp hueAngle > 90.0 to 90.0
+        assert!(args[1].contains("hue=h=90"));
+    }
+
+    #[test]
+    fn test_saturation_adjust_basic() {
+        let op = make_op(
+            OperationType::SaturationAdjust,
+            serde_json::json!({"saturation": 1.5, "contrast": 1.1, "brightness": 0.1}),
+        );
+        let args = build_saturation_adjust_filter(&op).unwrap();
+        assert!(args[0] == "-vf");
+        assert!(args[1].contains("eq="));
+        assert!(args[1].contains("saturation=1.5"));
+        assert!(args[1].contains(":contrast=1.1"));
+        assert!(args[1].contains(":brightness=0.1"));
+    }
+
+    #[test]
+    fn test_brightness_contrast_basic() {
+        let op = make_op(
+            OperationType::BrightnessContrast,
+            serde_json::json!({"brightness": 0.0, "contrast": 1.0, "gamma": 1.0}),
+        );
+        let args = build_brightness_contrast_filter(&op).unwrap();
+        assert!(args[0] == "-vf");
+        assert!(args[1].contains("eq="));
+        assert!(args[1].contains("brightness=0"));
+        assert!(args[1].contains(":contrast=1"));
+        assert!(args[1].contains(":gamma=1"));
+    }
+
+    #[test]
+    fn test_color_balance_basic() {
+        let op = make_op(
+            OperationType::ColorBalance,
+            serde_json::json!({"rs": 0.1, "gs": -0.1, "bs": 0.05}),
+        );
+        let args = build_color_balance_filter(&op).unwrap();
+        assert!(args[0] == "-vf");
+        assert!(args[1].contains("colorbalance=rs=0.1"));
+        assert!(args[1].contains(":gs=-0.1"));
+        assert!(args[1].contains(":bs=0.05"));
+    }
+
+    #[test]
+    fn test_film_grain_basic() {
+        let op =
+            make_op(OperationType::FilmGrain, serde_json::json!({"strength": 15, "flags": "t+u"}));
+        let args = build_film_grain_filter(&op).unwrap();
+        assert!(args[0] == "-vf");
+        assert!(args[1].contains("noise=alls=15"));
+        assert!(args[1].contains(":allf=t+u"));
+    }
+
+    #[test]
+    fn test_gaussian_blur_basic() {
+        let op = make_op(OperationType::GaussianBlur, serde_json::json!({"sigma": 1.5}));
+        let args = build_gaussian_blur_filter(&op).unwrap();
+        assert!(args[0] == "-vf");
+        assert!(args[1].contains("gblur=sigma=1.5"));
+    }
+
+    #[test]
+    fn test_sharpen_basic() {
+        let op = make_op(OperationType::Sharpen, serde_json::json!({"amount": 1.0, "radius": 3.0}));
+        let args = build_sharpen_filter(&op).unwrap();
+        assert!(args[0] == "-vf");
+        assert!(args[1].contains("unsharp="));
+        assert!(args[1].contains("luma_amount=1"));
+    }
+
+    #[test]
+    fn test_micro_rotate_basic() {
+        let op = make_op(OperationType::MicroRotate, serde_json::json!({"angle": 0.5}));
+        let args = build_micro_rotate_filter(&op).unwrap();
+        assert!(args[0] == "-vf");
+        assert!(args[1].contains("rotate="));
+        assert!(args[1].contains(":ow=iw:oh=ih"));
+        // 0.5 degrees in radians = 0.5 * PI / 180 ≈ 0.00873
+        assert!(args[1].contains("0.00872") || args[1].contains("0.00873"));
+    }
+
+    #[test]
+    fn test_flip_horizontal() {
+        let op = make_op(OperationType::Flip, serde_json::json!({"direction": "horizontal"}));
+        let args = build_flip_filter(&op).unwrap();
+        assert!(args[0] == "-vf");
+        assert!(args[1] == "hflip");
+    }
+
+    #[test]
+    fn test_flip_vertical() {
+        let op = make_op(OperationType::Flip, serde_json::json!({"direction": "vertical"}));
+        let args = build_flip_filter(&op).unwrap();
+        assert!(args[0] == "-vf");
+        assert!(args[1] == "vflip");
+    }
+
+    #[test]
+    fn test_solid_color_overlay_clamps_mix() {
+        let op = make_op(
+            OperationType::SolidColorOverlay,
+            serde_json::json!({"hue": 120.0, "saturation": 0.5, "lightness": 0.5, "mix": 0.5}),
+        );
+        let args = build_solid_color_overlay_filter(&op).unwrap();
+        assert!(args[0] == "-vf");
+        assert!(args[1].contains("colorize="));
+        // mix=0.5 should clamp to 0.15 per D-01
+        assert!(args[1].contains(":mix=0.15"));
+    }
+
+    #[test]
+    fn test_gradient_overlay_basic() {
+        let op = make_op(
+            OperationType::GradientOverlay,
+            serde_json::json!({"type": "linear", "opacity": 0.1}),
+        );
+        let args = build_gradient_overlay_filter(&op).unwrap();
+        assert!(args[0] == "-vf");
+        assert!(args[1].contains("geq="));
+    }
+
+    #[test]
+    fn test_watermark_blend_basic() {
+        let op = make_op(
+            OperationType::WatermarkBlend,
+            serde_json::json!({"pattern": "grid", "opacity": 0.08}),
+        );
+        let args = build_watermark_blend_filter(&op).unwrap();
+        assert!(args[0] == "-vf");
+        assert!(args[1].contains("geq="));
+    }
+
+    #[test]
+    fn test_tiny_scale_basic() {
+        let op = make_op(OperationType::TinyScale, serde_json::json!({"scaleFactor": 0.995}));
+        let args = build_tiny_scale_filter(&op).unwrap();
+        assert!(args[0] == "-vf");
+        assert!(args[1].contains("scale="));
+        assert!(args[1].contains("iw*0.995"));
+        assert!(args[1].contains(":ih*0.995"));
+        assert!(args[1].contains(":flags=lanczos"));
+    }
 }

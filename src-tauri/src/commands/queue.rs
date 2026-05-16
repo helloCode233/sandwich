@@ -67,6 +67,35 @@ pub async fn clear_queue(state: State<'_, Mutex<AppState>>, app: AppHandle) -> R
     Ok(())
 }
 
+/// Tauri command: Persist reordered queue after drag-and-drop (D-14).
+/// Accepts the full reordered entries array from the frontend,
+/// updates order_index on each entry, replaces app_state.queue, and persists.
+#[tauri::command]
+pub async fn reorder_queue(
+    state: State<'_, Mutex<AppState>>,
+    app: AppHandle,
+    entries: Vec<VideoEntry>,
+) -> Result<(), String> {
+    {
+        let mut app_state = state.lock().map_err(|e| format!("Lock error: {}", e))?;
+        // Assign correct order_index to each entry
+        let mut indexed: Vec<VideoEntry> = entries
+            .into_iter()
+            .enumerate()
+            .map(|(i, mut entry)| {
+                entry.order_index = i as u32;
+                entry
+            })
+            .collect();
+        app_state.queue = indexed;
+    }
+
+    persist_queue(&app)?;
+    let _ = app.emit("queue-updated", ());
+
+    Ok(())
+}
+
 /// Write-through persistence: serialize the full queue to tauri-plugin-store.
 /// Follows the exact pattern from ffmpeg.rs lines 185-191.
 fn persist_queue(app: &AppHandle) -> Result<(), String> {

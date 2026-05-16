@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
+import { invoke } from '@tauri-apps/api/core';
 import type { VideoEntry } from '@/types/video';
 
 export const useQueueStore = defineStore('queue', () => {
@@ -31,6 +32,21 @@ export const useQueueStore = defineStore('queue', () => {
     entries.value = [];
   }
 
+  /** Persist reordered entries after drag-and-drop (D-14).
+   *  newOrder is the full reordered array from VueDraggable v-model.
+   *  Calls Rust backend to persist the new order to queue.json. */
+  async function reorderEntries(newOrder: VideoEntry[]) {
+    // Update order_index on each entry
+    const indexed = newOrder.map((entry, i) => ({ ...entry, orderIndex: i }));
+    entries.value = indexed;
+    // Persist to Rust backend
+    try {
+      await invoke('reorder_queue', { entries: indexed });
+    } catch (err) {
+      console.error('Failed to persist queue reorder:', err);
+    }
+  }
+
   return {
     entries,
     entryCount,
@@ -40,5 +56,6 @@ export const useQueueStore = defineStore('queue', () => {
     addEntry,
     removeEntry,
     clearQueue,
+    reorderEntries,
   };
 });

@@ -293,15 +293,16 @@ fn generate_operation(
         }
         // ── Color processing (4): D-01, D-02, D-04, tier-driven ─────────────
         OperationType::HueRotate => {
+            // Barely visible curves-driven shifts: tiny hue rotation + near-neutral saturation
             let (angle_min, angle_max) = match strength_tier {
-                StrengthTier::Conservative => (-15.0, 15.0),
-                StrengthTier::Standard => (-45.0, 45.0),
-                StrengthTier::Aggressive => (-90.0, 90.0),
+                StrengthTier::Conservative => (-3.0, 3.0),
+                StrengthTier::Standard => (-8.0, 8.0),
+                StrengthTier::Aggressive => (-20.0, 20.0),
             };
             let (sat_min, sat_max) = match strength_tier {
-                StrengthTier::Conservative => (0.9, 1.1),
-                StrengthTier::Standard => (0.7, 1.3),
-                StrengthTier::Aggressive => (0.5, 1.5),
+                StrengthTier::Conservative => (0.97, 1.03),
+                StrengthTier::Standard => (0.95, 1.05),
+                StrengthTier::Aggressive => (0.85, 1.15),
             };
             serde_json::json!({
                 "hueAngle": rng.random_range(angle_min..=angle_max),
@@ -309,20 +310,21 @@ fn generate_operation(
             })
         }
         OperationType::SaturationAdjust => {
+            // Subtle eq curves: near-neutral saturation/contrast/brightness
             let (sat_min, sat_max) = match strength_tier {
-                StrengthTier::Conservative => (0.9, 1.1),
-                StrengthTier::Standard => (0.8, 1.2),
-                StrengthTier::Aggressive => (0.6, 1.4),
+                StrengthTier::Conservative => (0.97, 1.03),
+                StrengthTier::Standard => (0.95, 1.05),
+                StrengthTier::Aggressive => (0.85, 1.15),
             };
             let (con_min, con_max) = match strength_tier {
-                StrengthTier::Conservative => (0.95, 1.05),
-                StrengthTier::Standard => (0.9, 1.1),
-                StrengthTier::Aggressive => (0.7, 1.3),
+                StrengthTier::Conservative => (0.98, 1.02),
+                StrengthTier::Standard => (0.96, 1.04),
+                StrengthTier::Aggressive => (0.88, 1.12),
             };
             let (bri_min, bri_max) = match strength_tier {
-                StrengthTier::Conservative => (-0.05, 0.05),
-                StrengthTier::Standard => (-0.1, 0.1),
-                StrengthTier::Aggressive => (-0.2, 0.2),
+                StrengthTier::Conservative => (-0.02, 0.02),
+                StrengthTier::Standard => (-0.03, 0.03),
+                StrengthTier::Aggressive => (-0.08, 0.08),
             };
             serde_json::json!({
                 "saturation": rng.random_range(sat_min..=sat_max),
@@ -331,20 +333,21 @@ fn generate_operation(
             })
         }
         OperationType::BrightnessContrast => {
+            // Subtle gamma curves: barely perceptible brightness/contrast/gamma shifts
             let (bri_min, bri_max) = match strength_tier {
-                StrengthTier::Conservative => (-0.05, 0.05),
-                StrengthTier::Standard => (-0.1, 0.1),
-                StrengthTier::Aggressive => (-0.25, 0.25),
+                StrengthTier::Conservative => (-0.02, 0.02),
+                StrengthTier::Standard => (-0.03, 0.03),
+                StrengthTier::Aggressive => (-0.08, 0.08),
             };
             let (con_min, con_max) = match strength_tier {
-                StrengthTier::Conservative => (0.95, 1.05),
-                StrengthTier::Standard => (0.9, 1.1),
-                StrengthTier::Aggressive => (0.7, 1.3),
+                StrengthTier::Conservative => (0.98, 1.02),
+                StrengthTier::Standard => (0.96, 1.04),
+                StrengthTier::Aggressive => (0.88, 1.12),
             };
             let (gam_min, gam_max) = match strength_tier {
-                StrengthTier::Conservative => (0.95, 1.05),
-                StrengthTier::Standard => (0.9, 1.1),
-                StrengthTier::Aggressive => (0.8, 1.2),
+                StrengthTier::Conservative => (0.98, 1.02),
+                StrengthTier::Standard => (0.96, 1.04),
+                StrengthTier::Aggressive => (0.88, 1.12),
             };
             serde_json::json!({
                 "brightness": rng.random_range(bri_min..=bri_max),
@@ -353,10 +356,12 @@ fn generate_operation(
             })
         }
         OperationType::ColorBalance => {
+            // Barely visible channel shifts: tight curves-style color tilt
+            // Previously ±0.05 at Standard caused visible red casts (画面过红).
             let (chan_min, chan_max) = match strength_tier {
-                StrengthTier::Conservative => (-0.03, 0.03),
-                StrengthTier::Standard => (-0.05, 0.05),
-                StrengthTier::Aggressive => (-0.1, 0.1),
+                StrengthTier::Conservative => (-0.005, 0.005),
+                StrengthTier::Standard => (-0.01, 0.01),
+                StrengthTier::Aggressive => (-0.03, 0.03),
             };
             serde_json::json!({
                 "rs": rng.random_range(chan_min..=chan_max),

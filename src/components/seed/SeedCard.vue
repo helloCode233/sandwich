@@ -49,7 +49,6 @@ function overflowCount() {
 }
 
 function onSelect() {
-  // Toggle selection: click same card deselects, click different selects
   store.toggleSeed(props.seed.id);
 }
 

@@ -32,7 +32,7 @@ const seedOptions = computed(() =>
   })),
 );
 
-/** Start disabled when no seed selected or queue has no valid entries. */
+/** Start disabled when no seeds selected or queue has no valid entries. */
 const startDisabled = computed(
   () => seedStore.selectedSeedIds.length === 0 || queueStore.validCount === 0,
 );
@@ -49,7 +49,6 @@ async function loadPreferences() {
     if (savedOutputDir) {
       outputDir.value = savedOutputDir;
     } else {
-      // Default per D-12: ~/Videos/sandwich-output/
       outputDir.value = t('batch.defaultOutputDir');
     }
   } catch (err) {
@@ -81,7 +80,6 @@ async function onChangeOutputDir() {
   if (dir && typeof dir === 'string') {
     outputDir.value = dir;
     message.success(t('batch.changeDir'));
-    // Persist output dir
     try {
       if (store) {
         await store.set('output_dir', dir);

@@ -1,4 +1,4 @@
-//! FFmpeg filter chain builders for all 7 operation types.
+//! FFmpeg filter chain builders for all 20 operation types.
 //!
 //! Each function takes an `Operation` reference and returns `Vec<String>` of
 //! FFmpeg CLI arguments. SEED-04 safety constraints are enforced via clamping.
@@ -19,17 +19,17 @@ pub fn build_math_overlay_filter(op: &Operation) -> Result<Vec<String>, String> 
     // Build geq expression based on pattern
     let expr = match pattern {
         "ripple" => format!(
-            "lum='lum(X,Y)*(1+{opacity}*sin(2*PI*{freq}*X/W)*sin(2*PI*{freq}*Y/H))'",
+            "lum='lum(X,Y)*(1+{opacity}*sin(2*PI*{freq}*X/W)*sin(2*PI*{freq}*Y/H))':cb='cb(X,Y)':cr='cr(X,Y)'",
             opacity = opacity,
             freq = frequency / 100.0
         ),
         "stripes" => format!(
-            "lum='lum(X,Y)*(1+{opacity}*sin(2*PI*{freq}*X/W))'",
+            "lum='lum(X,Y)*(1+{opacity}*sin(2*PI*{freq}*X/W))':cb='cb(X,Y)':cr='cr(X,Y)'",
             opacity = opacity,
             freq = frequency / 100.0
         ),
         "concentric" => format!(
-            "lum='lum(X,Y)*(1+{opacity}*sin(2*PI*{freq}*hypot(X-W/2,Y-H/2)/W))'",
+            "lum='lum(X,Y)*(1+{opacity}*sin(2*PI*{freq}*hypot(X-W/2,Y-H/2)/W))':cb='cb(X,Y)':cr='cr(X,Y)'",
             opacity = opacity,
             freq = frequency / 100.0
         ),
@@ -58,10 +58,7 @@ pub fn build_pixel_shift_filter(op: &Operation) -> Result<Vec<String>, String> {
     let crop_filter = format!("crop=iw-{}:ih-{}:{}:{}", dx.abs(), dy.abs(), crop_x, crop_y);
     let pad_filter = format!("pad=iw+{}:ih+{}:{}:{}", dx.abs(), dy.abs(), pad_x, pad_y);
 
-    Ok(vec![
-        "-vf".to_string(),
-        format!("{},{}", crop_filter, pad_filter),
-    ])
+    Ok(vec!["-vf".to_string(), format!("{},{}", crop_filter, pad_filter)])
 }
 
 /// Build FFmpeg filter arguments for frame dropping.
@@ -132,6 +129,8 @@ pub fn build_filter_args(op: &Operation) -> Result<Vec<String>, String> {
         OperationType::MetadataErase => build_metadata_erase_filter(op),
         OperationType::AudioTweak => build_audio_tweak_filter(op),
         OperationType::Remux => build_remux_filter(op),
+        // Phase 6 new operation types — filter builders to be implemented in plan 06-02.
+        _ => Err(format!("Filter not yet implemented for operation type: {:?}", op.op_type)),
     }
 }
 
@@ -188,12 +187,7 @@ mod tests {
     use crate::models::seed::{Operation, OperationType};
 
     fn make_op(op_type: OperationType, params: serde_json::Value) -> Operation {
-        Operation {
-            op_type,
-            start_frame: 0,
-            duration_frames: 0,
-            params,
-        }
+        Operation { op_type, start_frame: 0, duration_frames: 0, params }
     }
 
     #[test]
@@ -209,6 +203,8 @@ mod tests {
         let args = build_math_overlay_filter(&op).unwrap();
         assert!(args[0] == "-vf");
         assert!(args[1].contains("geq="));
+        assert!(args[1].contains("cb='cb(X,Y)'"));
+        assert!(args[1].contains("cr='cr(X,Y)'"));
         assert!(args[1].contains("ripple") || args[1].contains("sin"));
     }
 

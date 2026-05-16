@@ -15,6 +15,19 @@ mod tests {
             OperationType::MetadataErase,
             OperationType::AudioTweak,
             OperationType::Remux,
+            OperationType::HueRotate,
+            OperationType::SaturationAdjust,
+            OperationType::BrightnessContrast,
+            OperationType::ColorBalance,
+            OperationType::FilmGrain,
+            OperationType::GaussianBlur,
+            OperationType::Sharpen,
+            OperationType::MicroRotate,
+            OperationType::TinyScale,
+            OperationType::Flip,
+            OperationType::SolidColorOverlay,
+            OperationType::GradientOverlay,
+            OperationType::WatermarkBlend,
         ];
         assert_eq!(variants.len(), 20, "OperationType must have exactly 20 variants");
     }
@@ -72,6 +85,10 @@ pub struct Seed {
     pub operations: Vec<Operation>,
     /// ISO 8601 creation timestamp.
     pub created_at: String,
+    /// Strength tier used when generating this seed (D-07).
+    /// #[serde(default)] ensures old seeds without this field deserialize as Standard.
+    #[serde(default)]
+    pub strength_tier: StrengthTier,
 }
 
 /// A single operation step within a seed's operation chain.
@@ -90,7 +107,22 @@ pub struct Operation {
     pub params: serde_json::Value,
 }
 
-/// The 7 operation types per SEED-02.
+/// Three-tier strength preset for seed generation (D-03, D-07).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum StrengthTier {
+    Conservative,
+    Standard,
+    Aggressive,
+}
+
+impl Default for StrengthTier {
+    fn default() -> Self {
+        StrengthTier::Standard
+    }
+}
+
+/// The 20 operation types covering all fingerprint modification categories.
 /// D-02: MathOverlay has highest weight (~30%) in random generation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -109,4 +141,34 @@ pub enum OperationType {
     AudioTweak,
     /// Remux: change container format.
     Remux,
+    // Color processing (4): D-01, D-02
+    /// Adjust hue angle by +/- degrees.
+    HueRotate,
+    /// Adjust saturation multiplier.
+    SaturationAdjust,
+    /// Adjust brightness and contrast.
+    BrightnessContrast,
+    /// Rebalance color channels.
+    ColorBalance,
+    // Noise texture (3): D-01, D-02
+    /// Apply synthetic film grain.
+    FilmGrain,
+    /// Apply Gaussian blur kernel.
+    GaussianBlur,
+    /// Apply unsharp mask / sharpen filter.
+    Sharpen,
+    // Geometric fine-tuning (3): D-01, D-02
+    /// Rotate by sub-degree angle (0.1-0.9 degrees).
+    MicroRotate,
+    /// Scale by tiny factor (0.98x-1.02x).
+    TinyScale,
+    /// Horizontal or vertical flip.
+    Flip,
+    // Blend overlay (3): D-01, D-02
+    /// Overlay semi-transparent solid color.
+    SolidColorOverlay,
+    /// Overlay gradient ramp.
+    GradientOverlay,
+    /// Blend transparent watermark pattern.
+    WatermarkBlend,
 }

@@ -3,24 +3,41 @@ use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_store::StoreExt;
 
-use crate::models::seed::{Operation, OperationType, Seed};
+use crate::models::seed::{Operation, OperationType, Seed, StrengthTier};
 use crate::state::AppState;
 
 /// Select an operation type using weighted random selection.
-/// D-02: MathOverlay ~30%, remaining 6 types: 12, 12, 12, 12, 11, 11 (sum 100).
+/// D-02: MathOverlay ~30%, remaining 19 types distributed evenly (sum 100).
 /// Uses cumulative probability threshold — rand 0.9 compatible (avoids WeightedIndex API drift).
 fn pick_operation_type(rng: &mut impl Rng) -> OperationType {
-    // Weights: MathOverlay=30, PixelShift=12, FrameDrop=12,
-    //          GopModify=12, MetadataErase=12, AudioTweak=11, Remux=11
+    // Weights: MathOverlay=30, PixelShift=5, FrameDrop=5, GopModify=5,
+    //          MetadataErase=5, AudioTweak=5, Remux=5,
+    //          HueRotate=3, SaturationAdjust=3, BrightnessContrast=3, ColorBalance=3,
+    //          FilmGrain=3, GaussianBlur=3, Sharpen=3,
+    //          MicroRotate=3, TinyScale=3, Flip=3,
+    //          SolidColorOverlay=3, GradientOverlay=3, WatermarkBlend=4
     let roll: u32 = rng.random_range(1..=100);
     match roll {
         1..=30 => OperationType::MathOverlay,
-        31..=42 => OperationType::PixelShift,
-        43..=54 => OperationType::FrameDrop,
-        55..=66 => OperationType::GopModify,
-        67..=78 => OperationType::MetadataErase,
-        79..=89 => OperationType::AudioTweak,
-        90..=100 => OperationType::Remux,
+        31..=35 => OperationType::PixelShift,
+        36..=40 => OperationType::FrameDrop,
+        41..=45 => OperationType::GopModify,
+        46..=50 => OperationType::MetadataErase,
+        51..=55 => OperationType::AudioTweak,
+        56..=60 => OperationType::Remux,
+        61..=63 => OperationType::HueRotate,
+        64..=66 => OperationType::SaturationAdjust,
+        67..=69 => OperationType::BrightnessContrast,
+        70..=72 => OperationType::ColorBalance,
+        73..=75 => OperationType::FilmGrain,
+        76..=78 => OperationType::GaussianBlur,
+        79..=81 => OperationType::Sharpen,
+        82..=84 => OperationType::MicroRotate,
+        85..=87 => OperationType::TinyScale,
+        88..=90 => OperationType::Flip,
+        91..=93 => OperationType::SolidColorOverlay,
+        94..=96 => OperationType::GradientOverlay,
+        97..=100 => OperationType::WatermarkBlend,
         _ => unreachable!("roll is 1..=100"),
     }
 }
@@ -55,6 +72,7 @@ pub async fn generate_seed(
         alias,
         operations,
         created_at: chrono::Utc::now().to_rfc3339(),
+        strength_tier: StrengthTier::default(),
     };
 
     // Persist to managed state
@@ -137,6 +155,63 @@ fn generate_operation(rng: &mut impl Rng, op_type: OperationType) -> Operation {
         }
         OperationType::Remux => {
             serde_json::json!({})
+        }
+        // Color processing (4): D-01, D-02
+        OperationType::HueRotate => {
+            serde_json::json!({ "angle": rng.random_range(-30..=30) })
+        }
+        OperationType::SaturationAdjust => {
+            serde_json::json!({ "factor": rng.random_range(0.8..=1.2) })
+        }
+        OperationType::BrightnessContrast => {
+            serde_json::json!({
+                "brightness": rng.random_range(-0.1..=0.1),
+                "contrast": rng.random_range(0.9..=1.1),
+            })
+        }
+        OperationType::ColorBalance => {
+            serde_json::json!({
+                "r": rng.random_range(-0.05..=0.05),
+                "g": rng.random_range(-0.05..=0.05),
+                "b": rng.random_range(-0.05..=0.05),
+            })
+        }
+        // Noise texture (3): D-01, D-02
+        OperationType::FilmGrain => {
+            serde_json::json!({ "strength": rng.random_range(1..=5) })
+        }
+        OperationType::GaussianBlur => {
+            serde_json::json!({ "sigma": rng.random_range(0.5..=1.5) })
+        }
+        OperationType::Sharpen => {
+            serde_json::json!({ "amount": rng.random_range(0.3..=1.0) })
+        }
+        // Geometric fine-tuning (3): D-01, D-02
+        OperationType::MicroRotate => {
+            serde_json::json!({ "angle": rng.random_range(0.1..=0.9) })
+        }
+        OperationType::TinyScale => {
+            serde_json::json!({ "factor": rng.random_range(0.98..=1.02) })
+        }
+        OperationType::Flip => {
+            let axis = if rng.random_bool(0.5) { "h" } else { "v" };
+            serde_json::json!({ "axis": axis })
+        }
+        // Blend overlay (3): D-01, D-02
+        OperationType::SolidColorOverlay => {
+            serde_json::json!({
+                "opacity": rng.random_range(0.01..=0.05),
+                "color": format!("#{:06x}", rng.random_range(0u32..=0xFFFFFF)),
+            })
+        }
+        OperationType::GradientOverlay => {
+            serde_json::json!({
+                "opacity": rng.random_range(0.01..=0.05),
+                "direction": if rng.random_bool(0.5) { "horizontal" } else { "vertical" },
+            })
+        }
+        OperationType::WatermarkBlend => {
+            serde_json::json!({ "opacity": rng.random_range(0.01..=0.03) })
         }
     };
 
@@ -224,6 +299,7 @@ pub async fn copy_seed(
             alias: new_alias,
             operations: new_operations,
             created_at: chrono::Utc::now().to_rfc3339(),
+            strength_tier: StrengthTier::default(),
         };
 
         (seed, source.alias.clone())

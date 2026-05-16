@@ -168,12 +168,12 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 **Goal:** Systematically enhance fingerprint modification with 13+ new FFmpeg operation types (color/noise/geometric/blend), 3-tier strength presets with intelligent seed generation (5-12 steps, >=70% video coverage), seed JSON export/import, and three v2 deferred features (drag-to-reorder queue, thumbnail preview, processing log history).
 **Requirements**: PHASE-06 (20 locked decisions from CONTEXT.md)
 **Depends on:** Phase 5
-**Plans:** 7 plans (3 waves)
+**Plans:** 2/7 plans executed
 
 Plans:
 **Wave 1** *(foundation — parallel)*
-- [ ] 06-01-PLAN.md — Rust model extensions (OperationType 20 variants, StrengthTier, Seed/VideoEntry/batch structs)
-- [ ] 06-02-PLAN.md — TypeScript type definitions + ~50 i18n keys (both locales)
+- [x] 06-01-PLAN.md — Rust model extensions (OperationType 20 variants, StrengthTier, Seed/VideoEntry/batch structs)
+- [x] 06-02-PLAN.md — TypeScript type definitions + ~50 i18n keys (both locales)
 
 **Wave 2** *(Rust backend — parallel)*
 - [ ] 06-03-PLAN.md — 13 new FFmpeg filter builders + dispatch match arms + tests

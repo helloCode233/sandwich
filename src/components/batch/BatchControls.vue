@@ -33,7 +33,9 @@ const seedOptions = computed(() =>
 );
 
 /** Start disabled when no seed selected or queue has no valid entries. */
-const startDisabled = computed(() => !seedStore.selectedSeedId || queueStore.validCount === 0);
+const startDisabled = computed(
+  () => seedStore.selectedSeedIds.length === 0 || queueStore.validCount === 0,
+);
 
 /** Load persisted preferences from tauri-plugin-store on mount. */
 async function loadPreferences() {
@@ -104,7 +106,7 @@ async function onOpenOutputDir() {
 
 /** Start batch processing. */
 async function onStart() {
-  if (!seedStore.selectedSeedId) {
+  if (seedStore.selectedSeedIds.length === 0) {
     message.warning(t('batch.noSeedSelected'));
     return;
   }
@@ -121,7 +123,8 @@ async function onStart() {
     return;
   }
 
-  const ok = await startBatch(seedStore.selectedSeedId, outputDir.value, queueStore.entryCount);
+  const totalJobs = queueStore.entryCount * seedStore.selectedSeedIds.length;
+  const ok = await startBatch(seedStore.selectedSeedIds, outputDir.value, totalJobs);
   if (!ok) {
     message.error(t('notification.operationFailed', { error: 'Batch start failed' }));
   }
@@ -143,6 +146,13 @@ function onCancel() {
   });
 }
 
+// Strength tier options for seed generation (D-03, D-07)
+const strengthTierOptions = [
+  { label: t('seed.strength.conservative'), value: 'conservative' },
+  { label: t('seed.strength.standard'), value: 'standard' },
+  { label: t('seed.strength.aggressive'), value: 'aggressive' },
+];
+
 // Concurrency options per D-11
 const concurrencyOptions = [
   { label: '1', value: 1 },
@@ -163,15 +173,28 @@ onMounted(() => {
     </NText>
 
     <NSpace vertical :size="12">
-      <!-- Seed Selector -->
+      <!-- Strength Tier Selector (D-03, D-07) -->
+      <div>
+        <NText depth="2" class="text-xs mb-1 block">
+          {{ t('seed.strengthTier') }}
+        </NText>
+        <NSelect
+          v-model:value="seedStore.strengthTier"
+          :options="strengthTierOptions"
+          :placeholder="t('seed.strengthTier')"
+          :disabled="batchStore.isProcessing"
+        />
+      </div>
+
+      <!-- Seed Selector — multi-select (Phase 5: MULTI-01) -->
       <NSelect
-        :value="seedStore.selectedSeedId"
+        v-model:value="seedStore.selectedSeedIds"
         :options="seedOptions"
-        :placeholder="t('batch.selectSeed')"
+        :placeholder="t('batch.selectSeeds')"
         :disabled="batchStore.isProcessing"
+        multiple
         filterable
         clearable
-        @update:value="(v: string | null) => seedStore.selectSeed(v)"
       />
 
       <!-- Concurrency (D-11) -->
@@ -209,11 +232,7 @@ onMounted(() => {
           </template>
           {{ t('batch.changeDir') }}
         </NButton>
-        <NButton
-          size="small"
-          quaternary
-          @click="onOpenOutputDir"
-        >
+        <NButton size="small" quaternary @click="onOpenOutputDir">
           {{ t('batch.openDir') }}
         </NButton>
       </div>

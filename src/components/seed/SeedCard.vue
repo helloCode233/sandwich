@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { NCard, NButton, NIcon, NText, NTag, NPopconfirm, NInput } from 'naive-ui';
-import { Pencil, Copy, Trash2, Zap } from 'lucide-vue-next';
+import { Pencil, Copy, Trash2, Zap, ArrowDownToLine, ArrowUpFromLine } from 'lucide-vue-next';
 import { useMessage } from 'naive-ui';
 import type { Seed } from '@/types/seed';
 import { useSeedStore } from '@/stores/seed';
+import { save, open as openDialog } from '@tauri-apps/plugin-dialog';
 import { useSeed } from '@/composables/useSeed';
+import { useBatchStore } from '@/stores/batch';
 import { useI18n } from 'vue-i18n';
 
 const props = defineProps<{
@@ -13,15 +15,30 @@ const props = defineProps<{
 }>();
 
 const store = useSeedStore();
-const { renameSeed, deleteSeed, copySeed } = useSeed();
+const { renameSeed, deleteSeed, copySeed, exportSeed, importSeed } = useSeed();
 const message = useMessage();
+const batchStore = useBatchStore();
 const { t } = useI18n();
 
 const isHovered = ref(false);
 const isRenaming = ref(false);
 const renameValue = ref('');
 
-const isSelected = () => store.selectedSeedId === props.seed.id;
+const isSelected = () => store.selectedSeedIds.includes(props.seed.id);
+
+/** Color-coded NTag type for strength tier badge (D-07). */
+const strengthTagType = computed(() => {
+  switch (props.seed.strengthTier) {
+    case 'conservative':
+      return 'info';
+    case 'standard':
+      return 'default';
+    case 'aggressive':
+      return 'warning';
+    default:
+      return 'default';
+  }
+});
 
 /** Display up to 3 operation type tags; show "+N more" if >3. */
 function visibleOps() {
@@ -33,7 +50,7 @@ function overflowCount() {
 
 function onSelect() {
   // Toggle selection: click same card deselects, click different selects
-  store.selectSeed(isSelected() ? null : props.seed.id);
+  store.toggleSeed(props.seed.id);
 }
 
 function startRename() {
@@ -77,6 +94,38 @@ async function onDelete() {
     message.error(t('notification.operationFailed', { error: 'Delete failed' }));
   }
 }
+
+async function onExport() {
+  const filepath = await save({
+    title: t('seed.export'),
+    defaultPath: `${props.seed.alias}.json`,
+    filters: [{ name: 'JSON', extensions: ['json'] }],
+  });
+  if (filepath) {
+    const ok = await exportSeed(props.seed.id, filepath);
+    if (ok) {
+      message.success(t('seed.exported'));
+    } else {
+      message.error(t('notification.operationFailed', { error: 'Export failed' }));
+    }
+  }
+}
+
+async function onImport() {
+  const filepath = await openDialog({
+    title: t('seed.import'),
+    filters: [{ name: 'Seed JSON', extensions: ['json'] }],
+    multiple: false,
+  });
+  if (filepath && typeof filepath === 'string') {
+    const seed = await importSeed(filepath);
+    if (seed) {
+      message.success(t('seed.imported', { alias: seed.alias }));
+    } else {
+      message.error(t('seed.importFailed', { error: 'Import failed' }));
+    }
+  }
+}
 </script>
 
 <template>
@@ -116,6 +165,15 @@ async function onDelete() {
 
         <!-- Operation type tags -->
         <div class="flex items-center gap-1 mt-1.5 flex-wrap">
+          <NTag
+            v-if="seed.strengthTier"
+            :type="strengthTagType"
+            :bordered="false"
+            size="tiny"
+            class="shrink-0"
+          >
+            {{ t(`seed.strength.${seed.strengthTier}`) }}
+          </NTag>
           <NTag v-for="op in visibleOps()" :key="op" type="info" :bordered="false" size="small">
             {{ op }}
           </NTag>
@@ -137,6 +195,20 @@ async function onDelete() {
         :class="['transition-opacity duration-200', isHovered ? 'opacity-100' : 'opacity-0']"
         @click.stop
       >
+        <NButton size="tiny" quaternary :disabled="batchStore.isProcessing" @click="onImport">
+          <template #icon>
+            <NIcon :size="16">
+              <ArrowUpFromLine />
+            </NIcon>
+          </template>
+        </NButton>
+        <NButton size="tiny" quaternary :disabled="batchStore.isProcessing" @click="onExport">
+          <template #icon>
+            <NIcon :size="16">
+              <ArrowDownToLine />
+            </NIcon>
+          </template>
+        </NButton>
         <NButton size="tiny" quaternary @click="startRename">
           <template #icon>
             <NIcon :size="16">

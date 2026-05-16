@@ -49,18 +49,15 @@ export function useBatch() {
     });
   }
 
-  /** Start batch processing. Per D-11: concurrency is read from store by Rust, NOT passed here. */
+  /** Start batch processing with multiple seeds (Phase 5: MULTI-01, MULTI-02). */
   async function startBatch(
-    seedId: string,
+    seedIds: string[],
     outputDir: string,
     queueSize: number,
   ): Promise<boolean> {
     try {
-      // Activate processing state BEFORE invoke so UI shows "0/n" immediately.
-      // Rust emits batch-progress with the correct total (including initial
-      // emission from Task 1), confirming/updating the frontend state.
       store.startProcessing(queueSize);
-      await invoke('start_batch', { seedId, outputDir });
+      await invoke('start_batch', { seedIds, outputDir });
       return true;
     } catch (err) {
       console.error('Failed to start batch:', err);

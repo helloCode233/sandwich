@@ -9,8 +9,16 @@ import {
   useDialog,
   useMessage,
 } from 'naive-ui';
-import { Clapperboard, Trash2, AlertCircle, CheckCircle, Plus } from 'lucide-vue-next';
+import {
+  Clapperboard,
+  Trash2,
+  AlertCircle,
+  CheckCircle,
+  Plus,
+  GripVertical,
+} from 'lucide-vue-next';
 import { open } from '@tauri-apps/plugin-dialog';
+import { VueDraggable } from 'vue-draggable-plus';
 import { useQueueStore } from '@/stores/queue';
 import { useQueue } from '@/composables/useQueue';
 import { useI18n } from 'vue-i18n';
@@ -75,6 +83,10 @@ function metadataLine(entry: VideoEntry): string {
     formatBytes(m.sizeBytes),
     formatCodec(m.codec),
   ].join(' | ');
+}
+
+function onReorderEnd() {
+  store.reorderEntries([...store.entries]);
 }
 
 async function onRemove(index: number) {
@@ -168,78 +180,110 @@ async function onAddVideoClick() {
     <!-- Queue List -->
     <NScrollbar v-else class="flex-1">
       <div class="space-y-1.5 pb-4">
-        <div v-for="(entry, index) in store.entries" :key="entry.filepath" class="queue-item">
-          <div class="flex items-center justify-between gap-3 py-2 px-3 rounded-md bg-[#1a1a1f]">
-            <!-- File info -->
-            <div class="flex-1 min-w-0">
-              <div class="flex items-center gap-2">
-                <NText strong class="truncate text-sm">
-                  {{ entry.filename }}
-                </NText>
-                <NTag
-                  :type="entry.status === 'valid' ? 'success' : 'warning'"
-                  :bordered="false"
-                  size="small"
-                >
-                  <template #icon>
-                    <NIcon :size="12">
-                      <CheckCircle v-if="entry.status === 'valid'" />
-                      <AlertCircle v-else />
-                    </NIcon>
-                  </template>
-                  {{ entry.status === 'valid' ? t('queue.valid') : t('queue.invalid') }}
-                </NTag>
-              </div>
-              <NText depth="3" class="text-xs mt-0.5 block">
-                {{ metadataLine(entry) }}
-              </NText>
-              <div
-                v-if="isCurrentFile(entry.filename) && fileProgressFor(entry.filename)"
-                class="mt-2"
+        <VueDraggable
+          v-model="store.entries"
+          :animation="150"
+          handle=".drag-handle"
+          :disabled="batchStore.isProcessing"
+          class="space-y-1"
+          @end="onReorderEnd"
+        >
+          <div v-for="(entry, index) in store.entries" :key="entry.filepath" class="queue-item">
+            <div class="flex items-center justify-between gap-3 py-2 px-3 rounded-md bg-[#1a1a1f]">
+              <!-- Drag handle -->
+              <NIcon
+                class="drag-handle cursor-grab shrink-0"
+                :size="14"
+                :class="{
+                  'text-[#2080f0]': batchStore.currentFileProgress?.file === entry.filename,
+                }"
               >
-                <NProgress
-                  type="line"
-                  :percentage="fileProgressFor(entry.filename)!.percent"
-                  indicator-placement="inside"
-                  :height="18"
-                  :color="fileProgressFor(entry.filename)!.percent === 100 ? '#18a058' : '#2080f0'"
-                />
-                <div class="flex justify-between mt-0.5">
-                  <NText depth="3" class="text-xs">
-                    {{
-                      t('batch.fileProgress', {
-                        current: fileProgressFor(entry.filename)!.currentFrame,
-                        total: fileProgressFor(entry.filename)!.totalFrames,
-                      })
-                    }}
+                <GripVertical />
+              </NIcon>
+
+              <!-- Thumbnail image -->
+              <img
+                v-if="entry.thumbnailBase64"
+                :src="'data:image/jpeg;base64,' + entry.thumbnailBase64"
+                class="w-12 h-7 object-cover rounded shrink-0"
+                :alt="t('queue.thumbnail')"
+              />
+
+              <!-- File info -->
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2">
+                  <NText strong class="truncate text-sm">
+                    {{ entry.filename }}
                   </NText>
-                  <NText depth="3" class="text-xs">
-                    {{
-                      t('batch.fileEta', {
-                        minutes: Math.ceil(fileProgressFor(entry.filename)!.remainingSeconds / 60),
-                      })
-                    }}
-                  </NText>
+                  <NTag
+                    :type="entry.status === 'valid' ? 'success' : 'warning'"
+                    :bordered="false"
+                    size="small"
+                  >
+                    <template #icon>
+                      <NIcon :size="12">
+                        <CheckCircle v-if="entry.status === 'valid'" />
+                        <AlertCircle v-else />
+                      </NIcon>
+                    </template>
+                    {{ entry.status === 'valid' ? t('queue.valid') : t('queue.invalid') }}
+                  </NTag>
+                </div>
+                <NText depth="3" class="text-xs mt-0.5 block">
+                  {{ metadataLine(entry) }}
+                </NText>
+                <div
+                  v-if="isCurrentFile(entry.filename) && fileProgressFor(entry.filename)"
+                  class="mt-2"
+                >
+                  <NProgress
+                    type="line"
+                    :percentage="fileProgressFor(entry.filename)!.percent"
+                    indicator-placement="inside"
+                    :height="18"
+                    :color="
+                      fileProgressFor(entry.filename)!.percent === 100 ? '#18a058' : '#2080f0'
+                    "
+                  />
+                  <div class="flex justify-between mt-0.5">
+                    <NText depth="3" class="text-xs">
+                      {{
+                        t('batch.fileProgress', {
+                          current: fileProgressFor(entry.filename)!.currentFrame,
+                          total: fileProgressFor(entry.filename)!.totalFrames,
+                        })
+                      }}
+                    </NText>
+                    <NText depth="3" class="text-xs">
+                      {{
+                        t('batch.fileEta', {
+                          minutes: Math.ceil(
+                            fileProgressFor(entry.filename)!.remainingSeconds / 60,
+                          ),
+                        })
+                      }}
+                    </NText>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <!-- Remove button -->
-            <NButton
-              size="tiny"
-              quaternary
-              type="error"
-              :disabled="batchStore.isProcessing"
-              @click="onRemove(index)"
-            >
-              <template #icon>
-                <NIcon :size="14">
-                  <Trash2 />
-                </NIcon>
-              </template>
-            </NButton>
+              <!-- Remove button -->
+              <NButton
+                size="tiny"
+                quaternary
+                type="error"
+                :disabled="batchStore.isProcessing"
+                @click="onRemove(index)"
+              >
+                <template #icon>
+                  <NIcon :size="14">
+                    <Trash2 />
+                  </NIcon>
+                </template>
+              </NButton>
+            </div>
           </div>
-        </div>
+        </VueDraggable>
       </div>
     </NScrollbar>
   </div>

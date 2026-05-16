@@ -6,73 +6,154 @@ use tauri_plugin_store::StoreExt;
 use crate::models::seed::{Operation, OperationType, Seed, StrengthTier};
 use crate::state::AppState;
 
-/// Select an operation type using weighted random selection.
-/// D-02: MathOverlay ~30%, remaining 19 types distributed evenly (sum 100).
-/// Uses cumulative probability threshold — rand 0.9 compatible (avoids WeightedIndex API drift).
+/// Select an operation type using weighted random selection (D-17).
+/// Weight distribution: Math overlay ~15%, Color processing ~20%, Noise texture ~15%,
+/// Geometric fine-tuning ~15%, Blend overlay ~10%, Remaining old categories ~25%.
+/// Uses 1000-bucket cumulative probability threshold for finer granularity.
 fn pick_operation_type(rng: &mut impl Rng) -> OperationType {
-    // Weights: MathOverlay=30, PixelShift=5, FrameDrop=5, GopModify=5,
-    //          MetadataErase=5, AudioTweak=5, Remux=5,
-    //          HueRotate=3, SaturationAdjust=3, BrightnessContrast=3, ColorBalance=3,
-    //          FilmGrain=3, GaussianBlur=3, Sharpen=3,
-    //          MicroRotate=3, TinyScale=3, Flip=3,
-    //          SolidColorOverlay=3, GradientOverlay=3, WatermarkBlend=4
-    let roll: u32 = rng.random_range(1..=100);
+    let roll: u32 = rng.random_range(1..=1000);
     match roll {
-        1..=30 => OperationType::MathOverlay,
-        31..=35 => OperationType::PixelShift,
-        36..=40 => OperationType::FrameDrop,
-        41..=45 => OperationType::GopModify,
-        46..=50 => OperationType::MetadataErase,
-        51..=55 => OperationType::AudioTweak,
-        56..=60 => OperationType::Remux,
-        61..=63 => OperationType::HueRotate,
-        64..=66 => OperationType::SaturationAdjust,
-        67..=69 => OperationType::BrightnessContrast,
-        70..=72 => OperationType::ColorBalance,
-        73..=75 => OperationType::FilmGrain,
-        76..=78 => OperationType::GaussianBlur,
-        79..=81 => OperationType::Sharpen,
-        82..=84 => OperationType::MicroRotate,
-        85..=87 => OperationType::TinyScale,
-        88..=90 => OperationType::Flip,
-        91..=93 => OperationType::SolidColorOverlay,
-        94..=96 => OperationType::GradientOverlay,
-        97..=100 => OperationType::WatermarkBlend,
-        _ => unreachable!("roll is 1..=100"),
+        // Math overlay (existing 3): ~15% = 150 buckets, ~50 each
+        1..=50 => OperationType::MathOverlay,
+        51..=100 => OperationType::MathOverlay,
+        101..=150 => OperationType::MathOverlay,
+        // Color processing (4): ~20% = 200 buckets, ~50 each
+        151..=200 => OperationType::HueRotate,
+        201..=250 => OperationType::SaturationAdjust,
+        251..=300 => OperationType::BrightnessContrast,
+        301..=350 => OperationType::ColorBalance,
+        // Noise texture (3): ~15% = 150 buckets, ~50 each
+        351..=400 => OperationType::FilmGrain,
+        401..=450 => OperationType::GaussianBlur,
+        451..=500 => OperationType::Sharpen,
+        // Geometric fine-tuning (3): ~15% = 150 buckets, ~50 each
+        501..=550 => OperationType::MicroRotate,
+        551..=600 => OperationType::TinyScale,
+        601..=650 => OperationType::Flip,
+        // Blend overlay (3): ~10% = 100 buckets, ~33 each
+        651..=683 => OperationType::SolidColorOverlay,
+        684..=716 => OperationType::GradientOverlay,
+        717..=750 => OperationType::WatermarkBlend,
+        // Remaining old categories (6): ~25% = 250 buckets, ~42 each
+        751..=792 => OperationType::PixelShift,
+        793..=834 => OperationType::FrameDrop,
+        835..=876 => OperationType::GopModify,
+        877..=918 => OperationType::MetadataErase,
+        919..=959 => OperationType::AudioTweak,
+        960..=1000 => OperationType::Remux,
+        _ => unreachable!("roll is 1..=1000"),
     }
 }
 
-/// Tauri command: Generate a random seed with 3-7 operations.
-/// Per D-02: weighted random -- MathOverlay ~30%, others evenly distributed.
-/// Per D-03: 3-7 random steps.
+/// Validate that operations collectively cover >=70% of video frames (D-09).
+/// For short videos (<50 frames), a relaxed 50% threshold is used.
+/// Returns true if coverage is adequate.
+fn validate_coverage(operations: &[Operation], total_frames: u32) -> bool {
+    if total_frames == 0 {
+        return true;
+    }
+    if operations.is_empty() {
+        return false;
+    }
+
+    let threshold = if total_frames < 50 { 0.50 } else { 0.70 };
+
+    let mut covered = vec![false; total_frames as usize];
+    for op in operations {
+        let start = op.start_frame as usize;
+        let end = if op.duration_frames == 0 {
+            total_frames as usize
+        } else {
+            ((op.start_frame + op.duration_frames) as usize).min(total_frames as usize)
+        };
+        for i in start..end {
+            covered[i] = true;
+        }
+    }
+    let covered_count = covered.iter().filter(|&&c| c).count();
+    (covered_count as f64 / total_frames as f64) >= threshold
+}
+
+/// Tauri command: Generate a random seed with strength tier and coverage validation.
+/// Per D-03: strength tier drives step count and parameter ranges.
+/// Per D-06: step count 5-7 (conservative), 6-9 (standard), 8-12 (aggressive).
+/// Per D-07: three global strength presets with tier-appropriate parameter ranges.
+/// Per D-09: coverage >=70% validated with retry; relaxed for short videos.
 /// Per D-04: auto-alias using timestamp format "seed_YYYYMMDD_HHMMSS".
 /// Per D-01: pure random generation, user cannot edit operation parameters.
 #[tauri::command]
 pub async fn generate_seed(
     state: State<'_, Mutex<AppState>>,
     app: AppHandle,
+    strength: String,
+    total_frames: Option<u32>,
 ) -> Result<Seed, String> {
+    let strength_tier = match strength.as_str() {
+        "conservative" => StrengthTier::Conservative,
+        "standard" => StrengthTier::Standard,
+        "aggressive" => StrengthTier::Aggressive,
+        _ => {
+            return Err(format!(
+                "Invalid strength tier: {}. Use conservative, standard, or aggressive",
+                strength
+            ));
+        }
+    };
+
     let mut rng = rand::rng();
 
-    // D-03: 3-7 random steps
-    let step_count = rng.random_range(3..=7);
+    // D-06, D-07: Step count per tier
+    let (min_steps, max_steps) = match strength_tier {
+        StrengthTier::Conservative => (5, 7),
+        StrengthTier::Standard => (6, 9),
+        StrengthTier::Aggressive => (8, 12),
+    };
+    let step_count = rng.random_range(min_steps..=max_steps);
     let mut operations = Vec::with_capacity(step_count);
 
     for _ in 0..step_count {
         let op_type = pick_operation_type(&mut rng);
-        let op = generate_operation(&mut rng, op_type);
+        let op = generate_operation(&mut rng, op_type, strength_tier, total_frames);
         operations.push(op);
     }
 
-    // D-04: Auto-alias with timestamp
-    let alias = chrono::Utc::now().format("seed_%Y%m%d_%H%M%S").to_string();
+    // D-09: Coverage validation with retry (up to 100 attempts)
+    if let Some(frames) = total_frames {
+        if frames > 0 {
+            let mut retries = 0;
+            while !validate_coverage(&operations, frames) && retries < 100 {
+                // Re-randomize start_frame/duration_frames for all ops
+                for op in &mut operations {
+                    let (start, dur) = random_frame_range(&mut rng, op.op_type, frames);
+                    op.start_frame = start;
+                    op.duration_frames = dur;
+                }
+                retries += 1;
+            }
+            // Fallback: set last operation to cover full video
+            if !validate_coverage(&operations, frames) {
+                if let Some(last) = operations.last_mut() {
+                    last.start_frame = 0;
+                    last.duration_frames = 0; // 0 = full video
+                }
+            }
+        }
+    }
+
+    // D-04: Auto-alias with timestamp + tier suffix
+    let tier_label = match strength_tier {
+        StrengthTier::Conservative => "cons",
+        StrengthTier::Standard => "std",
+        StrengthTier::Aggressive => "agg",
+    };
+    let alias = format!("seed_{}_{}", chrono::Utc::now().format("%Y%m%d_%H%M%S"), tier_label);
 
     let seed = Seed {
         id: uuid::Uuid::new_v4().to_string(),
         alias,
         operations,
         created_at: chrono::Utc::now().to_rfc3339(),
-        strength_tier: StrengthTier::default(),
+        strength_tier,
     };
 
     // Persist to managed state
@@ -90,30 +171,63 @@ pub async fn generate_seed(
     Ok(seed)
 }
 
-/// Generate a single Operation with safety-constrained random parameters.
-/// SEED-04 constraints applied inline.
-fn generate_operation(rng: &mut impl Rng, op_type: OperationType) -> Operation {
-    let (start_frame, duration_frames) = match op_type {
+/// Generate random frame range for an operation (D-09).
+/// For FrameDrop: retains existing time-slice behavior (start 0..300, dur 60..600).
+/// For all other ops: random start within video bounds, random duration covering at least 1 frame.
+fn random_frame_range(rng: &mut impl Rng, op_type: OperationType, total_frames: u32) -> (u32, u32) {
+    match op_type {
         OperationType::FrameDrop => {
-            // Frame drop is more effective when applied to a section
-            let start = rng.random_range(0..300);
-            let dur = rng.random_range(60..600);
+            let start = rng.random_range(0..300u32);
+            let dur = rng.random_range(60..600u32);
             (start, dur)
         }
         _ => {
-            // Most operations apply to full video
-            (0u32, 0u32)
+            if total_frames > 1 {
+                let start = rng.random_range(0..total_frames);
+                let remaining = total_frames - start;
+                let dur = if remaining == 0 { 0 } else { rng.random_range(1..=remaining) };
+                (start, dur)
+            } else {
+                (0u32, 0u32)
+            }
         }
+    }
+}
+
+/// Generate a single Operation with tier-driven randomized parameters (D-03, D-09).
+/// SEED-04 constraints applied inline. Strength tier controls parameter ranges.
+fn generate_operation(
+    rng: &mut impl Rng,
+    op_type: OperationType,
+    strength_tier: StrengthTier,
+    total_frames: Option<u32>,
+) -> Operation {
+    let (start_frame, duration_frames) = match total_frames {
+        Some(frames) => random_frame_range(rng, op_type, frames),
+        None => match op_type {
+            OperationType::FrameDrop => {
+                let start = rng.random_range(0..300u32);
+                let dur = rng.random_range(60..600u32);
+                (start, dur)
+            }
+            _ => (0u32, 0u32),
+        },
     };
 
     let params = match op_type {
+        // ── Math overlay (existing, tier-driven opacity) ────────────────────
         OperationType::MathOverlay => {
             let pattern = match rng.random_range(0..3) {
                 0 => "ripple",
                 1 => "stripes",
                 _ => "concentric",
             };
-            let opacity = rng.random_range(0.03..=0.15); // SEED-04: <= 0.15
+            let (opacity_min, opacity_max) = match strength_tier {
+                StrengthTier::Conservative => (0.03, 0.08),
+                StrengthTier::Standard => (0.05, 0.12),
+                StrengthTier::Aggressive => (0.08, 0.15),
+            };
+            let opacity = rng.random_range(opacity_min..=opacity_max);
             let frequency = rng.random_range(20..=200);
             serde_json::json!({
                 "pattern": pattern,
@@ -121,22 +235,32 @@ fn generate_operation(rng: &mut impl Rng, op_type: OperationType) -> Operation {
                 "frequency": frequency,
             })
         }
+        // ── Pixel shift (existing, tier-driven) ─────────────────────────────
         OperationType::PixelShift => {
-            let dx = rng.random_range(-3i32..=3); // SEED-04: <= |3|
-            let dy = rng.random_range(-3i32..=3);
+            let (min, max) = match strength_tier {
+                StrengthTier::Conservative => (-1i32, 1i32),
+                StrengthTier::Standard => (-2i32, 2i32),
+                StrengthTier::Aggressive => (-3i32, 3i32),
+            };
+            let dx = rng.random_range(min..=max);
+            let dy = rng.random_range(min..=max);
             serde_json::json!({ "dx": dx, "dy": dy })
         }
+        // ── FrameDrop (existing, unchanged) ─────────────────────────────────
         OperationType::FrameDrop => {
             let interval = rng.random_range(15..=60); // SEED-04: >= 15
             serde_json::json!({ "interval": interval })
         }
+        // ── GOP modify (existing) ───────────────────────────────────────────
         OperationType::GopModify => {
             let gop_size = rng.random_range(12..=250);
             serde_json::json!({ "gopSize": gop_size })
         }
+        // ── Metadata erase (existing) ───────────────────────────────────────
         OperationType::MetadataErase => {
             serde_json::json!({})
         }
+        // ── Audio tweak (existing, tier-driven) ────────────────────────────
         OperationType::AudioTweak => {
             let effect = match rng.random_range(0..3) {
                 0 => "volume",
@@ -145,73 +269,195 @@ fn generate_operation(rng: &mut impl Rng, op_type: OperationType) -> Operation {
             };
             match effect {
                 "volume" => {
-                    serde_json::json!({ "effect": "volume", "db": rng.random_range(-1.0..=1.0) })
+                    let (min_db, max_db) = match strength_tier {
+                        StrengthTier::Conservative => (-0.5, 0.5),
+                        StrengthTier::Standard => (-1.0, 1.0),
+                        StrengthTier::Aggressive => (-2.0, 2.0),
+                    };
+                    serde_json::json!({ "effect": "volume", "db": rng.random_range(min_db..=max_db) })
                 }
                 "tempo" => {
-                    serde_json::json!({ "effect": "tempo", "factor": rng.random_range(0.99..=1.01) })
+                    let (min_f, max_f) = match strength_tier {
+                        StrengthTier::Conservative => (0.995, 1.005),
+                        StrengthTier::Standard => (0.99, 1.01),
+                        StrengthTier::Aggressive => (0.98, 1.02),
+                    };
+                    serde_json::json!({ "effect": "tempo", "factor": rng.random_range(min_f..=max_f) })
                 }
                 _ => serde_json::json!({ "effect": "echo" }),
             }
         }
+        // ── Remux (existing) ────────────────────────────────────────────────
         OperationType::Remux => {
             serde_json::json!({})
         }
-        // Color processing (4): D-01, D-02
+        // ── Color processing (4): D-01, D-02, D-04, tier-driven ─────────────
         OperationType::HueRotate => {
-            serde_json::json!({ "angle": rng.random_range(-30..=30) })
+            let (angle_min, angle_max) = match strength_tier {
+                StrengthTier::Conservative => (-15.0, 15.0),
+                StrengthTier::Standard => (-45.0, 45.0),
+                StrengthTier::Aggressive => (-90.0, 90.0),
+            };
+            let (sat_min, sat_max) = match strength_tier {
+                StrengthTier::Conservative => (0.9, 1.1),
+                StrengthTier::Standard => (0.7, 1.3),
+                StrengthTier::Aggressive => (0.5, 1.5),
+            };
+            serde_json::json!({
+                "hueAngle": rng.random_range(angle_min..=angle_max),
+                "saturation": rng.random_range(sat_min..=sat_max),
+            })
         }
         OperationType::SaturationAdjust => {
-            serde_json::json!({ "factor": rng.random_range(0.8..=1.2) })
+            let (sat_min, sat_max) = match strength_tier {
+                StrengthTier::Conservative => (0.9, 1.1),
+                StrengthTier::Standard => (0.8, 1.2),
+                StrengthTier::Aggressive => (0.6, 1.4),
+            };
+            let (con_min, con_max) = match strength_tier {
+                StrengthTier::Conservative => (0.95, 1.05),
+                StrengthTier::Standard => (0.9, 1.1),
+                StrengthTier::Aggressive => (0.7, 1.3),
+            };
+            let (bri_min, bri_max) = match strength_tier {
+                StrengthTier::Conservative => (-0.05, 0.05),
+                StrengthTier::Standard => (-0.1, 0.1),
+                StrengthTier::Aggressive => (-0.2, 0.2),
+            };
+            serde_json::json!({
+                "saturation": rng.random_range(sat_min..=sat_max),
+                "contrast": rng.random_range(con_min..=con_max),
+                "brightness": rng.random_range(bri_min..=bri_max),
+            })
         }
         OperationType::BrightnessContrast => {
+            let (bri_min, bri_max) = match strength_tier {
+                StrengthTier::Conservative => (-0.05, 0.05),
+                StrengthTier::Standard => (-0.1, 0.1),
+                StrengthTier::Aggressive => (-0.25, 0.25),
+            };
+            let (con_min, con_max) = match strength_tier {
+                StrengthTier::Conservative => (0.95, 1.05),
+                StrengthTier::Standard => (0.9, 1.1),
+                StrengthTier::Aggressive => (0.7, 1.3),
+            };
+            let (gam_min, gam_max) = match strength_tier {
+                StrengthTier::Conservative => (0.95, 1.05),
+                StrengthTier::Standard => (0.9, 1.1),
+                StrengthTier::Aggressive => (0.8, 1.2),
+            };
             serde_json::json!({
-                "brightness": rng.random_range(-0.1..=0.1),
-                "contrast": rng.random_range(0.9..=1.1),
+                "brightness": rng.random_range(bri_min..=bri_max),
+                "contrast": rng.random_range(con_min..=con_max),
+                "gamma": rng.random_range(gam_min..=gam_max),
             })
         }
         OperationType::ColorBalance => {
+            let (chan_min, chan_max) = match strength_tier {
+                StrengthTier::Conservative => (-0.03, 0.03),
+                StrengthTier::Standard => (-0.05, 0.05),
+                StrengthTier::Aggressive => (-0.1, 0.1),
+            };
             serde_json::json!({
-                "r": rng.random_range(-0.05..=0.05),
-                "g": rng.random_range(-0.05..=0.05),
-                "b": rng.random_range(-0.05..=0.05),
+                "rs": rng.random_range(chan_min..=chan_max),
+                "gs": rng.random_range(chan_min..=chan_max),
+                "bs": rng.random_range(chan_min..=chan_max),
             })
         }
-        // Noise texture (3): D-01, D-02
+        // ── Noise texture (3): D-01, D-02, D-04, tier-driven ───────────────
         OperationType::FilmGrain => {
-            serde_json::json!({ "strength": rng.random_range(1..=5) })
+            let (str_min, str_max) = match strength_tier {
+                StrengthTier::Conservative => (5u32, 12u32),
+                StrengthTier::Standard => (8u32, 20u32),
+                StrengthTier::Aggressive => (15u32, 30u32),
+            };
+            let flags = match rng.random_range(0..3) {
+                0 => "t+u",
+                1 => "t",
+                _ => "u",
+            };
+            serde_json::json!({
+                "strength": rng.random_range(str_min..=str_max),
+                "flags": flags,
+            })
         }
         OperationType::GaussianBlur => {
-            serde_json::json!({ "sigma": rng.random_range(0.5..=1.5) })
+            let (sig_min, sig_max) = match strength_tier {
+                StrengthTier::Conservative => (0.3, 0.8),
+                StrengthTier::Standard => (0.5, 1.5),
+                StrengthTier::Aggressive => (1.0, 2.5),
+            };
+            serde_json::json!({ "sigma": rng.random_range(sig_min..=sig_max) })
         }
         OperationType::Sharpen => {
-            serde_json::json!({ "amount": rng.random_range(0.3..=1.0) })
+            let (amt_min, amt_max) = match strength_tier {
+                StrengthTier::Conservative => (0.2, 0.5),
+                StrengthTier::Standard => (0.3, 1.0),
+                StrengthTier::Aggressive => (0.5, 1.5),
+            };
+            serde_json::json!({ "amount": rng.random_range(amt_min..=amt_max) })
         }
-        // Geometric fine-tuning (3): D-01, D-02
+        // ── Geometric fine-tuning (3): D-01, D-02, D-04, tier-driven ───────
         OperationType::MicroRotate => {
-            serde_json::json!({ "angle": rng.random_range(0.1..=0.9) })
+            let (ang_min, ang_max) = match strength_tier {
+                StrengthTier::Conservative => (-0.3, 0.3),
+                StrengthTier::Standard => (-0.7, 0.7),
+                StrengthTier::Aggressive => (-1.0, 1.0),
+            };
+            serde_json::json!({ "angle": rng.random_range(ang_min..=ang_max) })
         }
         OperationType::TinyScale => {
-            serde_json::json!({ "factor": rng.random_range(0.98..=1.02) })
+            let (fac_min, fac_max) = match strength_tier {
+                StrengthTier::Conservative => (0.99, 1.01),
+                StrengthTier::Standard => (0.98, 1.02),
+                StrengthTier::Aggressive => (0.96, 1.04),
+            };
+            serde_json::json!({ "scaleFactor": rng.random_range(fac_min..=fac_max) })
         }
         OperationType::Flip => {
-            let axis = if rng.random_bool(0.5) { "h" } else { "v" };
-            serde_json::json!({ "axis": axis })
+            let direction = if rng.random_bool(0.5) { "horizontal" } else { "vertical" };
+            serde_json::json!({ "direction": direction })
         }
-        // Blend overlay (3): D-01, D-02
+        // ── Blend overlay (3): D-01, D-02, D-04, tier-driven ───────────────
         OperationType::SolidColorOverlay => {
+            let (mix_min, mix_max) = match strength_tier {
+                StrengthTier::Conservative => (0.01, 0.05),
+                StrengthTier::Standard => (0.03, 0.10),
+                StrengthTier::Aggressive => (0.08, 0.15),
+            };
+            let hue: f64 = rng.random_range(0.0..=360.0);
+            let saturation: f64 = rng.random_range(0.3..=1.0);
+            let lightness: f64 = rng.random_range(0.3..=0.7);
             serde_json::json!({
-                "opacity": rng.random_range(0.01..=0.05),
-                "color": format!("#{:06x}", rng.random_range(0u32..=0xFFFFFF)),
+                "hue": hue,
+                "saturation": saturation,
+                "lightness": lightness,
+                "mix": rng.random_range(mix_min..=mix_max),
             })
         }
         OperationType::GradientOverlay => {
+            let (op_min, op_max) = match strength_tier {
+                StrengthTier::Conservative => (0.01, 0.05),
+                StrengthTier::Standard => (0.03, 0.08),
+                StrengthTier::Aggressive => (0.06, 0.12),
+            };
+            let gtype = if rng.random_bool(0.5) { "linear" } else { "radial" };
             serde_json::json!({
-                "opacity": rng.random_range(0.01..=0.05),
-                "direction": if rng.random_bool(0.5) { "horizontal" } else { "vertical" },
+                "type": gtype,
+                "opacity": rng.random_range(op_min..=op_max),
             })
         }
         OperationType::WatermarkBlend => {
-            serde_json::json!({ "opacity": rng.random_range(0.01..=0.03) })
+            let (op_min, op_max) = match strength_tier {
+                StrengthTier::Conservative => (0.005, 0.02),
+                StrengthTier::Standard => (0.01, 0.03),
+                StrengthTier::Aggressive => (0.02, 0.05),
+            };
+            let pattern = if rng.random_bool(0.5) { "grid" } else { "diagonal" };
+            serde_json::json!({
+                "pattern": pattern,
+                "opacity": rng.random_range(op_min..=op_max),
+            })
         }
     };
 
@@ -272,6 +518,8 @@ pub async fn delete_seed(
 /// Tauri command: Copy a seed with re-randomized parameters.
 /// Per D-01: copy-and-re-randomize is the supported user workflow
 /// for getting a different seed based on similar operation types.
+/// Preserves the source seed's strength_tier; total_frames is None since
+/// copy doesn't know the video context.
 #[tauri::command]
 pub async fn copy_seed(
     state: State<'_, Mutex<AppState>>,
@@ -288,9 +536,14 @@ pub async fn copy_seed(
             .find(|s| s.id == seed_id)
             .ok_or_else(|| format!("Seed not found: {}", seed_id))?;
 
+        let tier = source.strength_tier;
+
         // Re-randomize parameters for each operation but keep the same op_types
-        let new_operations: Vec<Operation> =
-            source.operations.iter().map(|op| generate_operation(&mut rng, op.op_type)).collect();
+        let new_operations: Vec<Operation> = source
+            .operations
+            .iter()
+            .map(|op| generate_operation(&mut rng, op.op_type, tier, None))
+            .collect();
 
         let new_alias = format!("{}_copy_{}", source.alias, chrono::Utc::now().format("%H%M%S"));
 
@@ -299,7 +552,7 @@ pub async fn copy_seed(
             alias: new_alias,
             operations: new_operations,
             created_at: chrono::Utc::now().to_rfc3339(),
-            strength_tier: StrengthTier::default(),
+            strength_tier: tier,
         };
 
         (seed, source.alias.clone())
@@ -326,7 +579,8 @@ pub async fn list_seeds(state: State<'_, Mutex<AppState>>) -> Result<Vec<Seed>, 
 
 /// Write-through persistence: serialize all seeds to tauri-plugin-store.
 /// Follows the exact pattern from ffmpeg.rs lines 185-191.
-fn persist_seeds(app: &AppHandle) -> Result<(), String> {
+/// Made pub for cross-module use (export_seed.rs import command).
+pub fn persist_seeds(app: &AppHandle) -> Result<(), String> {
     let state = app.state::<Mutex<AppState>>();
     let app_state = state.lock().map_err(|e| format!("Lock error: {}", e))?;
 

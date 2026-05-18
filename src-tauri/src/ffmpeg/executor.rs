@@ -62,11 +62,13 @@ pub fn execute_single_file(
     let mut other_args: Vec<String> = Vec::new();
 
     for op in &seed.operations {
-        let (kind, args) = build_filter_args_separated(op)?;
-        match kind {
-            FilterKind::VideoFilter(expr) => vf_exprs.push(expr),
-            FilterKind::AudioFilter(expr) => af_exprs.push(expr),
-            FilterKind::Other(args) => other_args.extend(args),
+        let results = build_filter_args_separated(op, None)?;
+        for (kind, _args) in results {
+            match kind {
+                FilterKind::VideoFilter(expr) => vf_exprs.push(expr),
+                FilterKind::AudioFilter(expr) => af_exprs.push(expr),
+                FilterKind::Other(args) => other_args.extend(args),
+            }
         }
     }
 

@@ -4,6 +4,17 @@
 //! FFmpeg CLI arguments. SEED-04 safety constraints are enforced via clamping.
 
 use crate::models::seed::{Operation, OperationType};
+use std::collections::HashMap;
+
+/// Metadata context passed from executor to filter builders that need current file metadata.
+/// Populated by ffprobe in the executor before building filter args for MetadataSelectiveErase.
+/// All other operations receive None.
+/// Defined here in filters.rs (not probe.rs) so Plan 03 compiles independently in Wave 2.
+/// Plan 05 (executor + probe) references this struct from filters.rs.
+pub struct MetadataContext {
+    /// All global metadata tags from the input file, as key-value pairs.
+    pub fields: HashMap<String, String>,
+}
 
 /// Build FFmpeg filter arguments for mathematical overlay.
 /// SEED-04: opacity <= 0.15, frequency range 20-200.
@@ -61,20 +72,21 @@ pub fn build_pixel_shift_filter(op: &Operation) -> Result<Vec<String>, String> {
     Ok(vec!["-vf".to_string(), format!("{},{}", crop_filter, pad_filter)])
 }
 
-/// Build FFmpeg filter arguments for frame dropping.
-/// SEED-04: interval >= 15.
+/// Build FFmpeg filter arguments for frame dropping via select filter (D-17, D-18, D-19).
+/// Replaces Phase 6's setpts micro-timing jitter approach with true frame decimation.
+/// select='mod(n+1,N)' keeps frames where mod(n+1,N) != 0, dropping 1 frame every N.
+/// D-18: interval 30-50 (drop 1 frame every 30-50 frames).
+/// D-19: tier-driven — Conservative 40-50, Standard 30-45, Aggressive 25-35.
+/// Requires -vsync vfr to prevent ffmpeg from inserting duplicate frames.
+/// Safety: interval clamped to [15, 100].
 pub fn build_frame_drop_filter(op: &Operation) -> Result<Vec<String>, String> {
-    // Micro-timing jitter via setpts — replaces framestep which caused slideshow
-    // (framestep kept 1/N frames; at N=15 → 2fps — 视频变成图片放映).
-    let offset: f64 = op.params["offset"].as_f64().unwrap_or(0.002);
-    let period: u32 = op.params["period"].as_u64().unwrap_or(60) as u32;
+    let interval: u32 = op.params["interval"].as_u64().unwrap_or(40) as u32;
+    let interval = interval.clamp(15, 100);
 
-    // Safety backstop: offset 0.0001..0.01s, period >= 15 frames
-    let offset = offset.clamp(0.0001, 0.01);
-    let period = period.max(15);
-
-    let filter =
-        format!("setpts=PTS+sin(N*2*PI/{period})*{offset}/TB", period = period, offset = offset);
+    // select='mod(n+1,N)': drops frame when mod(n+1, N) == 0
+    // Example N=40: frame 39 -> mod(40,40)=0 -> dropped; frame 40 -> mod(41,40)=1 -> kept
+    // setpts=N/FRAME_RATE/TB resets PTS to maintain smooth playback after frame removal
+    let filter = format!("select='mod(n+1\\,{})',setpts=N/FRAME_RATE/TB", interval);
     Ok(vec!["-vf".to_string(), filter])
 }
 
@@ -292,6 +304,106 @@ pub fn build_trim_edges_filter(op: &Operation) -> Result<Vec<String>, String> {
     };
 
     Ok(vec!["-vf".to_string(), vf, "-af".to_string(), af])
+}
+
+// =========================================================================
+// Phase 7: Metadata Operations (D-09~D-13) — 2 filter builders (MetadataErase stays unchanged)
+// =========================================================================
+
+/// Build FFmpeg arguments for metadata writing (D-10, D-11).
+/// Reads fake field values from the operation's params and outputs -metadata key=value pairs.
+/// Fields: creation_time, title, author, comment, copyright, encoder.
+/// These are CLI-level arguments, not video/audio filters — returned as Other.
+pub fn build_metadata_write_filter(op: &Operation) -> Result<Vec<String>, String> {
+    let fields = [
+        ("creation_time", "creationTime"),
+        ("title", "title"),
+        ("author", "author"),
+        ("comment", "comment"),
+        ("copyright", "copyright"),
+        ("encoder", "encoder"),
+    ];
+    let mut args = Vec::new();
+    for (ffmpeg_key, param_key) in &fields {
+        if let Some(val) = op.params.get(param_key) {
+            if let Some(s) = val.as_str() {
+                if !s.is_empty() {
+                    args.push("-metadata".to_string());
+                    args.push(format!("{}={}", ffmpeg_key, s));
+                }
+            }
+        }
+    }
+    Ok(args)
+}
+
+/// Build FFmpeg arguments for selective metadata erase (D-12).
+/// Requires the file's current metadata to know which fields to keep.
+/// This function receives the erase categories from op.params and uses MetadataContext
+/// (passed via build_filter_args_separated's optional parameter) to determine field mappings.
+///
+/// Strategy: -map_metadata -1 strips all metadata, then selectively write back kept fields.
+/// The kept fields are those NOT in the erased categories.
+/// Category field mappings (from RESEARCH.md):
+///   time: creation_time, date, modify_date, timecode, year
+///   device: make, model, camera, lens, com.android.*, apple.*
+///   description: title, comment, author, copyright, description, album, artist, genre
+///
+/// When MetadataContext is None (no ffprobe data available), falls back to -map_metadata -1
+/// with no writeback (effectively full erase).
+pub fn build_metadata_selective_erase_filter(
+    op: &Operation,
+    metadata_ctx: Option<&MetadataContext>,
+) -> Result<Vec<String>, String> {
+    let mut args = vec!["-map_metadata".to_string(), "-1".to_string()];
+
+    let ctx = match metadata_ctx {
+        Some(c) => c,
+        None => return Ok(args), // No metadata context → full erase only
+    };
+
+    // Read which categories to erase from params
+    let categories: Vec<&str> = op.params["categories"]
+        .as_array()
+        .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect())
+        .unwrap_or_default();
+
+    if categories.is_empty() {
+        return Ok(args); // No categories specified → full erase
+    }
+
+    // Category field mappings
+    let time_fields = ["creation_time", "date", "modify_date", "timecode", "year"];
+    let device_fields = ["make", "model", "camera", "lens"];
+    let description_fields =
+        ["title", "comment", "author", "copyright", "description", "album", "artist", "genre"];
+
+    // Collect all fields to erase
+    let mut erase_fields: Vec<&str> = Vec::new();
+    for cat in &categories {
+        match *cat {
+            "time" => erase_fields.extend_from_slice(&time_fields),
+            "device" => erase_fields.extend_from_slice(&device_fields),
+            "description" => erase_fields.extend_from_slice(&description_fields),
+            _ => {}
+        }
+    }
+
+    // Write back fields NOT in the erase set
+    for (key, value) in &ctx.fields {
+        let key_lower = key.to_lowercase();
+        let should_erase = erase_fields.iter().any(|ef| {
+            key_lower == *ef
+                || key_lower.starts_with("com.android.")
+                || key_lower.starts_with("apple.")
+        });
+        if !should_erase && !value.is_empty() {
+            args.push("-metadata".to_string());
+            args.push(format!("{}={}", key, value));
+        }
+    }
+
+    Ok(args)
 }
 
 // =========================================================================
@@ -544,8 +656,20 @@ pub fn build_filter_args(op: &Operation) -> Result<Vec<String>, String> {
         OperationType::SolidColorOverlay => build_solid_color_overlay_filter(op),
         OperationType::GradientOverlay => build_gradient_overlay_filter(op),
         OperationType::WatermarkBlend => build_watermark_blend_filter(op),
-        // Phase 7: Stub for new variants — replaced by plan 07-02
-        _ => Err(format!("unsupported operation type: {:?}", op.op_type)),
+        // Phase 7: Audio (5)
+        OperationType::AudioResample => build_audio_resample_filter(op),
+        OperationType::AudioVolume => build_audio_volume_filter(op),
+        OperationType::AudioPitch => build_audio_pitch_filter(op),
+        OperationType::AudioEQ => build_audio_eq_filter(op),
+        OperationType::AudioChannel => build_audio_channel_filter(op),
+        // Phase 7: Crop (1)
+        OperationType::Crop => build_crop_filter(op),
+        // Phase 7: Metadata (2)
+        OperationType::MetadataWrite => build_metadata_write_filter(op),
+        OperationType::MetadataSelectiveErase => build_metadata_selective_erase_filter(op, None),
+        // Phase 7: Duration (2)
+        OperationType::VideoSpeed => build_video_speed_filter(op),
+        OperationType::TrimEdges => build_trim_edges_filter(op),
     }
 }
 
@@ -562,102 +686,170 @@ pub enum FilterKind {
 /// Like `build_filter_args` but separates video/audio filter expressions from other args.
 /// This allows the executor to merge multiple -vf / -af into single comma-joined chains
 /// and resolve conflicts between -c copy (remux) and filtering operations.
-pub fn build_filter_args_separated(op: &Operation) -> Result<(FilterKind, Vec<String>), String> {
+///
+/// Phase 7 change: returns `Vec<(FilterKind, Vec<String>)>` instead of a single tuple
+/// to support multi-filter operations (VideoSpeed, TrimEdges) that need both -vf and -af.
+/// Accepts optional MetadataContext for MetadataSelectiveErase's ffprobe data dependency.
+pub fn build_filter_args_separated(
+    op: &Operation,
+    metadata_ctx: Option<&MetadataContext>,
+) -> Result<Vec<(FilterKind, Vec<String>)>, String> {
     match op.op_type {
         OperationType::MathOverlay => {
             let args = build_math_overlay_filter(op)?;
             // args = ["-vf", "geq=..."]
             let expr = args.get(1).cloned().unwrap_or_default();
-            Ok((FilterKind::VideoFilter(expr), args))
+            Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
         OperationType::PixelShift => {
             let args = build_pixel_shift_filter(op)?;
             // args = ["-vf", "crop=...,pad=..."]
             let expr = args.get(1).cloned().unwrap_or_default();
-            Ok((FilterKind::VideoFilter(expr), args))
+            Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
         OperationType::FrameDrop => {
             let args = build_frame_drop_filter(op)?;
-            // args = ["-vf", "setpts=..."]
+            // args = ["-vf", "select='mod(n+1,N)',setpts=..."]
             let expr = args.get(1).cloned().unwrap_or_default();
-            Ok((FilterKind::VideoFilter(expr), args))
+            Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
         OperationType::AudioTweak => {
             let args = build_audio_tweak_filter(op)?;
             // args = ["-af", "volume=..."] or similar
             let expr = args.get(1).cloned().unwrap_or_default();
-            Ok((FilterKind::AudioFilter(expr), args))
+            Ok(vec![(FilterKind::AudioFilter(expr), args)])
         }
         // Phase 6: All color/noise/geometric/blend ops are VideoFilter
         OperationType::HueRotate => {
             let args = build_hue_rotate_filter(op)?;
             let expr = args.get(1).cloned().unwrap_or_default();
-            Ok((FilterKind::VideoFilter(expr), args))
+            Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
         OperationType::SaturationAdjust => {
             let args = build_saturation_adjust_filter(op)?;
             let expr = args.get(1).cloned().unwrap_or_default();
-            Ok((FilterKind::VideoFilter(expr), args))
+            Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
         OperationType::BrightnessContrast => {
             let args = build_brightness_contrast_filter(op)?;
             let expr = args.get(1).cloned().unwrap_or_default();
-            Ok((FilterKind::VideoFilter(expr), args))
+            Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
         OperationType::ColorBalance => {
             let args = build_color_balance_filter(op)?;
             let expr = args.get(1).cloned().unwrap_or_default();
-            Ok((FilterKind::VideoFilter(expr), args))
+            Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
         OperationType::FilmGrain => {
             let args = build_film_grain_filter(op)?;
             let expr = args.get(1).cloned().unwrap_or_default();
-            Ok((FilterKind::VideoFilter(expr), args))
+            Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
         OperationType::GaussianBlur => {
             let args = build_gaussian_blur_filter(op)?;
             let expr = args.get(1).cloned().unwrap_or_default();
-            Ok((FilterKind::VideoFilter(expr), args))
+            Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
         OperationType::Sharpen => {
             let args = build_sharpen_filter(op)?;
             let expr = args.get(1).cloned().unwrap_or_default();
-            Ok((FilterKind::VideoFilter(expr), args))
+            Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
         OperationType::MicroRotate => {
             let args = build_micro_rotate_filter(op)?;
             let expr = args.get(1).cloned().unwrap_or_default();
-            Ok((FilterKind::VideoFilter(expr), args))
+            Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
         OperationType::TinyScale => {
             let args = build_tiny_scale_filter(op)?;
             let expr = args.get(1).cloned().unwrap_or_default();
-            Ok((FilterKind::VideoFilter(expr), args))
+            Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
         OperationType::Flip => {
             let args = build_flip_filter(op)?;
             let expr = args.get(1).cloned().unwrap_or_default();
-            Ok((FilterKind::VideoFilter(expr), args))
+            Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
         OperationType::SolidColorOverlay => {
             let args = build_solid_color_overlay_filter(op)?;
             let expr = args.get(1).cloned().unwrap_or_default();
-            Ok((FilterKind::VideoFilter(expr), args))
+            Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
         OperationType::GradientOverlay => {
             let args = build_gradient_overlay_filter(op)?;
             let expr = args.get(1).cloned().unwrap_or_default();
-            Ok((FilterKind::VideoFilter(expr), args))
+            Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
         OperationType::WatermarkBlend => {
             let args = build_watermark_blend_filter(op)?;
             let expr = args.get(1).cloned().unwrap_or_default();
-            Ok((FilterKind::VideoFilter(expr), args))
+            Ok(vec![(FilterKind::VideoFilter(expr), args)])
+        }
+        // Phase 7: Audio (5) — all return AudioFilter
+        OperationType::AudioResample => {
+            let args = build_audio_resample_filter(op)?;
+            let expr = args.get(1).cloned().unwrap_or_default();
+            Ok(vec![(FilterKind::AudioFilter(expr), args)])
+        }
+        OperationType::AudioVolume => {
+            let args = build_audio_volume_filter(op)?;
+            let expr = args.get(1).cloned().unwrap_or_default();
+            Ok(vec![(FilterKind::AudioFilter(expr), args)])
+        }
+        OperationType::AudioPitch => {
+            let args = build_audio_pitch_filter(op)?;
+            let expr = args.get(1).cloned().unwrap_or_default();
+            Ok(vec![(FilterKind::AudioFilter(expr), args)])
+        }
+        OperationType::AudioEQ => {
+            let args = build_audio_eq_filter(op)?;
+            let expr = args.get(1).cloned().unwrap_or_default();
+            Ok(vec![(FilterKind::AudioFilter(expr), args)])
+        }
+        OperationType::AudioChannel => {
+            let args = build_audio_channel_filter(op)?;
+            let expr = args.get(1).cloned().unwrap_or_default();
+            Ok(vec![(FilterKind::AudioFilter(expr), args)])
+        }
+        // Phase 7: Crop (1) — VideoFilter
+        OperationType::Crop => {
+            let args = build_crop_filter(op)?;
+            let expr = args.get(1).cloned().unwrap_or_default();
+            Ok(vec![(FilterKind::VideoFilter(expr), args)])
+        }
+        // Phase 7: Metadata (2) — Other
+        OperationType::MetadataWrite => {
+            let args = build_metadata_write_filter(op)?;
+            Ok(vec![(FilterKind::Other(args.clone()), args)])
+        }
+        OperationType::MetadataSelectiveErase => {
+            let args = build_metadata_selective_erase_filter(op, metadata_ctx)?;
+            Ok(vec![(FilterKind::Other(args.clone()), args)])
+        }
+        // Phase 7: Duration (2) — VideoSpeed returns BOTH VideoFilter and AudioFilter
+        OperationType::VideoSpeed => {
+            let args = build_video_speed_filter(op)?;
+            // args = ["-vf", "setpts=N*PTS", "-af", "atempo=N"]
+            let vf_expr = args.get(1).cloned().unwrap_or_default();
+            let af_expr = args.get(3).cloned().unwrap_or_default();
+            Ok(vec![
+                (FilterKind::VideoFilter(vf_expr.clone()), vec!["-vf".to_string(), vf_expr]),
+                (FilterKind::AudioFilter(af_expr.clone()), vec!["-af".to_string(), af_expr]),
+            ])
+        }
+        OperationType::TrimEdges => {
+            let args = build_trim_edges_filter(op)?;
+            let vf_expr = args.get(1).cloned().unwrap_or_default();
+            let af_expr = args.get(3).cloned().unwrap_or_default();
+            Ok(vec![
+                (FilterKind::VideoFilter(vf_expr.clone()), vec!["-vf".to_string(), vf_expr]),
+                (FilterKind::AudioFilter(af_expr.clone()), vec!["-af".to_string(), af_expr]),
+            ])
         }
         _ => {
             // GopModify, MetadataErase, Remux — pass through as Other
             let args = build_filter_args(op)?;
-            Ok((FilterKind::Other(args.clone()), args))
+            Ok(vec![(FilterKind::Other(args.clone()), args)])
         }
     }
 }
@@ -718,48 +910,35 @@ mod tests {
     }
 
     #[test]
-    fn test_frame_drop_setpts_jitter() {
-        // Normal params: offset and period within safe range
+    fn test_frame_drop_select_based() {
+        // Normal params: interval within safe range, verify select filter
         let op = make_op(
             OperationType::FrameDrop,
             serde_json::json!({
-                "offset": 0.003,
-                "period": 45
+                "interval": 45
             }),
         );
         let args = build_frame_drop_filter(&op).unwrap();
-        assert!(args[1].contains("setpts="), "Should use setpts filter, got: {}", args[1]);
-        assert!(args[1].contains("sin"), "Should include sin() oscillation");
-        assert!(args[1].contains("0.003"), "Should use the passed offset value");
-        assert!(args[1].contains("45"), "Should use the passed period value");
+        assert!(args[1].contains("select='mod(n+1"), "Should use select filter, got: {}", args[1]);
+        assert!(
+            args[1].contains("setpts=N/FRAME_RATE/TB"),
+            "Should include setpts for PTS reset, got: {}",
+            args[1]
+        );
+        assert!(args[1].contains("45"), "Should use the passed interval value");
     }
 
     #[test]
-    fn test_frame_drop_clamps_offset_too_small() {
-        // offset below minimum → clamped to 0.0001
+    fn test_frame_drop_clamps_interval() {
+        // interval below minimum → clamped to 15
         let op = make_op(
             OperationType::FrameDrop,
             serde_json::json!({
-                "offset": 0.0,
-                "period": 30
+                "interval": 2
             }),
         );
         let args = build_frame_drop_filter(&op).unwrap();
-        assert!(args[1].contains("0.0001"), "Should clamp offset up to 0.0001, got: {}", args[1]);
-    }
-
-    #[test]
-    fn test_frame_drop_clamps_period_too_low() {
-        // period below minimum → clamped to 15
-        let op = make_op(
-            OperationType::FrameDrop,
-            serde_json::json!({
-                "offset": 0.002,
-                "period": 2
-            }),
-        );
-        let args = build_frame_drop_filter(&op).unwrap();
-        assert!(args[1].contains("15"), "Should clamp period to >=15, got: {}", args[1]);
+        assert!(args[1].contains("15"), "Should clamp interval to >=15, got: {}", args[1]);
     }
 
     #[test]
@@ -998,20 +1177,22 @@ mod tests {
             OperationType::HueRotate,
             serde_json::json!({"hueAngle": 30.0, "saturation": 1.0}),
         );
-        let (kind, _args) = build_filter_args_separated(&op).unwrap();
+        let result = build_filter_args_separated(&op, None).unwrap();
+        let (kind, _args) = &result[0];
         match kind {
             FilterKind::VideoFilter(expr) => assert!(expr.contains("hue=h=30")),
-            other => panic!("Expected VideoFilter, got {:?}", std::mem::discriminant(&other)),
+            other => panic!("Expected VideoFilter, got {:?}", std::mem::discriminant(other)),
         }
     }
 
     #[test]
     fn test_separated_gop_modify_returns_other() {
         let op = make_op(OperationType::GopModify, serde_json::json!({"gopSize": 60}));
-        let (kind, _args) = build_filter_args_separated(&op).unwrap();
+        let result = build_filter_args_separated(&op, None).unwrap();
+        let (kind, _args) = &result[0];
         match kind {
             FilterKind::Other(_) => {} // expected
-            other => panic!("Expected FilterKind::Other, got {:?}", std::mem::discriminant(&other)),
+            other => panic!("Expected FilterKind::Other, got {:?}", std::mem::discriminant(other)),
         }
     }
 
@@ -1108,7 +1289,7 @@ mod tests {
                     "type": "linear",
                 }),
             );
-            let result = build_filter_args_separated(&op);
+            let result = build_filter_args_separated(&op, None);
             assert!(result.is_ok(), "Failed for {:?}: {:?}", t, result.err());
         }
     }

@@ -91,7 +91,7 @@ mod tests {
             }],
             created_at: "2026-01-01T00:00:00Z".to_string(),
             strength_tier: StrengthTier::Standard,
-            schema_version: 0,
+            schema_version: 3,
         }
     }
 
@@ -112,7 +112,7 @@ mod tests {
             operations: ops,
             created_at: "2026-01-01T00:00:00Z".to_string(),
             strength_tier: StrengthTier::Standard,
-            schema_version: 0,
+            schema_version: 3,
         }
     }
 

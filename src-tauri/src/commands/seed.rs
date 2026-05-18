@@ -7,40 +7,55 @@ use crate::models::seed::{Operation, OperationType, Seed, StrengthTier};
 use crate::state::AppState;
 
 /// Select an operation type using weighted random selection (D-17).
-/// Weight distribution: Math overlay ~15%, Color processing ~20%, Noise texture ~15%,
-/// Geometric fine-tuning ~15%, Blend overlay ~10%, Remaining old categories ~25%.
-/// Uses 1000-bucket cumulative probability threshold for finer granularity.
+/// Phase 7: 29 types in pool (30 total - AudioTweak deprecated).
+/// Weight distribution: Math overlay ~12%, Color ~16%, Noise ~12%, Geometric ~12%,
+/// Blend ~9%, Audio (new) ~12%, Old categories ~18%, Duration (new) ~5%,
+/// Crop/FrameDrop ~2% each (pre-injected defaults, low pool weight).
+/// Uses 1000-bucket cumulative probability threshold.
 fn pick_operation_type(rng: &mut impl Rng) -> OperationType {
     let roll: u32 = rng.random_range(1..=1000);
     match roll {
-        // Math overlay (existing 3): ~15% = 150 buckets, ~50 each
-        1..=50 => OperationType::MathOverlay,
-        51..=100 => OperationType::MathOverlay,
-        101..=150 => OperationType::MathOverlay,
-        // Color processing (4): ~20% = 200 buckets, ~50 each
-        151..=200 => OperationType::HueRotate,
-        201..=250 => OperationType::SaturationAdjust,
-        251..=300 => OperationType::BrightnessContrast,
-        301..=350 => OperationType::ColorBalance,
-        // Noise texture (3): ~15% = 150 buckets, ~50 each
-        351..=400 => OperationType::FilmGrain,
-        401..=450 => OperationType::GaussianBlur,
-        451..=500 => OperationType::Sharpen,
-        // Geometric fine-tuning (3): ~15% = 150 buckets, ~50 each
-        501..=550 => OperationType::MicroRotate,
-        551..=600 => OperationType::TinyScale,
-        601..=650 => OperationType::Flip,
-        // Blend overlay (3): ~10% = 100 buckets, ~33 each
-        651..=683 => OperationType::SolidColorOverlay,
-        684..=716 => OperationType::GradientOverlay,
-        717..=750 => OperationType::WatermarkBlend,
-        // Remaining old categories (6): ~25% = 250 buckets, ~42 each
-        751..=792 => OperationType::PixelShift,
-        793..=834 => OperationType::FrameDrop,
-        835..=876 => OperationType::GopModify,
-        877..=918 => OperationType::MetadataErase,
-        919..=959 => OperationType::AudioTweak,
-        960..=1000 => OperationType::Remux,
+        // Math overlay (3): ~12% = 120 buckets, ~40 each
+        1..=40 => OperationType::MathOverlay,
+        41..=80 => OperationType::MathOverlay,
+        81..=120 => OperationType::MathOverlay,
+        // Color processing (4): ~16% = 160 buckets, ~40 each
+        121..=160 => OperationType::HueRotate,
+        161..=200 => OperationType::SaturationAdjust,
+        201..=240 => OperationType::BrightnessContrast,
+        241..=280 => OperationType::ColorBalance,
+        // Noise texture (3): ~12% = 120 buckets, ~40 each
+        281..=320 => OperationType::FilmGrain,
+        321..=360 => OperationType::GaussianBlur,
+        361..=400 => OperationType::Sharpen,
+        // Geometric fine-tuning (3): ~12% = 120 buckets, ~40 each
+        401..=440 => OperationType::MicroRotate,
+        441..=480 => OperationType::TinyScale,
+        481..=520 => OperationType::Flip,
+        // Blend overlay (3): ~9% = 90 buckets, ~30 each
+        521..=550 => OperationType::SolidColorOverlay,
+        551..=580 => OperationType::GradientOverlay,
+        581..=610 => OperationType::WatermarkBlend,
+        // Old categories (5, excluding AudioTweak): ~19% = 190 buckets, ~38 each
+        611..=648 => OperationType::PixelShift,
+        649..=686 => OperationType::GopModify,
+        687..=724 => OperationType::MetadataErase,
+        725..=762 => OperationType::Remux,
+        // Phase 7: Audio (5): ~12% = 120 buckets, ~24 each
+        763..=786 => OperationType::AudioResample,
+        787..=810 => OperationType::AudioVolume,
+        811..=834 => OperationType::AudioPitch,
+        835..=858 => OperationType::AudioEQ,
+        859..=882 => OperationType::AudioChannel,
+        // Phase 7: Metadata new (2): ~4% = 40 buckets, ~20 each
+        883..=902 => OperationType::MetadataWrite,
+        903..=922 => OperationType::MetadataSelectiveErase,
+        // Phase 7: Duration (2): ~5% = 50 buckets, ~25 each
+        923..=947 => OperationType::VideoSpeed,
+        948..=972 => OperationType::TrimEdges,
+        // Default ops (2): ~3% = 28 buckets — low weight, pre-injected but can be picked again
+        973..=986 => OperationType::Crop,
+        987..=1000 => OperationType::FrameDrop,
         _ => unreachable!("roll is 1..=1000"),
     }
 }
@@ -109,8 +124,21 @@ pub async fn generate_seed(
         StrengthTier::Aggressive => (8, 12),
     };
     let step_count = rng.random_range(min_steps..=max_steps);
-    let mut operations = Vec::with_capacity(step_count);
+    // +2 capacity for default operations (Crop + FrameDrop) per D-04, D-19
+    let mut operations = Vec::with_capacity(step_count + 2);
 
+    // --- Phase 7: Pre-inject default operations (D-04, D-19) ---
+    // Crop and FrameDrop are guaranteed in every seed. They do NOT count toward step_count.
+    // They can also be randomly picked in the pool for a second instance (dual-guarantee per D-04).
+    operations.push(generate_operation(&mut rng, OperationType::Crop, strength_tier, total_frames));
+    operations.push(generate_operation(
+        &mut rng,
+        OperationType::FrameDrop,
+        strength_tier,
+        total_frames,
+    ));
+
+    // Random loop: step_count operations from weighted pool
     for _ in 0..step_count {
         let op_type = pick_operation_type(&mut rng);
         let op = generate_operation(&mut rng, op_type, strength_tier, total_frames);
@@ -248,21 +276,17 @@ fn generate_operation(
             let dy = rng.random_range(min..=max);
             serde_json::json!({ "dx": dx, "dy": dy })
         }
-        // ── FrameDrop: setpts micro-timing jitter (D-01, D-02, D-04) ────
-        // Replaces framestep decimation which caused slideshow (画面变成图片放映).
-        // setpts sin() oscillation alters frame timestamps imperceptibly
-        // while preserving all frames for smooth playback.
+        // ── Phase 7: FrameDrop — select-based, default operation (D-17, D-18, D-19) ──
+        // REPLACES the old FrameDrop arm (setpts jitter: offset/period params).
+        // Uses 'select' filter interval: drop 1 frame every N frames.
+        // Tier-driven per D-19: Conservative 40-50, Standard 30-45, Aggressive 25-35.
         OperationType::FrameDrop => {
-            let (offset_min, offset_max) = match strength_tier {
-                StrengthTier::Conservative => (0.0005, 0.001),
-                StrengthTier::Standard => (0.001, 0.003),
-                StrengthTier::Aggressive => (0.003, 0.006),
+            let (int_min, int_max) = match strength_tier {
+                StrengthTier::Conservative => (40u32, 50u32),
+                StrengthTier::Standard => (30u32, 45u32),
+                StrengthTier::Aggressive => (25u32, 35u32),
             };
-            let period = rng.random_range(30..=120);
-            serde_json::json!({
-                "offset": rng.random_range(offset_min..=offset_max),
-                "period": period,
-            })
+            serde_json::json!({ "interval": rng.random_range(int_min..=int_max) })
         }
         // ── GOP modify (existing) ───────────────────────────────────────────
         OperationType::GopModify => {
@@ -477,7 +501,170 @@ fn generate_operation(
                 "opacity": rng.random_range(op_min..=op_max),
             })
         }
-        // Phase 7: Stub for new variants — replaced by plan 07-02
+        // ── Phase 7: Audio Resample (D-03) ─────────────────────────────────
+        OperationType::AudioResample => {
+            let (rate_min, rate_max) = match strength_tier {
+                StrengthTier::Conservative => (32000u32, 48000u32),
+                StrengthTier::Standard => (24000u32, 48000u32),
+                StrengthTier::Aggressive => (22050u32, 48000u32),
+            };
+            serde_json::json!({ "sampleRate": rng.random_range(rate_min..=rate_max) })
+        }
+        // ── Phase 7: Audio Volume (D-02) ──────────────────────────────────
+        OperationType::AudioVolume => {
+            let (db_min, db_max) = match strength_tier {
+                StrengthTier::Conservative => (-1.0, 1.0),
+                StrengthTier::Standard => (-2.0, 2.0),
+                StrengthTier::Aggressive => (-3.0, 3.0),
+            };
+            serde_json::json!({ "db": rng.random_range(db_min..=db_max) })
+        }
+        // ── Phase 7: Audio Pitch via asetrate+atempo (D-02) ───────────────
+        OperationType::AudioPitch => {
+            // Pitch factor: +/-2 semitones = 2^(semitones/12)
+            // +2 = 2^(2/12)  1.1225, -2 = 2^(-2/12)  0.8909
+            let (pf_min, pf_max) = match strength_tier {
+                StrengthTier::Conservative => (0.98, 1.02),
+                StrengthTier::Standard => (0.94, 1.06),
+                StrengthTier::Aggressive => (0.8909, 1.1225),
+            };
+            let original_rate: u32 = 48000; // Standard sample rate for output
+            serde_json::json!({
+                "pitchFactor": rng.random_range(pf_min..=pf_max),
+                "originalRate": original_rate,
+            })
+        }
+        // ── Phase 7: Audio EQ (D-02) ──────────────────────────────────────
+        OperationType::AudioEQ => {
+            let (gain_min, gain_max) = match strength_tier {
+                StrengthTier::Conservative => (-2.0, 2.0),
+                StrengthTier::Standard => (-4.0, 4.0),
+                StrengthTier::Aggressive => (-6.0, 6.0),
+            };
+            serde_json::json!({
+                "frequency": rng.random_range(100u32..=10000u32),
+                "gain": rng.random_range(gain_min..=gain_max),
+                "width": rng.random_range(50u32..=500u32),
+            })
+        }
+        // ── Phase 7: Audio Channel (D-02) ─────────────────────────────────
+        OperationType::AudioChannel => {
+            let mode = match rng.random_range(0..3) {
+                0 => "swap",
+                1 => "mono",
+                _ => "stereo",
+            };
+            serde_json::json!({ "mode": mode })
+        }
+        // ── Phase 7: Crop — default operation (D-04, D-05, D-06, D-07) ───
+        OperationType::Crop => {
+            let (pct_min, pct_max) = match strength_tier {
+                StrengthTier::Conservative => (0.5, 1.5),
+                StrengthTier::Standard => (1.0, 2.5),
+                StrengthTier::Aggressive => (2.0, 3.5),
+            };
+            serde_json::json!({
+                "leftPct": rng.random_range(pct_min..=pct_max),
+                "rightPct": rng.random_range(pct_min..=pct_max),
+                "topPct": rng.random_range(pct_min..=pct_max),
+                "bottomPct": rng.random_range(pct_min..=pct_max),
+            })
+        }
+        // ── Phase 7: Metadata Write (D-09, D-10, D-11, D-13) ─────────────
+        // Does NOT follow strength tiers per D-13.
+        OperationType::MetadataWrite => {
+            // Fake metadata word lists
+            let titles = [
+                "Untitled Project",
+                "My Video",
+                "Footage",
+                "Recording",
+                "Clip",
+                "Export",
+                "Draft",
+                "Final",
+                "Sequence",
+                "Scene",
+            ];
+            let authors = [
+                "admin",
+                "user",
+                "editor",
+                "creator",
+                "owner",
+                "default",
+                "Guest",
+                "User1",
+                "operator",
+                "anonymous",
+            ];
+            let comments =
+                ["", "", "", "Edited", "Processed", "Draft version", "Auto-generated", ""];
+            let encoders = ["Sandwich 0.1.0", "Lavf 60.16.100", "Sandwich 0.1.0", "Sandwich 0.1.0"]; // Bias toward Sandwich
+
+            // creation_time: +/-30 days random offset from now (D-11)
+            let offset_days: i64 = rng.random_range(-30i64..=30i64);
+            let fake_time = chrono::Utc::now() + chrono::Duration::days(offset_days);
+            let creation_time = fake_time.format("%Y-%m-%dT%H:%M:%S").to_string();
+
+            let title = titles[rng.random_range(0..titles.len())];
+            let author = authors[rng.random_range(0..authors.len())];
+            let comment = comments[rng.random_range(0..comments.len())];
+            let encoder = encoders[rng.random_range(0..encoders.len())];
+            let copyright = format!("Copyright {}", chrono::Utc::now().format("%Y"));
+
+            serde_json::json!({
+                "creationTime": creation_time,
+                "title": title,
+                "author": author,
+                "comment": comment,
+                "copyright": copyright,
+                "encoder": encoder,
+            })
+        }
+        // ── Phase 7: Metadata Selective Erase (D-09, D-12, D-13) ──────────
+        // Does NOT follow strength tiers per D-13.
+        // Randomly selects 1-3 categories to erase: time, device, description.
+        OperationType::MetadataSelectiveErase => {
+            let all_categories = ["time", "device", "description"];
+            let n_categories: usize = rng.random_range(1..=3);
+            // Shuffle and take first n
+            let mut indices: Vec<usize> = (0..3).collect();
+            for i in (1..indices.len()).rev() {
+                let j = rng.random_range(0..=i);
+                indices.swap(i, j);
+            }
+            let categories: Vec<&str> =
+                indices.iter().take(n_categories).map(|&i| all_categories[i]).collect();
+            serde_json::json!({ "categories": categories })
+        }
+        // ── Phase 7: Video Speed (D-14, D-15) ─────────────────────────────
+        OperationType::VideoSpeed => {
+            let (spd_min, spd_max) = match strength_tier {
+                StrengthTier::Conservative => (0.98, 1.02),
+                StrengthTier::Standard => (0.96, 1.04),
+                StrengthTier::Aggressive => (0.95, 1.05),
+            };
+            serde_json::json!({ "speedFactor": rng.random_range(spd_min..=spd_max) })
+        }
+        // ── Phase 7: Trim Edges (D-14, D-16) ──────────────────────────────
+        OperationType::TrimEdges => {
+            let (trim_min, trim_max) = match strength_tier {
+                StrengthTier::Conservative => (1u32, 10u32),
+                StrengthTier::Standard => (5u32, 20u32),
+                StrengthTier::Aggressive => (10u32, 30u32),
+            };
+            let mode = match rng.random_range(0..3) {
+                0 => "head",
+                1 => "tail",
+                _ => "both",
+            };
+            serde_json::json!({
+                "mode": mode,
+                "trimFrames": rng.random_range(trim_min..=trim_max),
+            })
+        }
+        // Phase 7: Stub for future variants not yet implemented
         _ => serde_json::json!({}),
     };
 
@@ -644,7 +831,6 @@ mod tests {
             OperationType::SolidColorOverlay => 17,
             OperationType::GradientOverlay => 18,
             OperationType::WatermarkBlend => 19,
-            // Phase 7 (10 new): 20-29
             OperationType::AudioResample => 20,
             OperationType::AudioVolume => 21,
             OperationType::AudioPitch => 22,
@@ -670,17 +856,17 @@ mod tests {
 
     // ─── TEST 4: pick_operation_type distribution ───────────────────────────
     #[test]
-    fn pick_operation_type_covers_all_20_types() {
+    fn pick_operation_type_covers_all_29_pool_types() {
         let mut rng = rand::rng();
-        let mut seen_flags: [bool; 20] = [false; 20];
+        let mut seen_flags: [bool; 30] = [false; 30];
         for _ in 0..10_000 {
             let t = pick_operation_type(&mut rng);
             seen_flags[variant_index(t)] = true;
         }
         let seen_count = seen_flags.iter().filter(|&&f| f).count();
         assert_eq!(
-            seen_count, 20,
-            "pick_operation_type must produce all 20 OperationType variants"
+            seen_count, 29,
+            "pick_operation_type must produce all 29 pool OperationType variants (excluding deprecated AudioTweak)"
         );
     }
 
@@ -702,9 +888,9 @@ mod tests {
         assert!(op.start_frame < 1000, "start_frame should be within bounds");
     }
 
-    // ─── TEST 6: FrameDrop uses setpts micro-jitter, not framestep ────────
+    // ─── TEST 6: FrameDrop uses select-based decimation, not setpts jitter ──
     #[test]
-    fn generate_operation_frame_drop_uses_setpts_jitter() {
+    fn generate_operation_frame_drop_uses_select_filter() {
         let mut rng = rand::rng();
         let op = generate_operation(
             &mut rng,
@@ -712,26 +898,17 @@ mod tests {
             StrengthTier::Standard,
             Some(5000),
         );
-        // FrameDrop still has time-slice behavior for apply-to range
+        // FrameDrop now uses select filter with interval parameter (D-17, D-18)
+        // Standard tier: interval 30-45 (D-19)
+        let interval = op.params["interval"].as_u64().unwrap();
         assert!(
-            op.start_frame < 300,
-            "FrameDrop start_frame should be in 0..300, got {}",
-            op.start_frame
+            interval >= 30 && interval <= 45,
+            "Standard tier FrameDrop interval should be 30-45, got {}",
+            interval
         );
-        assert!(
-            op.duration_frames >= 60 && op.duration_frames < 600,
-            "FrameDrop duration_frames should be in 60..600, got {}",
-            op.duration_frames
-        );
-        // Verify setpts params (not framestep interval)
-        let offset = op.params["offset"].as_f64().unwrap();
-        assert!(
-            offset >= 0.001 && offset <= 0.003,
-            "Standard tier offset should be 0.001..0.003, got {}",
-            offset
-        );
-        let period = op.params["period"].as_u64().unwrap();
-        assert!(period >= 30 && period <= 120, "Period should be 30..120, got {}", period);
+        // Verify no setpts jitter params (offset, period removed)
+        assert!(op.params.get("offset").is_none(), "FrameDrop should NOT have offset param");
+        assert!(op.params.get("period").is_none(), "FrameDrop should NOT have period param");
     }
 
     // ─── TEST 3: Coverage validation ────────────────────────────────────────
@@ -828,5 +1005,95 @@ mod tests {
         );
         assert!(op.params.get("hueAngle").is_some(), "HueRotate should have hueAngle param");
         assert!(op.params.get("saturation").is_some(), "HueRotate should have saturation param");
+    }
+
+    #[test]
+    fn generate_operation_crop_per_side_asymmetric() {
+        let mut rng = rand::rng();
+        let op =
+            generate_operation(&mut rng, OperationType::Crop, StrengthTier::Standard, Some(1000));
+        let left = op.params["leftPct"].as_f64().unwrap();
+        let right = op.params["rightPct"].as_f64().unwrap();
+        let top = op.params["topPct"].as_f64().unwrap();
+        let bottom = op.params["bottomPct"].as_f64().unwrap();
+        // Standard tier: 1.0-2.5% per side (D-07)
+        assert!(left >= 1.0 && left <= 2.5, "Standard leftPct should be 1.0-2.5, got {}", left);
+        assert!(right >= 1.0 && right <= 2.5, "Standard rightPct should be 1.0-2.5, got {}", right);
+        assert!(top >= 1.0 && top <= 2.5, "Standard topPct should be 1.0-2.5, got {}", top);
+        assert!(
+            bottom >= 1.0 && bottom <= 2.5,
+            "Standard bottomPct should be 1.0-2.5, got {}",
+            bottom
+        );
+    }
+
+    #[test]
+    fn generate_operation_audio_volume_tier_ranges() {
+        let mut rng = rand::rng();
+        let cons = generate_operation(
+            &mut rng,
+            OperationType::AudioVolume,
+            StrengthTier::Conservative,
+            Some(1000),
+        );
+        let db_c = cons.params["db"].as_f64().unwrap();
+        assert!(db_c >= -1.0 && db_c <= 1.0, "Conservative db should be -1..1, got {}", db_c);
+
+        let mut rng2 = rand::rng();
+        let agg = generate_operation(
+            &mut rng2,
+            OperationType::AudioVolume,
+            StrengthTier::Aggressive,
+            Some(1000),
+        );
+        let db_a = agg.params["db"].as_f64().unwrap();
+        assert!(db_a >= -3.0 && db_a <= 3.0, "Aggressive db should be -3..3, got {}", db_a);
+    }
+
+    #[test]
+    fn generate_operation_video_speed_tier_ranges() {
+        let mut rng = rand::rng();
+        let cons = generate_operation(
+            &mut rng,
+            OperationType::VideoSpeed,
+            StrengthTier::Conservative,
+            Some(1000),
+        );
+        let spd = cons.params["speedFactor"].as_f64().unwrap();
+        assert!(spd >= 0.98 && spd <= 1.02, "Conservative speed should be 0.98-1.02, got {}", spd);
+
+        let mut rng2 = rand::rng();
+        let agg = generate_operation(
+            &mut rng2,
+            OperationType::VideoSpeed,
+            StrengthTier::Aggressive,
+            Some(1000),
+        );
+        let spd2 = agg.params["speedFactor"].as_f64().unwrap();
+        assert!(spd2 >= 0.95 && spd2 <= 1.05, "Aggressive speed should be 0.95-1.05, got {}", spd2);
+    }
+
+    #[test]
+    fn generate_operation_metadata_no_tier() {
+        // D-13: Metadata operations do NOT follow strength tiers
+        let mut rng = rand::rng();
+        let cons = generate_operation(
+            &mut rng,
+            OperationType::MetadataWrite,
+            StrengthTier::Conservative,
+            Some(1000),
+        );
+        let mut rng2 = rand::rng();
+        let agg = generate_operation(
+            &mut rng2,
+            OperationType::MetadataWrite,
+            StrengthTier::Aggressive,
+            Some(1000),
+        );
+        // Both should have the same set of fields
+        assert!(cons.params.get("creationTime").is_some());
+        assert!(agg.params.get("creationTime").is_some());
+        assert!(cons.params.get("title").is_some());
+        assert!(agg.params.get("title").is_some());
     }
 }

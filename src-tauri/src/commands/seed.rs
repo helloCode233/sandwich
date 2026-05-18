@@ -122,8 +122,21 @@ pub async fn generate_seed(
         StrengthTier::Aggressive => (8, 12),
     };
     let step_count = rng.random_range(min_steps..=max_steps);
-    let mut operations = Vec::with_capacity(step_count);
+    // +2 capacity for default operations (Crop + FrameDrop) per D-04, D-19
+    let mut operations = Vec::with_capacity(step_count + 2);
 
+    // --- Phase 7: Pre-inject default operations (D-04, D-19) ---
+    // Crop and FrameDrop are guaranteed in every seed. They do NOT count toward step_count.
+    // They can also be randomly picked in the pool for a second instance (dual-guarantee per D-04).
+    operations.push(generate_operation(&mut rng, OperationType::Crop, strength_tier, total_frames));
+    operations.push(generate_operation(
+        &mut rng,
+        OperationType::FrameDrop,
+        strength_tier,
+        total_frames,
+    ));
+
+    // Random loop: step_count operations from weighted pool
     for _ in 0..step_count {
         let op_type = pick_operation_type(&mut rng);
         let op = generate_operation(&mut rng, op_type, strength_tier, total_frames);
@@ -187,7 +200,7 @@ pub async fn generate_seed(
 
 /// Generate random frame range for an operation (D-09).
 /// For FrameDrop: retains time-slice behavior (start 0..300, dur 60..600)
-/// — applies setpts micro-jitter to this segment only.
+/// — uses select-based frame decimation (interval param), not setpts jitter.
 /// For all other ops: random start within video bounds, random duration covering at least 1 frame.
 fn random_frame_range(rng: &mut impl Rng, op_type: OperationType, total_frames: u32) -> (u32, u32) {
     match op_type {

@@ -808,7 +808,7 @@ mod tests {
     use rand::SeedableRng;
     use rand::rngs::StdRng;
 
-    /// Map OperationType to a unique index 0..19 for tracking purposes.
+    /// Map OperationType to a unique index 0..29 for tracking purposes.
     fn variant_index(t: OperationType) -> usize {
         match t {
             OperationType::MathOverlay => 0,
@@ -831,6 +831,16 @@ mod tests {
             OperationType::SolidColorOverlay => 17,
             OperationType::GradientOverlay => 18,
             OperationType::WatermarkBlend => 19,
+            OperationType::AudioResample => 20,
+            OperationType::AudioVolume => 21,
+            OperationType::AudioPitch => 22,
+            OperationType::AudioEQ => 23,
+            OperationType::AudioChannel => 24,
+            OperationType::Crop => 25,
+            OperationType::MetadataWrite => 26,
+            OperationType::MetadataSelectiveErase => 27,
+            OperationType::VideoSpeed => 28,
+            OperationType::TrimEdges => 29,
         }
     }
 
@@ -846,17 +856,17 @@ mod tests {
 
     // ─── TEST 4: pick_operation_type distribution ───────────────────────────
     #[test]
-    fn pick_operation_type_covers_all_20_types() {
+    fn pick_operation_type_covers_all_29_pool_types() {
         let mut rng = rand::rng();
-        let mut seen_flags: [bool; 20] = [false; 20];
+        let mut seen_flags: [bool; 30] = [false; 30];
         for _ in 0..10_000 {
             let t = pick_operation_type(&mut rng);
             seen_flags[variant_index(t)] = true;
         }
         let seen_count = seen_flags.iter().filter(|&&f| f).count();
         assert_eq!(
-            seen_count, 20,
-            "pick_operation_type must produce all 20 OperationType variants"
+            seen_count, 29,
+            "pick_operation_type must produce all 29 pool OperationType variants (excluding deprecated AudioTweak)"
         );
     }
 
@@ -878,9 +888,9 @@ mod tests {
         assert!(op.start_frame < 1000, "start_frame should be within bounds");
     }
 
-    // ─── TEST 6: FrameDrop uses setpts micro-jitter, not framestep ────────
+    // ─── TEST 6: FrameDrop uses select-based decimation, not setpts jitter ──
     #[test]
-    fn generate_operation_frame_drop_uses_setpts_jitter() {
+    fn generate_operation_frame_drop_uses_select_filter() {
         let mut rng = rand::rng();
         let op = generate_operation(
             &mut rng,
@@ -888,26 +898,17 @@ mod tests {
             StrengthTier::Standard,
             Some(5000),
         );
-        // FrameDrop still has time-slice behavior for apply-to range
+        // FrameDrop now uses select filter with interval parameter (D-17, D-18)
+        // Standard tier: interval 30-45 (D-19)
+        let interval = op.params["interval"].as_u64().unwrap();
         assert!(
-            op.start_frame < 300,
-            "FrameDrop start_frame should be in 0..300, got {}",
-            op.start_frame
+            interval >= 30 && interval <= 45,
+            "Standard tier FrameDrop interval should be 30-45, got {}",
+            interval
         );
-        assert!(
-            op.duration_frames >= 60 && op.duration_frames < 600,
-            "FrameDrop duration_frames should be in 60..600, got {}",
-            op.duration_frames
-        );
-        // Verify setpts params (not framestep interval)
-        let offset = op.params["offset"].as_f64().unwrap();
-        assert!(
-            offset >= 0.001 && offset <= 0.003,
-            "Standard tier offset should be 0.001..0.003, got {}",
-            offset
-        );
-        let period = op.params["period"].as_u64().unwrap();
-        assert!(period >= 30 && period <= 120, "Period should be 30..120, got {}", period);
+        // Verify no setpts jitter params (offset, period removed)
+        assert!(op.params.get("offset").is_none(), "FrameDrop should NOT have offset param");
+        assert!(op.params.get("period").is_none(), "FrameDrop should NOT have period param");
     }
 
     // ─── TEST 3: Coverage validation ────────────────────────────────────────
@@ -1004,5 +1005,95 @@ mod tests {
         );
         assert!(op.params.get("hueAngle").is_some(), "HueRotate should have hueAngle param");
         assert!(op.params.get("saturation").is_some(), "HueRotate should have saturation param");
+    }
+
+    #[test]
+    fn generate_operation_crop_per_side_asymmetric() {
+        let mut rng = rand::rng();
+        let op =
+            generate_operation(&mut rng, OperationType::Crop, StrengthTier::Standard, Some(1000));
+        let left = op.params["leftPct"].as_f64().unwrap();
+        let right = op.params["rightPct"].as_f64().unwrap();
+        let top = op.params["topPct"].as_f64().unwrap();
+        let bottom = op.params["bottomPct"].as_f64().unwrap();
+        // Standard tier: 1.0-2.5% per side (D-07)
+        assert!(left >= 1.0 && left <= 2.5, "Standard leftPct should be 1.0-2.5, got {}", left);
+        assert!(right >= 1.0 && right <= 2.5, "Standard rightPct should be 1.0-2.5, got {}", right);
+        assert!(top >= 1.0 && top <= 2.5, "Standard topPct should be 1.0-2.5, got {}", top);
+        assert!(
+            bottom >= 1.0 && bottom <= 2.5,
+            "Standard bottomPct should be 1.0-2.5, got {}",
+            bottom
+        );
+    }
+
+    #[test]
+    fn generate_operation_audio_volume_tier_ranges() {
+        let mut rng = rand::rng();
+        let cons = generate_operation(
+            &mut rng,
+            OperationType::AudioVolume,
+            StrengthTier::Conservative,
+            Some(1000),
+        );
+        let db_c = cons.params["db"].as_f64().unwrap();
+        assert!(db_c >= -1.0 && db_c <= 1.0, "Conservative db should be -1..1, got {}", db_c);
+
+        let mut rng2 = rand::rng();
+        let agg = generate_operation(
+            &mut rng2,
+            OperationType::AudioVolume,
+            StrengthTier::Aggressive,
+            Some(1000),
+        );
+        let db_a = agg.params["db"].as_f64().unwrap();
+        assert!(db_a >= -3.0 && db_a <= 3.0, "Aggressive db should be -3..3, got {}", db_a);
+    }
+
+    #[test]
+    fn generate_operation_video_speed_tier_ranges() {
+        let mut rng = rand::rng();
+        let cons = generate_operation(
+            &mut rng,
+            OperationType::VideoSpeed,
+            StrengthTier::Conservative,
+            Some(1000),
+        );
+        let spd = cons.params["speedFactor"].as_f64().unwrap();
+        assert!(spd >= 0.98 && spd <= 1.02, "Conservative speed should be 0.98-1.02, got {}", spd);
+
+        let mut rng2 = rand::rng();
+        let agg = generate_operation(
+            &mut rng2,
+            OperationType::VideoSpeed,
+            StrengthTier::Aggressive,
+            Some(1000),
+        );
+        let spd2 = agg.params["speedFactor"].as_f64().unwrap();
+        assert!(spd2 >= 0.95 && spd2 <= 1.05, "Aggressive speed should be 0.95-1.05, got {}", spd2);
+    }
+
+    #[test]
+    fn generate_operation_metadata_no_tier() {
+        // D-13: Metadata operations do NOT follow strength tiers
+        let mut rng = rand::rng();
+        let cons = generate_operation(
+            &mut rng,
+            OperationType::MetadataWrite,
+            StrengthTier::Conservative,
+            Some(1000),
+        );
+        let mut rng2 = rand::rng();
+        let agg = generate_operation(
+            &mut rng2,
+            OperationType::MetadataWrite,
+            StrengthTier::Aggressive,
+            Some(1000),
+        );
+        // Both should have the same set of fields
+        assert!(cons.params.get("creationTime").is_some());
+        assert!(agg.params.get("creationTime").is_some());
+        assert!(cons.params.get("title").is_some());
+        assert!(agg.params.get("title").is_some());
     }
 }

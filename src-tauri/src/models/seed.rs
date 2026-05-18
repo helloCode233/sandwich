@@ -4,9 +4,9 @@ use serde::{Deserialize, Serialize};
 mod tests {
     use super::*;
 
-    /// Verify OperationType has exactly 20 variants (7 existing + 13 new in Phase 6).
+    /// Verify OperationType has exactly 30 variants (20 Phase 6 + 10 new in Phase 7).
     #[test]
-    fn operation_type_has_20_variants() {
+    fn operation_type_has_30_variants() {
         let variants = &[
             OperationType::MathOverlay,
             OperationType::PixelShift,
@@ -28,8 +28,18 @@ mod tests {
             OperationType::SolidColorOverlay,
             OperationType::GradientOverlay,
             OperationType::WatermarkBlend,
+            OperationType::AudioResample,
+            OperationType::AudioVolume,
+            OperationType::AudioPitch,
+            OperationType::AudioEQ,
+            OperationType::AudioChannel,
+            OperationType::Crop,
+            OperationType::MetadataWrite,
+            OperationType::MetadataSelectiveErase,
+            OperationType::VideoSpeed,
+            OperationType::TrimEdges,
         ];
-        assert_eq!(variants.len(), 20, "OperationType must have exactly 20 variants");
+        assert_eq!(variants.len(), 30, "OperationType must have exactly 30 variants");
     }
 
     /// Verify StrengthTier serializes to camelCase correctly.
@@ -65,6 +75,7 @@ mod tests {
             operations: vec![],
             created_at: "2026-01-01T00:00:00Z".into(),
             strength_tier: StrengthTier::Aggressive,
+            schema_version: 3,
         };
         let json = serde_json::to_string(&seed).unwrap();
         let parsed: Seed = serde_json::from_str(&json).unwrap();
@@ -89,6 +100,10 @@ pub struct Seed {
     /// #[serde(default)] ensures old seeds without this field deserialize as Standard.
     #[serde(default)]
     pub strength_tier: StrengthTier,
+    /// Schema version for migration tracking. Incremented per phase.
+    /// Phase 6 = 2, Phase 7 = 3. Old seeds without this field default to 0.
+    #[serde(default)]
+    pub schema_version: u32,
 }
 
 /// A single operation step within a seed's operation chain.
@@ -122,7 +137,7 @@ impl Default for StrengthTier {
     }
 }
 
-/// The 20 operation types covering all fingerprint modification categories.
+/// The 30 operation types covering all fingerprint modification categories.
 /// D-02: MathOverlay has highest weight (~30%) in random generation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

@@ -195,8 +195,8 @@ Plans:
 **Plans:** 6 plans
 
 Plans:
-- [ ] 07-01-PLAN.md — Rust OperationType enum (+10 variants, schema_version) and model tests
-- [ ] 07-02-PLAN.md — TypeScript OperationType union + 10 i18n keys in both locales
+- [x] 07-01-PLAN.md — Rust OperationType enum (+10 variants, schema_version) and model tests
+- [x] 07-02-PLAN.md — TypeScript OperationType union + 10 i18n keys in both locales
 - [ ] 07-03-PLAN.md — 10 new filter builders + FrameDrop select rewrite + dispatch + separated signature change
 - [ ] 07-04-PLAN.md — Seed generation: pre-inject defaults, weight redistribution, 10 generate_operation arms
 - [ ] 07-05-PLAN.md — Executor multi-FilterKind loop + -vsync vfr + probe_global_metadata + MetadataContext wiring

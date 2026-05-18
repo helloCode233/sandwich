@@ -122,7 +122,7 @@ impl Default for StrengthTier {
     }
 }
 
-/// The 20 operation types covering all fingerprint modification categories.
+/// The 30 operation types covering all fingerprint modification categories.
 /// D-02: MathOverlay has highest weight (~30%) in random generation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -171,4 +171,28 @@ pub enum OperationType {
     GradientOverlay,
     /// Blend transparent watermark pattern.
     WatermarkBlend,
+    // Phase 7: Audio operations (5) — replace AudioTweak's 3 sub-effects (D-01, D-02, D-03)
+    /// Resample audio to random rate 22050-48000 Hz.
+    AudioResample,
+    /// Adjust volume by +/-3 dB (D-02).
+    AudioVolume,
+    /// Pitch shift via asetrate+atempo chain, +/-2 semitones (D-02).
+    AudioPitch,
+    /// Parametric EQ at random frequency (D-02).
+    AudioEQ,
+    /// Channel remapping (swap, mono mixdown, etc.) (D-02).
+    AudioChannel,
+    // Phase 7: Crop (1) — default operation (D-04, D-05, D-06, D-07, D-08)
+    /// Asymmetric crop (0.5%-3.5% per side, tier-driven) then scale back to original resolution.
+    Crop,
+    // Phase 7: Metadata (2) — supplement existing MetadataErase (D-09, D-10, D-11, D-12, D-13)
+    /// Write fake metadata fields (creation_time, title, author, comment, copyright, encoder).
+    MetadataWrite,
+    /// Selectively erase metadata by category (time/device/description). Requires ffprobe context.
+    MetadataSelectiveErase,
+    // Phase 7: Duration (2) (D-14, D-15, D-16)
+    /// Video speed change (setpts for video + atempo for audio, synchronized), 0.95-1.05x.
+    VideoSpeed,
+    /// Trim head/tail frames (1-30 frames from start, end, or both).
+    TrimEdges,
 }

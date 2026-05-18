@@ -124,8 +124,21 @@ pub async fn generate_seed(
         StrengthTier::Aggressive => (8, 12),
     };
     let step_count = rng.random_range(min_steps..=max_steps);
-    let mut operations = Vec::with_capacity(step_count);
+    // +2 capacity for default operations (Crop + FrameDrop) per D-04, D-19
+    let mut operations = Vec::with_capacity(step_count + 2);
 
+    // --- Phase 7: Pre-inject default operations (D-04, D-19) ---
+    // Crop and FrameDrop are guaranteed in every seed. They do NOT count toward step_count.
+    // They can also be randomly picked in the pool for a second instance (dual-guarantee per D-04).
+    operations.push(generate_operation(&mut rng, OperationType::Crop, strength_tier, total_frames));
+    operations.push(generate_operation(
+        &mut rng,
+        OperationType::FrameDrop,
+        strength_tier,
+        total_frames,
+    ));
+
+    // Random loop: step_count operations from weighted pool
     for _ in 0..step_count {
         let op_type = pick_operation_type(&mut rng);
         let op = generate_operation(&mut rng, op_type, strength_tier, total_frames);
@@ -263,21 +276,17 @@ fn generate_operation(
             let dy = rng.random_range(min..=max);
             serde_json::json!({ "dx": dx, "dy": dy })
         }
-        // ── FrameDrop: setpts micro-timing jitter (D-01, D-02, D-04) ────
-        // Replaces framestep decimation which caused slideshow (画面变成图片放映).
-        // setpts sin() oscillation alters frame timestamps imperceptibly
-        // while preserving all frames for smooth playback.
+        // ── Phase 7: FrameDrop — select-based, default operation (D-17, D-18, D-19) ──
+        // REPLACES the old FrameDrop arm (setpts jitter: offset/period params).
+        // Uses 'select' filter interval: drop 1 frame every N frames.
+        // Tier-driven per D-19: Conservative 40-50, Standard 30-45, Aggressive 25-35.
         OperationType::FrameDrop => {
-            let (offset_min, offset_max) = match strength_tier {
-                StrengthTier::Conservative => (0.0005, 0.001),
-                StrengthTier::Standard => (0.001, 0.003),
-                StrengthTier::Aggressive => (0.003, 0.006),
+            let (int_min, int_max) = match strength_tier {
+                StrengthTier::Conservative => (40u32, 50u32),
+                StrengthTier::Standard => (30u32, 45u32),
+                StrengthTier::Aggressive => (25u32, 35u32),
             };
-            let period = rng.random_range(30..=120);
-            serde_json::json!({
-                "offset": rng.random_range(offset_min..=offset_max),
-                "period": period,
-            })
+            serde_json::json!({ "interval": rng.random_range(int_min..=int_max) })
         }
         // ── GOP modify (existing) ───────────────────────────────────────────
         OperationType::GopModify => {
@@ -492,7 +501,170 @@ fn generate_operation(
                 "opacity": rng.random_range(op_min..=op_max),
             })
         }
-        // Phase 7: Stub for new variants — replaced by plans 07-02/07-04
+        // ── Phase 7: Audio Resample (D-03) ─────────────────────────────────
+        OperationType::AudioResample => {
+            let (rate_min, rate_max) = match strength_tier {
+                StrengthTier::Conservative => (32000u32, 48000u32),
+                StrengthTier::Standard => (24000u32, 48000u32),
+                StrengthTier::Aggressive => (22050u32, 48000u32),
+            };
+            serde_json::json!({ "sampleRate": rng.random_range(rate_min..=rate_max) })
+        }
+        // ── Phase 7: Audio Volume (D-02) ──────────────────────────────────
+        OperationType::AudioVolume => {
+            let (db_min, db_max) = match strength_tier {
+                StrengthTier::Conservative => (-1.0, 1.0),
+                StrengthTier::Standard => (-2.0, 2.0),
+                StrengthTier::Aggressive => (-3.0, 3.0),
+            };
+            serde_json::json!({ "db": rng.random_range(db_min..=db_max) })
+        }
+        // ── Phase 7: Audio Pitch via asetrate+atempo (D-02) ───────────────
+        OperationType::AudioPitch => {
+            // Pitch factor: +/-2 semitones = 2^(semitones/12)
+            // +2 = 2^(2/12)  1.1225, -2 = 2^(-2/12)  0.8909
+            let (pf_min, pf_max) = match strength_tier {
+                StrengthTier::Conservative => (0.98, 1.02),
+                StrengthTier::Standard => (0.94, 1.06),
+                StrengthTier::Aggressive => (0.8909, 1.1225),
+            };
+            let original_rate: u32 = 48000; // Standard sample rate for output
+            serde_json::json!({
+                "pitchFactor": rng.random_range(pf_min..=pf_max),
+                "originalRate": original_rate,
+            })
+        }
+        // ── Phase 7: Audio EQ (D-02) ──────────────────────────────────────
+        OperationType::AudioEQ => {
+            let (gain_min, gain_max) = match strength_tier {
+                StrengthTier::Conservative => (-2.0, 2.0),
+                StrengthTier::Standard => (-4.0, 4.0),
+                StrengthTier::Aggressive => (-6.0, 6.0),
+            };
+            serde_json::json!({
+                "frequency": rng.random_range(100u32..=10000u32),
+                "gain": rng.random_range(gain_min..=gain_max),
+                "width": rng.random_range(50u32..=500u32),
+            })
+        }
+        // ── Phase 7: Audio Channel (D-02) ─────────────────────────────────
+        OperationType::AudioChannel => {
+            let mode = match rng.random_range(0..3) {
+                0 => "swap",
+                1 => "mono",
+                _ => "stereo",
+            };
+            serde_json::json!({ "mode": mode })
+        }
+        // ── Phase 7: Crop — default operation (D-04, D-05, D-06, D-07) ───
+        OperationType::Crop => {
+            let (pct_min, pct_max) = match strength_tier {
+                StrengthTier::Conservative => (0.5, 1.5),
+                StrengthTier::Standard => (1.0, 2.5),
+                StrengthTier::Aggressive => (2.0, 3.5),
+            };
+            serde_json::json!({
+                "leftPct": rng.random_range(pct_min..=pct_max),
+                "rightPct": rng.random_range(pct_min..=pct_max),
+                "topPct": rng.random_range(pct_min..=pct_max),
+                "bottomPct": rng.random_range(pct_min..=pct_max),
+            })
+        }
+        // ── Phase 7: Metadata Write (D-09, D-10, D-11, D-13) ─────────────
+        // Does NOT follow strength tiers per D-13.
+        OperationType::MetadataWrite => {
+            // Fake metadata word lists
+            let titles = [
+                "Untitled Project",
+                "My Video",
+                "Footage",
+                "Recording",
+                "Clip",
+                "Export",
+                "Draft",
+                "Final",
+                "Sequence",
+                "Scene",
+            ];
+            let authors = [
+                "admin",
+                "user",
+                "editor",
+                "creator",
+                "owner",
+                "default",
+                "Guest",
+                "User1",
+                "operator",
+                "anonymous",
+            ];
+            let comments =
+                ["", "", "", "Edited", "Processed", "Draft version", "Auto-generated", ""];
+            let encoders = ["Sandwich 0.1.0", "Lavf 60.16.100", "Sandwich 0.1.0", "Sandwich 0.1.0"]; // Bias toward Sandwich
+
+            // creation_time: +/-30 days random offset from now (D-11)
+            let offset_days: i64 = rng.random_range(-30i64..=30i64);
+            let fake_time = chrono::Utc::now() + chrono::Duration::days(offset_days);
+            let creation_time = fake_time.format("%Y-%m-%dT%H:%M:%S").to_string();
+
+            let title = titles[rng.random_range(0..titles.len())];
+            let author = authors[rng.random_range(0..authors.len())];
+            let comment = comments[rng.random_range(0..comments.len())];
+            let encoder = encoders[rng.random_range(0..encoders.len())];
+            let copyright = format!("Copyright {}", chrono::Utc::now().format("%Y"));
+
+            serde_json::json!({
+                "creationTime": creation_time,
+                "title": title,
+                "author": author,
+                "comment": comment,
+                "copyright": copyright,
+                "encoder": encoder,
+            })
+        }
+        // ── Phase 7: Metadata Selective Erase (D-09, D-12, D-13) ──────────
+        // Does NOT follow strength tiers per D-13.
+        // Randomly selects 1-3 categories to erase: time, device, description.
+        OperationType::MetadataSelectiveErase => {
+            let all_categories = ["time", "device", "description"];
+            let n_categories: usize = rng.random_range(1..=3);
+            // Shuffle and take first n
+            let mut indices: Vec<usize> = (0..3).collect();
+            for i in (1..indices.len()).rev() {
+                let j = rng.random_range(0..=i);
+                indices.swap(i, j);
+            }
+            let categories: Vec<&str> =
+                indices.iter().take(n_categories).map(|&i| all_categories[i]).collect();
+            serde_json::json!({ "categories": categories })
+        }
+        // ── Phase 7: Video Speed (D-14, D-15) ─────────────────────────────
+        OperationType::VideoSpeed => {
+            let (spd_min, spd_max) = match strength_tier {
+                StrengthTier::Conservative => (0.98, 1.02),
+                StrengthTier::Standard => (0.96, 1.04),
+                StrengthTier::Aggressive => (0.95, 1.05),
+            };
+            serde_json::json!({ "speedFactor": rng.random_range(spd_min..=spd_max) })
+        }
+        // ── Phase 7: Trim Edges (D-14, D-16) ──────────────────────────────
+        OperationType::TrimEdges => {
+            let (trim_min, trim_max) = match strength_tier {
+                StrengthTier::Conservative => (1u32, 10u32),
+                StrengthTier::Standard => (5u32, 20u32),
+                StrengthTier::Aggressive => (10u32, 30u32),
+            };
+            let mode = match rng.random_range(0..3) {
+                0 => "head",
+                1 => "tail",
+                _ => "both",
+            };
+            serde_json::json!({
+                "mode": mode,
+                "trimFrames": rng.random_range(trim_min..=trim_max),
+            })
+        }
+        // Phase 7: Stub for future variants not yet implemented
         _ => serde_json::json!({}),
     };
 

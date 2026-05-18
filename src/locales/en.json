@@ -89,7 +89,7 @@
   },
   "batch": {
     "title": "Processing Controls",
-    "selectSeed": "Select Seed",
+    "selectSeeds": "Select Seeds",
     "concurrency": "Concurrency",
     "concurrencyDesc": "Number of videos processed simultaneously. Higher = faster, higher CPU usage",
     "outputDir": "Output Directory",
@@ -106,7 +106,7 @@
     "fileEta": "~{minutes} min remaining",
     "fileFailed": "{filename} failed: {error}",
     "noOutputDir": "Please select an output directory first",
-    "noSeedSelected": "Please select a seed first",
+    "noSeedSelected": "Please select at least one seed",
     "queueEmpty": "Queue is empty. Import videos first",
     "alreadyRunning": "A batch is already in progress",
     "processing": "Processing",
@@ -125,7 +125,14 @@
       "fileError": "{filename}: {errorMessage}",
       "clearResults": "Clear Results",
       "completeBody": "{succeeded} succeeded, {failed} failed out of {total} files",
-      "cancelledBody": "Cancelled after {succeeded} succeeded, {failed} failed out of {total} files"
+      "cancelledBody": "Cancelled after {succeeded} succeeded, {failed} failed out of {total} files",
+      "seed": "Seed",
+      "md5Before": "MD5 (before)",
+      "md5After": "MD5 (after)",
+      "md5Modified": "Modified",
+      "md5Unchanged": "Unchanged",
+      "md5UnchangedWarning": "{count} file output MD5 matches input — processing may have had no effect | {count} files output MD5 matches input — processing may have had no effect",
+      "completeBodyWithMD5": "{succeeded} succeeded, {failed} failed, {unchanged} unchanged out of {total} jobs"
     }
   },
   "log": {
@@ -169,6 +176,16 @@
     "flip": "Flip",
     "solidColorOverlay": "Solid Color Overlay",
     "gradientOverlay": "Gradient Overlay",
-    "watermarkBlend": "Watermark Blend"
+    "watermarkBlend": "Watermark Blend",
+    "audioResample": "Audio Resample",
+    "audioVolume": "Audio Volume",
+    "audioPitch": "Pitch Shift",
+    "audioEQ": "Equalizer",
+    "audioChannel": "Channel Op",
+    "crop": "Smart Crop",
+    "metadataWrite": "Metadata Write",
+    "metadataSelectiveErase": "Selective Erase",
+    "videoSpeed": "Video Speed",
+    "trimEdges": "Trim Edges"
   }
 }

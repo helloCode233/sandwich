@@ -186,3 +186,13 @@ Plans:
 
 **Wave 4** *(frontend UI)*
 - [x] 06-07-PLAN.md — SeedCard + BatchControls + QueueList (VueDraggable + thumbnails) + LogPanel + MainLayout NTabs
+
+### Phase 7: 增强视频指纹，修改音频，视频长度，元数据，轻微裁切成为默认
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase 6
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 7 to break down)

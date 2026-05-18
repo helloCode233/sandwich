@@ -89,7 +89,7 @@
   },
   "batch": {
     "title": "处理控制",
-    "selectSeed": "选择种子",
+    "selectSeeds": "选择种子",
     "concurrency": "并发数",
     "concurrencyDesc": "同时处理的视频数，值越高速度越快 CPU 占用越大",
     "outputDir": "输出目录",
@@ -106,7 +106,7 @@
     "fileEta": "预计剩余 {minutes} 分钟",
     "fileFailed": "{filename} 处理失败：{error}",
     "noOutputDir": "请先选择输出目录",
-    "noSeedSelected": "请先选择一个种子",
+    "noSeedSelected": "请至少选择一个种子",
     "queueEmpty": "队列为空，请先导入视频",
     "alreadyRunning": "已有批处理正在进行中，请等待完成或取消",
     "processing": "处理中",
@@ -125,7 +125,14 @@
       "fileError": "{filename}：{errorMessage}",
       "clearResults": "清除结果",
       "completeBody": "共 {total} 个文件，成功 {succeeded} 个，失败 {failed} 个",
-      "cancelledBody": "已取消，共 {total} 个文件，成功 {succeeded} 个，失败 {failed} 个"
+      "cancelledBody": "已取消，共 {total} 个文件，成功 {succeeded} 个，失败 {failed} 个",
+      "seed": "种子",
+      "md5Before": "MD5（处理前）",
+      "md5After": "MD5（处理后）",
+      "md5Modified": "已修改",
+      "md5Unchanged": "未变化",
+      "md5UnchangedWarning": "{count} 个文件输出 MD5 与输入相同 — 处理可能未生效 | {count} 个文件输出 MD5 与输入相同 — 处理可能未生效",
+      "completeBodyWithMD5": "共 {total} 个任务，成功 {succeeded} 个，失败 {failed} 个，{unchanged} 个未变化"
     }
   },
   "log": {
@@ -169,6 +176,16 @@
     "flip": "翻转",
     "solidColorOverlay": "纯色叠加",
     "gradientOverlay": "渐变叠加",
-    "watermarkBlend": "水印混合"
+    "watermarkBlend": "水印混合",
+    "audioResample": "音频重采样",
+    "audioVolume": "音频音量",
+    "audioPitch": "音调偏移",
+    "audioEQ": "均衡器",
+    "audioChannel": "声道操作",
+    "crop": "智能裁切",
+    "metadataWrite": "元数据写入",
+    "metadataSelectiveErase": "选择性擦除",
+    "videoSpeed": "视频变速",
+    "trimEdges": "时长裁剪"
   }
 }

@@ -32,9 +32,68 @@ pub async fn export_seed(
     Ok(())
 }
 
+/// Migrate a single imported seed from old format to Phase 7 format.
+/// Applies the same transformations as seed_v3::migrate_seeds but for individual imports.
+/// AudioTweak -> new audio types, FrameDrop setpts -> select interval.
+fn migrate_imported_seed(mut seed: Seed) -> Result<Seed, String> {
+    use crate::models::seed::OperationType;
+    use rand::Rng;
+    let mut rng = rand::rng();
+
+    for op in seed.operations.iter_mut() {
+        match op.op_type {
+            OperationType::AudioTweak => {
+                let effect = op.params["effect"].as_str().unwrap_or("volume");
+                match effect {
+                    "volume" => {
+                        let db = op.params["db"].as_f64().unwrap_or(0.5);
+                        op.op_type = OperationType::AudioVolume;
+                        op.params = serde_json::json!({ "db": db });
+                    }
+                    "tempo" => {
+                        op.op_type = OperationType::AudioPitch;
+                        op.params = serde_json::json!({
+                            "pitchFactor": 1.0,
+                            "originalRate": 48000,
+                        });
+                    }
+                    "echo" => {
+                        op.params = serde_json::json!({ "__drop": true });
+                    }
+                    _ => {}
+                }
+            }
+            OperationType::FrameDrop => {
+                if op.params.get("offset").is_some() || op.params.get("period").is_some() {
+                    let interval = rng.random_range(30u32..=50u32);
+                    op.params = serde_json::json!({ "interval": interval });
+                }
+            }
+            _ => {}
+        }
+    }
+
+    // Remove echo operations
+    seed.operations
+        .retain(|op| !op.params.get("__drop").and_then(|v| v.as_bool()).unwrap_or(false));
+
+    // Update operation count validation: max 30 (was 20 in Phase 6).
+    // Phase 7 seeds can have up to 14 ops (12 aggressive + 2 defaults), but imports
+    // from unknown sources should be more generous.
+    if seed.operations.len() > 30 {
+        return Err(format!(
+            "Imported seed has {} operations (max 30). Import rejected.",
+            seed.operations.len()
+        ));
+    }
+
+    seed.schema_version = 3;
+    Ok(seed)
+}
+
 /// Tauri command: Import a seed from a JSON file (D-12).
 /// Reads and validates a seed JSON file, regenerates UUID and timestamp,
-/// validates operation count <= 20, and appends to the seed list.
+/// validates operation count <= 30, and appends to the seed list.
 #[tauri::command]
 pub async fn import_seed(
     state: State<'_, Mutex<AppState>>,
@@ -48,17 +107,15 @@ pub async fn import_seed(
     let mut seed: Seed =
         serde_json::from_str(&json_str).map_err(|e| format!("Invalid seed JSON: {}", e))?;
 
+    // Phase 7: Migrate imported seeds that lack schema_version (old export format).
+    // This handles seed JSON files exported from Phase 6 or earlier.
+    if seed.schema_version < 3 {
+        seed = migrate_imported_seed(seed)?;
+    }
+
     // D-12: Regenerate UUID and timestamp
     seed.id = uuid::Uuid::new_v4().to_string();
     seed.created_at = chrono::Utc::now().to_rfc3339();
-
-    // Validate: cap operations at 20 (security: prevent resource exhaustion, T-06-07)
-    if seed.operations.len() > 20 {
-        return Err(format!(
-            "Imported seed has {} operations (max 20). Import rejected.",
-            seed.operations.len()
-        ));
-    }
 
     // Push + persist + emit (pattern from commands/seed.rs)
     {
@@ -95,10 +152,10 @@ mod tests {
         }
     }
 
-    /// Helper: create seed JSON with >20 operations (DoS vector, T-06-07).
+    /// Helper: create seed JSON with >30 operations (DoS vector, T-07-06-02).
     fn make_oversized_seed() -> Seed {
         let mut ops = Vec::new();
-        for _ in 0..25 {
+        for _ in 0..35 {
             ops.push(Operation {
                 op_type: OperationType::Remux,
                 start_frame: 0,
@@ -142,13 +199,13 @@ mod tests {
         assert_ne!(imported.id, original_id, "import_seed should regenerate UUID");
     }
 
-    // ─── TEST 3: import_seed rejects >20 operations ────────────────────────
+    // ─── TEST 3: import_seed rejects >30 operations ────────────────────────
     #[test]
     fn test_import_seed_rejects_oversized_operations() {
         let seed = make_oversized_seed();
-        assert!(seed.operations.len() > 20, "Oversized seed should have >20 operations");
-        let would_reject = seed.operations.len() > 20;
-        assert!(would_reject, "import_seed must reject seeds with >20 operations");
+        assert!(seed.operations.len() > 30, "Oversized seed should have >30 operations");
+        let would_reject = seed.operations.len() > 30;
+        assert!(would_reject, "import_seed must reject seeds with >30 operations");
     }
 
     // ─── TEST 4: import_seed rejects non-existent file ─────────────────────

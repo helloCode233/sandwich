@@ -144,6 +144,26 @@ pub fn run() {
                 }
             });
 
+            // --- Phase 7: AudioTweak split + FrameDrop re-parameterize migration ---
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                use migrations::seed_v3;
+                match seed_v3::migrate_seeds(&handle) {
+                    Ok(0) => {} // no migration needed or already done
+                    Ok(n) => {
+                        let _ = handle
+                            .emit("seeds-migrated", serde_json::json!({ "count": n, "phase": 7 }));
+                    }
+                    Err(e) => {
+                        eprintln!("Phase 7 seed migration error: {}", e);
+                        let _ = handle.emit(
+                            "seeds-migration-error",
+                            serde_json::json!({ "error": e, "phase": 7 }),
+                        );
+                    }
+                }
+            });
+
             // D-25: Non-blocking check for newer FFmpeg release (unchanged)
             let update_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {

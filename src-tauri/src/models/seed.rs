@@ -65,6 +65,7 @@ mod tests {
             operations: vec![],
             created_at: "2026-01-01T00:00:00Z".into(),
             strength_tier: StrengthTier::Aggressive,
+            schema_version: 3,
         };
         let json = serde_json::to_string(&seed).unwrap();
         let parsed: Seed = serde_json::from_str(&json).unwrap();
@@ -89,6 +90,10 @@ pub struct Seed {
     /// #[serde(default)] ensures old seeds without this field deserialize as Standard.
     #[serde(default)]
     pub strength_tier: StrengthTier,
+    /// Schema version for migration tracking. Incremented per phase.
+    /// Phase 6 = 2, Phase 7 = 3. Old seeds without this field default to 0.
+    #[serde(default)]
+    pub schema_version: u32,
 }
 
 /// A single operation step within a seed's operation chain.

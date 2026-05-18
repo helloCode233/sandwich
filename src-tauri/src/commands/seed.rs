@@ -154,6 +154,7 @@ pub async fn generate_seed(
         operations,
         created_at: chrono::Utc::now().to_rfc3339(),
         strength_tier,
+        schema_version: 3,
     };
 
     // Persist to managed state
@@ -476,6 +477,8 @@ fn generate_operation(
                 "opacity": rng.random_range(op_min..=op_max),
             })
         }
+        // Phase 7: Stub for new variants — replaced by plan 07-02
+        _ => serde_json::json!({}),
     };
 
     Operation { op_type, start_frame, duration_frames, params }
@@ -570,6 +573,7 @@ pub async fn copy_seed(
             operations: new_operations,
             created_at: chrono::Utc::now().to_rfc3339(),
             strength_tier: tier,
+            schema_version: 3,
         };
 
         (seed, source.alias.clone())

@@ -11,7 +11,8 @@ use ffmpeg_sidecar::event::LogLevel;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
-use crate::ffmpeg::filters::{FilterKind, build_filter_args_separated};
+use crate::ffmpeg::filters::{FilterKind, MetadataContext, build_filter_args_separated};
+use crate::ffmpeg::probe::probe_global_metadata;
 use crate::models::batch::PerFileProgress;
 use crate::models::gpu::GpuEncoder;
 use crate::models::seed::{OperationType, Seed};
@@ -61,8 +62,36 @@ pub fn execute_single_file(
     let mut af_exprs: Vec<String> = Vec::new();
     let mut other_args: Vec<String> = Vec::new();
 
+    // Phase 7: MetadataSelectiveErase needs current file metadata from ffprobe (D-12).
+    // Probe the file for global metadata tags if any operation is MetadataSelectiveErase.
+    // Pass the context into build_filter_args_separated so the filter builder can
+    // determine which fields to keep vs erase.
+    let metadata_ctx: Option<MetadataContext> = if seed
+        .operations
+        .iter()
+        .any(|op| matches!(op.op_type, OperationType::MetadataSelectiveErase))
+    {
+        match probe_global_metadata(&entry.filepath) {
+            Ok(fields) => Some(MetadataContext { fields }),
+            Err(e) => {
+                // Log the error but continue — fallback to full metadata erase
+                let _ = app.emit(
+                    "batch-log",
+                    serde_json::json!({
+                        "file": entry.filename,
+                        "level": "warning",
+                        "message": format!("Cannot probe metadata for selective erase: {}", e),
+                    }),
+                );
+                None
+            }
+        }
+    } else {
+        None
+    };
+
     for op in &seed.operations {
-        let results = build_filter_args_separated(op, None)?;
+        let results = build_filter_args_separated(op, metadata_ctx.as_ref())?;
         for (kind, _args) in results {
             match kind {
                 FilterKind::VideoFilter(expr) => vf_exprs.push(expr),

@@ -375,6 +375,8 @@ pub fn build_filter_args(op: &Operation) -> Result<Vec<String>, String> {
         OperationType::SolidColorOverlay => build_solid_color_overlay_filter(op),
         OperationType::GradientOverlay => build_gradient_overlay_filter(op),
         OperationType::WatermarkBlend => build_watermark_blend_filter(op),
+        // Phase 7: Stub for new variants — replaced by plans 07-02/07-03
+        _ => Ok(vec![]),
     }
 }
 

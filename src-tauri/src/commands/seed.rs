@@ -7,40 +7,55 @@ use crate::models::seed::{Operation, OperationType, Seed, StrengthTier};
 use crate::state::AppState;
 
 /// Select an operation type using weighted random selection (D-17).
-/// Weight distribution: Math overlay ~15%, Color processing ~20%, Noise texture ~15%,
-/// Geometric fine-tuning ~15%, Blend overlay ~10%, Remaining old categories ~25%.
-/// Uses 1000-bucket cumulative probability threshold for finer granularity.
+/// Phase 7: 29 types in pool (30 total - AudioTweak deprecated).
+/// Weight distribution: Math overlay ~12%, Color ~16%, Noise ~12%, Geometric ~12%,
+/// Blend ~9%, Audio (new) ~12%, Old categories ~18%, Duration (new) ~5%,
+/// Crop/FrameDrop ~2% each (pre-injected defaults, low pool weight).
+/// Uses 1000-bucket cumulative probability threshold.
 fn pick_operation_type(rng: &mut impl Rng) -> OperationType {
     let roll: u32 = rng.random_range(1..=1000);
     match roll {
-        // Math overlay (existing 3): ~15% = 150 buckets, ~50 each
-        1..=50 => OperationType::MathOverlay,
-        51..=100 => OperationType::MathOverlay,
-        101..=150 => OperationType::MathOverlay,
-        // Color processing (4): ~20% = 200 buckets, ~50 each
-        151..=200 => OperationType::HueRotate,
-        201..=250 => OperationType::SaturationAdjust,
-        251..=300 => OperationType::BrightnessContrast,
-        301..=350 => OperationType::ColorBalance,
-        // Noise texture (3): ~15% = 150 buckets, ~50 each
-        351..=400 => OperationType::FilmGrain,
-        401..=450 => OperationType::GaussianBlur,
-        451..=500 => OperationType::Sharpen,
-        // Geometric fine-tuning (3): ~15% = 150 buckets, ~50 each
-        501..=550 => OperationType::MicroRotate,
-        551..=600 => OperationType::TinyScale,
-        601..=650 => OperationType::Flip,
-        // Blend overlay (3): ~10% = 100 buckets, ~33 each
-        651..=683 => OperationType::SolidColorOverlay,
-        684..=716 => OperationType::GradientOverlay,
-        717..=750 => OperationType::WatermarkBlend,
-        // Remaining old categories (6): ~25% = 250 buckets, ~42 each
-        751..=792 => OperationType::PixelShift,
-        793..=834 => OperationType::FrameDrop,
-        835..=876 => OperationType::GopModify,
-        877..=918 => OperationType::MetadataErase,
-        919..=959 => OperationType::AudioTweak,
-        960..=1000 => OperationType::Remux,
+        // Math overlay (3): ~12% = 120 buckets, ~40 each
+        1..=40 => OperationType::MathOverlay,
+        41..=80 => OperationType::MathOverlay,
+        81..=120 => OperationType::MathOverlay,
+        // Color processing (4): ~16% = 160 buckets, ~40 each
+        121..=160 => OperationType::HueRotate,
+        161..=200 => OperationType::SaturationAdjust,
+        201..=240 => OperationType::BrightnessContrast,
+        241..=280 => OperationType::ColorBalance,
+        // Noise texture (3): ~12% = 120 buckets, ~40 each
+        281..=320 => OperationType::FilmGrain,
+        321..=360 => OperationType::GaussianBlur,
+        361..=400 => OperationType::Sharpen,
+        // Geometric fine-tuning (3): ~12% = 120 buckets, ~40 each
+        401..=440 => OperationType::MicroRotate,
+        441..=480 => OperationType::TinyScale,
+        481..=520 => OperationType::Flip,
+        // Blend overlay (3): ~9% = 90 buckets, ~30 each
+        521..=550 => OperationType::SolidColorOverlay,
+        551..=580 => OperationType::GradientOverlay,
+        581..=610 => OperationType::WatermarkBlend,
+        // Old categories (5, excluding AudioTweak): ~19% = 190 buckets, ~38 each
+        611..=648 => OperationType::PixelShift,
+        649..=686 => OperationType::GopModify,
+        687..=724 => OperationType::MetadataErase,
+        725..=762 => OperationType::Remux,
+        // Phase 7: Audio (5): ~12% = 120 buckets, ~24 each
+        763..=786 => OperationType::AudioResample,
+        787..=810 => OperationType::AudioVolume,
+        811..=834 => OperationType::AudioPitch,
+        835..=858 => OperationType::AudioEQ,
+        859..=882 => OperationType::AudioChannel,
+        // Phase 7: Metadata new (2): ~4% = 40 buckets, ~20 each
+        883..=902 => OperationType::MetadataWrite,
+        903..=922 => OperationType::MetadataSelectiveErase,
+        // Phase 7: Duration (2): ~5% = 50 buckets, ~25 each
+        923..=947 => OperationType::VideoSpeed,
+        948..=972 => OperationType::TrimEdges,
+        // Default ops (2): ~3% = 28 buckets — low weight, pre-injected but can be picked again
+        973..=986 => OperationType::Crop,
+        987..=1000 => OperationType::FrameDrop,
         _ => unreachable!("roll is 1..=1000"),
     }
 }
@@ -154,6 +169,7 @@ pub async fn generate_seed(
         operations,
         created_at: chrono::Utc::now().to_rfc3339(),
         strength_tier,
+        schema_version: 3,
     };
 
     // Persist to managed state
@@ -476,6 +492,8 @@ fn generate_operation(
                 "opacity": rng.random_range(op_min..=op_max),
             })
         }
+        // Phase 7: Stub for new variants — replaced by plans 07-02/07-04
+        _ => serde_json::json!({}),
     };
 
     Operation { op_type, start_frame, duration_frames, params }
@@ -570,6 +588,7 @@ pub async fn copy_seed(
             operations: new_operations,
             created_at: chrono::Utc::now().to_rfc3339(),
             strength_tier: tier,
+            schema_version: 3,
         };
 
         (seed, source.alias.clone())

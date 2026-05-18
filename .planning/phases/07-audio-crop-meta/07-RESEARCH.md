@@ -533,27 +533,27 @@ ffmpeg -i input.mp4 \
 | A5 | tauri-plugin-store `seeds.json` can be read at startup for migration before the main window loads | Runtime State Inventory | If the store is unavailable at startup time, migration must be deferred and seeds will be in a mixed-format state. |
 | A6 | Seed export JSON files from Phase 6 contain AudioTweak and old FrameDrop operations that need migration on import | Runtime State Inventory | If users have never exported seeds, this is a no-op. The import migration is defensive coding. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **What to do with AudioTweak echo effect during migration?**
    - What we know: D-01 lists 5 new audio types (Resample, Volume, Pitch, EQ, Channel). Echo has no direct equivalent.
    - What's unclear: Should echo operations be silently dropped during migration, converted to a conservative EQ, or kept as-is in a deprecated state?
-   - Recommendation: Drop echo operations during migration. The echo was a fixed preset (`aecho=0.8:0.9:20:0.1`) with no randomized parameters — minimal fingerprint modification value. Log a warning to the user.
+   - RESOLVED: Drop echo operations during migration. The echo was a fixed preset (`aecho=0.8:0.9:20:0.1`) with no randomized parameters — minimal fingerprint modification value. Log a warning to the user.
 
 2. **Does `-vsync vfr` interact correctly with GPU encoders?**
    - What we know: GPU encoders (VideoToolbox, NVENC, AMF) may have different behavior with variable frame rate output.
    - What's unclear: Whether some GPU encoders override vsync settings or produce unexpected frame timing.
-   - Recommendation: Test FrameDrop with each GPU encoder variant. Add encoder-specific fallback (e.g., insert `fps=fps=source_fps` filter after select if the GPU encoder needs constant frame rate input).
+   - RESOLVED: Test FrameDrop with each GPU encoder variant. Add encoder-specific fallback (e.g., insert `fps=fps=source_fps` filter after select if the GPU encoder needs constant frame rate input).
 
 3. **Should the step_count minimum change with default operations?**
    - What we know: D-06 specifies step counts: conservative 5-7, standard 6-9, aggressive 8-12. These are expected to be the random loop iterations. With 2 extra operations (Crop + FrameDrop), total operations per seed = step_count + 2.
    - What's unclear: Whether the user expects total operations to stay in the current range or increase by 2. 5-7 becoming 7-9 total may shift the complexity profile.
-   - Recommendation: Keep step_count as-is (5-7, 6-9, 8-12) for the random loop. Total operations will be step_count + 2 default ops. This is a slight increase in total operations (7-9 for conservative, up to 10-14 for aggressive) but adds guaranteed baseline coverage.
+   - RESOLVED: Keep step_count as-is (5-7, 6-9, 8-12) for the random loop. Total operations will be step_count + 2 default ops. This is a slight increase in total operations (7-9 for conservative, up to 10-14 for aggressive) but adds guaranteed baseline coverage.
 
 4. **Are there any interaction issues between crop and existing position-sensitive operations?**
    - What we know: Crop changes `iw`/`ih` for subsequent filters. Operations like MathOverlay (geq uses X/W, Y/H) and SolidColorOverlay (colorize) use relative positioning that should adapt to the new dimensions after crop+scale.
    - What's unclear: Whether the crop+scale cycle introduces sub-pixel shifts that compound with micro-rotate or pixel-shift operations.
-   - Recommendation: Run visual verification with crop+scale combined with each existing operation type. The scale filter with lanczos should handle sub-pixel positions correctly.
+   - RESOLVED: Run visual verification with crop+scale combined with each existing operation type. The scale filter with lanczos should handle sub-pixel positions correctly.
 
 ## Environment Availability
 

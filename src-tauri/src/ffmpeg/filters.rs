@@ -209,6 +209,92 @@ pub fn build_audio_channel_filter(op: &Operation) -> Result<Vec<String>, String>
 }
 
 // =========================================================================
+// Phase 7: Crop + Duration Operations (D-04~D-08, D-14~D-16) — 3 filter builders
+// =========================================================================
+
+/// Build crop+scale filter chain (D-05: asymmetric per-side, D-06: scale back, D-07: tier-driven).
+/// crop=W:H:X:Y extracts a sub-rectangle, then scale=OW:OH scales back with lanczos resampling.
+/// Each side percentage is independently random: leftPct, rightPct, topPct, bottomPct.
+/// Safety: each percentage clamped to [0.5, 3.5]. Expressions use iw/ih for resolution independence.
+pub fn build_crop_filter(op: &Operation) -> Result<Vec<String>, String> {
+    let left_pct: f64 = op.params["leftPct"].as_f64().unwrap_or(1.0);
+    let right_pct: f64 = op.params["rightPct"].as_f64().unwrap_or(1.0);
+    let top_pct: f64 = op.params["topPct"].as_f64().unwrap_or(1.0);
+    let bottom_pct: f64 = op.params["bottomPct"].as_f64().unwrap_or(1.0);
+
+    // Clamp to safety range (0.5%-3.5% per D-07)
+    let left_pct = left_pct.clamp(0.5, 3.5);
+    let right_pct = right_pct.clamp(0.5, 3.5);
+    let top_pct = top_pct.clamp(0.5, 3.5);
+    let bottom_pct = bottom_pct.clamp(0.5, 3.5);
+
+    // crop=out_w:out_h:x:y using iw/ih expressions
+    let filter = format!(
+        "crop=iw*(1-{lp}/100-{rp}/100):ih*(1-{tp}/100-{bp}/100):iw*{lp}/100:ih*{tp}/100,scale=iw:ih:flags=lanczos",
+        lp = left_pct,
+        rp = right_pct,
+        tp = top_pct,
+        bp = bottom_pct
+    );
+    Ok(vec!["-vf".to_string(), filter])
+}
+
+/// Build VideoSpeed filter (D-14, D-15): synchronized setpts (video) + atempo (audio).
+/// Speed factor 0.95-1.05x. Video PTS / factor, audio tempo = factor.
+/// This is a multi-filter operation: returns BOTH video and audio filter expressions.
+/// Safety: speedFactor clamped to [0.95, 1.05].
+pub fn build_video_speed_filter(op: &Operation) -> Result<Vec<String>, String> {
+    let speed_factor: f64 = op.params["speedFactor"].as_f64().unwrap_or(1.0);
+    let speed_factor = speed_factor.clamp(0.95, 1.05);
+
+    // setpts: speed up video by inverse factor
+    // atempo: speed up audio to match — FFmpeg requires 0.5-2.0, our range is safe
+    let vf_expr = format!("setpts={:.4}*PTS", 1.0 / speed_factor);
+    let af_expr = format!("atempo={:.4}", speed_factor);
+
+    // Return as combined filter args: -vf setpts=... -af atempo=...
+    Ok(vec!["-vf".to_string(), vf_expr, "-af".to_string(), af_expr])
+}
+
+/// Build TrimEdges filter (D-16): trim head/tail frames using trim+atrim filters.
+/// Randomly selects: head-only, tail-only, or both.
+/// Trims 1-30 frames per edge.
+/// Uses setpts=PTS-STARTPTS and asetpts=PTS-STARTPTS to reset timestamps after trim.
+/// Safety: trimFrames clamped to [1, 30]. Trim mode validated against known values.
+pub fn build_trim_edges_filter(op: &Operation) -> Result<Vec<String>, String> {
+    let trim_frames: u32 = op.params["trimFrames"].as_u64().unwrap_or(10) as u32;
+    let mode = op.params["mode"].as_str().unwrap_or("both");
+    let _total_frames: u32 = op.params["totalFrames"].as_u64().unwrap_or(0) as u32;
+
+    let trim_frames = trim_frames.clamp(1, 30);
+
+    let (vf, af) = match mode {
+        "head" => (
+            format!("trim=start_frame={},setpts=PTS-STARTPTS", trim_frames),
+            format!("atrim=start={},asetpts=PTS-STARTPTS", trim_frames as f64 / 30.0),
+        ),
+        "tail" => (
+            format!("trim=end_frame={},setpts=PTS-STARTPTS", trim_frames),
+            format!("atrim=duration={},asetpts=PTS-STARTPTS", trim_frames as f64 / 30.0),
+        ),
+        "both" => (
+            format!(
+                "trim=start_frame={}:end_frame=-{},setpts=PTS-STARTPTS",
+                trim_frames, trim_frames
+            ),
+            format!(
+                "atrim=start={}:end=duration-{},asetpts=PTS-STARTPTS",
+                trim_frames as f64 / 30.0,
+                trim_frames as f64 / 30.0
+            ),
+        ),
+        _ => return Err(format!("Unknown trim mode: {}", mode)),
+    };
+
+    Ok(vec!["-vf".to_string(), vf, "-af".to_string(), af])
+}
+
+// =========================================================================
 // Phase 6: Color Processing (D-01, D-02) — 4 new filter builder functions
 // =========================================================================
 

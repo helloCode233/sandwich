@@ -126,6 +126,89 @@ pub fn build_remux_filter(_op: &Operation) -> Result<Vec<String>, String> {
 }
 
 // =========================================================================
+// Phase 7: Audio Operations (D-01, D-02, D-03) — 5 new filter builder functions
+// =========================================================================
+
+/// Build FFmpeg filter arguments for audio resampling (D-03).
+/// Resample to random rate within 22050-48000 Hz using aresample filter.
+/// Safety: rate clamped to [22050, 48000].
+pub fn build_audio_resample_filter(op: &Operation) -> Result<Vec<String>, String> {
+    let sample_rate: u32 = op.params["sampleRate"].as_u64().unwrap_or(44100) as u32;
+    let sample_rate = sample_rate.clamp(22050, 48000);
+    let filter = format!("aresample={}", sample_rate);
+    Ok(vec!["-af".to_string(), filter])
+}
+
+/// Build FFmpeg filter arguments for volume adjustment (D-02).
+/// Adjust by +/-3 dB using volume filter.
+/// Safety: db clamped to [-3.0, 3.0].
+pub fn build_audio_volume_filter(op: &Operation) -> Result<Vec<String>, String> {
+    let db: f64 = op.params["db"].as_f64().unwrap_or(0.0);
+    let db = db.clamp(-3.0, 3.0);
+    let filter = format!("volume={}dB", db);
+    Ok(vec!["-af".to_string(), filter])
+}
+
+/// Build FFmpeg filter arguments for pitch shift via asetrate+atempo+aresample chain (D-02).
+/// Pitch change +/-2 semitones using the standard technique:
+///   1. asetrate: change sample rate (alters both pitch AND speed)
+///   2. atempo: restore original speed (counteracts speed change, pitch stays shifted)
+///   3. aresample: bring sample rate back to original
+/// This avoids rubberband (external library, violates D-05 pure built-in constraint).
+/// Safety: pitchFactor clamped to [2^(-2/12), 2^(2/12)] ≈ [0.8909, 1.1225].
+pub fn build_audio_pitch_filter(op: &Operation) -> Result<Vec<String>, String> {
+    let pitch_factor: f64 = op.params["pitchFactor"].as_f64().unwrap_or(1.0);
+    let original_rate: u32 = op.params["originalRate"].as_u64().unwrap_or(48000) as u32;
+
+    // Clamp pitch factor to +/-2 semitones: 2^(-2/12) ≈ 0.8909, 2^(2/12) ≈ 1.1225
+    let pitch_factor = pitch_factor.clamp(0.8909, 1.1225);
+
+    // asetrate uses the target sample rate (original * factor) to shift pitch
+    // atempo uses 1/factor to restore speed
+    // aresample brings it back to original rate
+    let filter = format!(
+        "asetrate={}*{:.4},atempo={:.4},aresample={}",
+        original_rate,
+        pitch_factor,
+        1.0 / pitch_factor,
+        original_rate
+    );
+    Ok(vec!["-af".to_string(), filter])
+}
+
+/// Build FFmpeg filter arguments for parametric EQ (D-02).
+/// Uses equalizer filter: two-pole peaking EQ at a randomly selected frequency.
+/// Safety: frequency clamped to [100, 10000], gain to [-6.0, 6.0], width to [50, 500].
+pub fn build_audio_eq_filter(op: &Operation) -> Result<Vec<String>, String> {
+    let frequency: u32 = op.params["frequency"].as_u64().unwrap_or(1000) as u32;
+    let gain: f64 = op.params["gain"].as_f64().unwrap_or(0.0);
+    let width: u32 = op.params["width"].as_u64().unwrap_or(200) as u32;
+
+    let frequency = frequency.clamp(100, 10000);
+    let gain = gain.clamp(-6.0, 6.0);
+    let width = width.clamp(50, 500);
+
+    let filter = format!("equalizer=f={}:t=h:width={}:g={}", frequency, width, gain);
+    Ok(vec!["-af".to_string(), filter])
+}
+
+/// Build FFmpeg filter arguments for channel remapping (D-02).
+/// Uses channelmap filter for channel swap or pan filter for mono mixdown.
+/// Safety: validates mode against known operations.
+pub fn build_audio_channel_filter(op: &Operation) -> Result<Vec<String>, String> {
+    let mode = op.params["mode"].as_str().unwrap_or("swap");
+
+    let filter = match mode {
+        "swap" => "channelmap=map=FL-FR|FR-FL".to_string(),
+        "mono" => "pan=mono|c0=0.5*FL+0.5*FR".to_string(),
+        "stereo" => "channelmap=map=FL-FC|FR-FC".to_string(),
+        _ => return Err(format!("Unknown channel mode: {}", mode)),
+    };
+
+    Ok(vec!["-af".to_string(), filter])
+}
+
+// =========================================================================
 // Phase 6: Color Processing (D-01, D-02) — 4 new filter builder functions
 // =========================================================================
 

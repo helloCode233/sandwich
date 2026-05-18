@@ -4,6 +4,15 @@
 //! FFmpeg CLI arguments. SEED-04 safety constraints are enforced via clamping.
 
 use crate::models::seed::{Operation, OperationType};
+use std::collections::HashMap;
+
+/// Metadata context passed from executor to filter builders that need current file metadata.
+/// Populated by ffprobe in the executor before building filter args for MetadataSelectiveErase.
+/// All other operations receive None.
+pub struct MetadataContext {
+    /// All global metadata tags from the input file, as key-value pairs.
+    pub fields: HashMap<String, String>,
+}
 
 /// Build FFmpeg filter arguments for mathematical overlay.
 /// SEED-04: opacity <= 0.15, frequency range 20-200.
@@ -97,6 +106,62 @@ pub fn build_metadata_erase_filter(_op: &Operation) -> Result<Vec<String>, Strin
         "-map_chapters".to_string(),
         "-1".to_string(),
     ])
+}
+
+/// Build FFmpeg arguments for selective metadata erase (D-12).
+/// Requires MetadataContext from ffprobe to know which fields exist.
+/// Strategy: -map_metadata -1 strips all, then selectively write back kept fields.
+/// Categories: time (creation_time, date, ...), device (make, model, ...),
+/// description (title, comment, ...).
+pub fn build_metadata_selective_erase_filter(
+    op: &Operation,
+    metadata_ctx: Option<&MetadataContext>,
+) -> Result<Vec<String>, String> {
+    let mut args = vec!["-map_metadata".to_string(), "-1".to_string()];
+
+    let ctx = match metadata_ctx {
+        Some(c) => c,
+        None => return Ok(args),
+    };
+
+    let categories: Vec<&str> = op.params["categories"]
+        .as_array()
+        .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect())
+        .unwrap_or_default();
+
+    if categories.is_empty() {
+        return Ok(args);
+    }
+
+    let time_fields = ["creation_time", "date", "modify_date", "timecode", "year"];
+    let device_fields = ["make", "model", "camera", "lens"];
+    let description_fields =
+        ["title", "comment", "author", "copyright", "description", "album", "artist", "genre"];
+
+    let mut erase_fields: Vec<&str> = Vec::new();
+    for cat in &categories {
+        match *cat {
+            "time" => erase_fields.extend_from_slice(&time_fields),
+            "device" => erase_fields.extend_from_slice(&device_fields),
+            "description" => erase_fields.extend_from_slice(&description_fields),
+            _ => {}
+        }
+    }
+
+    for (key, value) in &ctx.fields {
+        let key_lower = key.to_lowercase();
+        let should_erase = erase_fields.iter().any(|ef| {
+            key_lower == *ef
+                || key_lower.starts_with("com.android.")
+                || key_lower.starts_with("apple.")
+        });
+        if !should_erase && !value.is_empty() {
+            args.push("-metadata".to_string());
+            args.push(format!("{}={}", key, value));
+        }
+    }
+
+    Ok(args)
 }
 
 /// Build FFmpeg filter arguments for audio tweaking.
@@ -375,6 +440,9 @@ pub fn build_filter_args(op: &Operation) -> Result<Vec<String>, String> {
         OperationType::SolidColorOverlay => build_solid_color_overlay_filter(op),
         OperationType::GradientOverlay => build_gradient_overlay_filter(op),
         OperationType::WatermarkBlend => build_watermark_blend_filter(op),
+        // Phase 7: all new types return empty args in flat dispatch;
+        // the separated dispatch handles them properly with MetadataContext support.
+        _ => Ok(vec![]),
     }
 }
 
@@ -391,102 +459,114 @@ pub enum FilterKind {
 /// Like `build_filter_args` but separates video/audio filter expressions from other args.
 /// This allows the executor to merge multiple -vf / -af into single comma-joined chains
 /// and resolve conflicts between -c copy (remux) and filtering operations.
-pub fn build_filter_args_separated(op: &Operation) -> Result<(FilterKind, Vec<String>), String> {
+///
+/// Phase 7 change: returns `Vec<(FilterKind, Vec<String>)>` instead of a single tuple
+/// to support multi-filter operations (VideoSpeed, TrimEdges) that need both -vf and -af.
+/// Accepts optional MetadataContext for MetadataSelectiveErase's ffprobe data dependency.
+pub fn build_filter_args_separated(
+    op: &Operation,
+    metadata_ctx: Option<&MetadataContext>,
+) -> Result<Vec<(FilterKind, Vec<String>)>, String> {
     match op.op_type {
         OperationType::MathOverlay => {
             let args = build_math_overlay_filter(op)?;
             // args = ["-vf", "geq=..."]
             let expr = args.get(1).cloned().unwrap_or_default();
-            Ok((FilterKind::VideoFilter(expr), args))
+            Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
         OperationType::PixelShift => {
             let args = build_pixel_shift_filter(op)?;
             // args = ["-vf", "crop=...,pad=..."]
             let expr = args.get(1).cloned().unwrap_or_default();
-            Ok((FilterKind::VideoFilter(expr), args))
+            Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
         OperationType::FrameDrop => {
             let args = build_frame_drop_filter(op)?;
-            // args = ["-vf", "setpts=..."]
+            // args = ["-vf", "select='mod(n+1,N)',setpts=..."]
             let expr = args.get(1).cloned().unwrap_or_default();
-            Ok((FilterKind::VideoFilter(expr), args))
+            Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
         OperationType::AudioTweak => {
             let args = build_audio_tweak_filter(op)?;
             // args = ["-af", "volume=..."] or similar
             let expr = args.get(1).cloned().unwrap_or_default();
-            Ok((FilterKind::AudioFilter(expr), args))
+            Ok(vec![(FilterKind::AudioFilter(expr), args)])
         }
         // Phase 6: All color/noise/geometric/blend ops are VideoFilter
         OperationType::HueRotate => {
             let args = build_hue_rotate_filter(op)?;
             let expr = args.get(1).cloned().unwrap_or_default();
-            Ok((FilterKind::VideoFilter(expr), args))
+            Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
         OperationType::SaturationAdjust => {
             let args = build_saturation_adjust_filter(op)?;
             let expr = args.get(1).cloned().unwrap_or_default();
-            Ok((FilterKind::VideoFilter(expr), args))
+            Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
         OperationType::BrightnessContrast => {
             let args = build_brightness_contrast_filter(op)?;
             let expr = args.get(1).cloned().unwrap_or_default();
-            Ok((FilterKind::VideoFilter(expr), args))
+            Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
         OperationType::ColorBalance => {
             let args = build_color_balance_filter(op)?;
             let expr = args.get(1).cloned().unwrap_or_default();
-            Ok((FilterKind::VideoFilter(expr), args))
+            Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
         OperationType::FilmGrain => {
             let args = build_film_grain_filter(op)?;
             let expr = args.get(1).cloned().unwrap_or_default();
-            Ok((FilterKind::VideoFilter(expr), args))
+            Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
         OperationType::GaussianBlur => {
             let args = build_gaussian_blur_filter(op)?;
             let expr = args.get(1).cloned().unwrap_or_default();
-            Ok((FilterKind::VideoFilter(expr), args))
+            Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
         OperationType::Sharpen => {
             let args = build_sharpen_filter(op)?;
             let expr = args.get(1).cloned().unwrap_or_default();
-            Ok((FilterKind::VideoFilter(expr), args))
+            Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
         OperationType::MicroRotate => {
             let args = build_micro_rotate_filter(op)?;
             let expr = args.get(1).cloned().unwrap_or_default();
-            Ok((FilterKind::VideoFilter(expr), args))
+            Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
         OperationType::TinyScale => {
             let args = build_tiny_scale_filter(op)?;
             let expr = args.get(1).cloned().unwrap_or_default();
-            Ok((FilterKind::VideoFilter(expr), args))
+            Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
         OperationType::Flip => {
             let args = build_flip_filter(op)?;
             let expr = args.get(1).cloned().unwrap_or_default();
-            Ok((FilterKind::VideoFilter(expr), args))
+            Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
         OperationType::SolidColorOverlay => {
             let args = build_solid_color_overlay_filter(op)?;
             let expr = args.get(1).cloned().unwrap_or_default();
-            Ok((FilterKind::VideoFilter(expr), args))
+            Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
         OperationType::GradientOverlay => {
             let args = build_gradient_overlay_filter(op)?;
             let expr = args.get(1).cloned().unwrap_or_default();
-            Ok((FilterKind::VideoFilter(expr), args))
+            Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
         OperationType::WatermarkBlend => {
             let args = build_watermark_blend_filter(op)?;
             let expr = args.get(1).cloned().unwrap_or_default();
-            Ok((FilterKind::VideoFilter(expr), args))
+            Ok(vec![(FilterKind::VideoFilter(expr), args)])
+        }
+        // Phase 7: MetadataSelectiveErase uses ffprobe metadata context
+        OperationType::MetadataSelectiveErase => {
+            let args = build_metadata_selective_erase_filter(op, metadata_ctx)?;
+            Ok(vec![(FilterKind::Other(args.clone()), args)])
         }
         _ => {
-            // GopModify, MetadataErase, Remux — pass through as Other
+            // GopModify, MetadataErase, Remux, and Phase 7 fallbacks — pass through as Other
             let args = build_filter_args(op)?;
-            Ok((FilterKind::Other(args.clone()), args))
+            Ok(vec![(FilterKind::Other(args.clone()), args)])
         }
     }
 }
@@ -827,7 +907,8 @@ mod tests {
             OperationType::HueRotate,
             serde_json::json!({"hueAngle": 30.0, "saturation": 1.0}),
         );
-        let (kind, _args) = build_filter_args_separated(&op).unwrap();
+        let results = build_filter_args_separated(&op, None).unwrap();
+        let (kind, _args) = results.into_iter().next().unwrap();
         match kind {
             FilterKind::VideoFilter(expr) => assert!(expr.contains("hue=h=30")),
             other => panic!("Expected VideoFilter, got {:?}", std::mem::discriminant(&other)),
@@ -837,7 +918,8 @@ mod tests {
     #[test]
     fn test_separated_gop_modify_returns_other() {
         let op = make_op(OperationType::GopModify, serde_json::json!({"gopSize": 60}));
-        let (kind, _args) = build_filter_args_separated(&op).unwrap();
+        let results = build_filter_args_separated(&op, None).unwrap();
+        let (kind, _args) = results.into_iter().next().unwrap();
         match kind {
             FilterKind::Other(_) => {} // expected
             other => panic!("Expected FilterKind::Other, got {:?}", std::mem::discriminant(&other)),
@@ -937,7 +1019,7 @@ mod tests {
                     "type": "linear",
                 }),
             );
-            let result = build_filter_args_separated(&op);
+            let result = build_filter_args_separated(&op, None);
             assert!(result.is_ok(), "Failed for {:?}: {:?}", t, result.err());
         }
     }

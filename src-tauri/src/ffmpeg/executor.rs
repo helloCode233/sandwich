@@ -14,7 +14,7 @@ use tauri::{AppHandle, Emitter};
 use crate::ffmpeg::filters::{FilterKind, build_filter_args_separated};
 use crate::models::batch::PerFileProgress;
 use crate::models::gpu::GpuEncoder;
-use crate::models::seed::Seed;
+use crate::models::seed::{OperationType, Seed};
 use crate::models::video::VideoEntry;
 
 /// Execute FFmpeg processing for a single video entry using the given seed.
@@ -62,11 +62,13 @@ pub fn execute_single_file(
     let mut other_args: Vec<String> = Vec::new();
 
     for op in &seed.operations {
-        let (kind, args) = build_filter_args_separated(op)?;
-        match kind {
-            FilterKind::VideoFilter(expr) => vf_exprs.push(expr),
-            FilterKind::AudioFilter(expr) => af_exprs.push(expr),
-            FilterKind::Other(args) => other_args.extend(args),
+        let results = build_filter_args_separated(op, None)?;
+        for (kind, _args) in results {
+            match kind {
+                FilterKind::VideoFilter(expr) => vf_exprs.push(expr),
+                FilterKind::AudioFilter(expr) => af_exprs.push(expr),
+                FilterKind::Other(args) => other_args.extend(args),
+            }
         }
     }
 
@@ -97,16 +99,29 @@ pub fn execute_single_file(
         }
     }
 
+    // Phase 7: FrameDrop uses 'select' filter which drops frames (D-17).
+    // Without -vsync vfr, ffmpeg's default -vsync cfr inserts duplicate frames
+    // to maintain constant frame rate, undoing the frame drop.
+    // Inject -vsync vfr when any operation in the seed is FrameDrop.
+    let has_frame_drop =
+        seed.operations.iter().any(|op| matches!(op.op_type, OperationType::FrameDrop));
+
     // Inject GPU encoder or CPU fallback (Phase 5: PERF-01, D-04, D-05)
     let codec = gpu_encoder.map(|e| e.encoder_name()).unwrap_or("libx264");
-    let mut final_args = vec![
+    let mut encoder_args = vec![
         "-c:v".to_string(),
         codec.to_string(),
         "-preset".to_string(),
         if gpu_encoder.is_some() { "fast" } else { "medium" }.to_string(),
     ];
-    final_args.extend(all_args);
-    let all_args = final_args; // shadow with injected encoder args
+    // Phase 7: -vsync vfr must come BEFORE encoder args to take effect
+    if has_frame_drop {
+        let mut vsync_args = vec!["-vsync".to_string(), "vfr".to_string()];
+        vsync_args.extend(encoder_args);
+        encoder_args = vsync_args;
+    }
+    encoder_args.extend(all_args);
+    let all_args = encoder_args; // shadow with injected encoder + vsync args
 
     // Determine ffmpeg binary path
     let ffmpeg_bin = Path::new(ffmpeg_path).join(if cfg!(target_os = "windows") {

@@ -171,4 +171,28 @@ pub enum OperationType {
     GradientOverlay,
     /// Blend transparent watermark pattern.
     WatermarkBlend,
+    // Phase 7: Audio (5)
+    /// Resample audio to a different sample rate (22050-48000 Hz).
+    AudioResample,
+    /// Adjust audio volume by +/-3 dB.
+    AudioVolume,
+    /// Shift audio pitch by +/-2 semitones via asetrate+atempo chain.
+    AudioPitch,
+    /// Apply parametric EQ (peaking filter at random frequency).
+    AudioEQ,
+    /// Remap audio channels (swap stereo, mono mixdown, etc.).
+    AudioChannel,
+    // Phase 7: Crop (1)
+    /// Asymmetric per-side crop (0.5-3.5%) with lanczos scale-back.
+    Crop,
+    // Phase 7: Metadata (2)
+    /// Write fake metadata fields (creation_time, title, author, etc.).
+    MetadataWrite,
+    /// Selectively erase metadata by category (time, device, description).
+    MetadataSelectiveErase,
+    // Phase 7: Duration (2)
+    /// Change video speed by 0.95-1.05x with synchronized audio.
+    VideoSpeed,
+    /// Trim frames from head and/or tail of video.
+    TrimEdges,
 }

@@ -476,6 +476,8 @@ fn generate_operation(
                 "opacity": rng.random_range(op_min..=op_max),
             })
         }
+        // Phase 7: new operation types — params populated by dedicated generators
+        _ => serde_json::json!({}),
     };
 
     Operation { op_type, start_frame, duration_frames, params }

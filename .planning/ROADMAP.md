@@ -11,6 +11,7 @@ A five-phase build: Foundation (FFmpeg lifecycle + scaffold) establishes the non
 - [x] **Phase 3: Vue Frontend** - Pinia stores, typed API wrappers, dual-panel UI, Naive UI dark theme (completed 2026-05-13)
 - [x] **Phase 4: Integration & Polish** - Progress streaming, batch summary, cancel flow wiring, E2E validation (completed 2026-05-14)
 - [x] **Phase 5: Production Hardening** - Cross-platform builds, GPU acceleration, multi-seed batch, MD5 integrity verification (completed 2026-05-15)
+- [x] **Phase 6: 增强指纹修改** - 20 operation types, 3-tier strength presets, drag-to-reorder, thumbnails, processing log (completed 2026-05-18)
 
 ## Phase Details
 
@@ -168,7 +169,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 **Goal:** Systematically enhance fingerprint modification with 13+ new FFmpeg operation types (color/noise/geometric/blend), 3-tier strength presets with intelligent seed generation (5-12 steps, >=70% video coverage), seed JSON export/import, and three v2 deferred features (drag-to-reorder queue, thumbnail preview, processing log history).
 **Requirements**: PHASE-06 (20 locked decisions from CONTEXT.md)
 **Depends on:** Phase 5
-**Plans:** 6/7 plans executed
+**Plans:** 7/7 plans executed
 
 Plans:
 **Wave 1** *(foundation — parallel)*
@@ -184,4 +185,4 @@ Plans:
 - [x] 06-06-PLAN.md — Pinia stores (log, seed, queue) + useSeed composable + vue-draggable-plus
 
 **Wave 4** *(frontend UI)*
-- [ ] 06-07-PLAN.md — SeedCard + BatchControls + QueueList (VueDraggable + thumbnails) + LogPanel + MainLayout NTabs
+- [x] 06-07-PLAN.md — SeedCard + BatchControls + QueueList (VueDraggable + thumbnails) + LogPanel + MainLayout NTabs

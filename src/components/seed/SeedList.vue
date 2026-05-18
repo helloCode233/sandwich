@@ -13,7 +13,7 @@ const message = useMessage();
 const { t } = useI18n();
 
 async function onGenerateSeed() {
-  const seed = await generateSeed();
+  const seed = await generateSeed(store.strengthTier);
   if (seed) {
     message.success(t('seed.generated', { alias: seed.alias }));
   } else {

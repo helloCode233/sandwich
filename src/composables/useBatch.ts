@@ -3,7 +3,9 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { useMessage } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import { useBatchStore } from '@/stores/batch';
+import { useLogStore } from '@/stores/log';
 import type { BatchProgress, BatchResult, FileResult, PerFileProgress } from '@/types/batch';
+import type { ProcessingLogEntry } from '@/types/log';
 
 let progressUnlisten: UnlistenFn | null = null;
 let fileErrorUnlisten: UnlistenFn | null = null;
@@ -11,9 +13,11 @@ let fileProgressUnlisten: UnlistenFn | null = null;
 let cancellingUnlisten: UnlistenFn | null = null;
 let completeUnlisten: UnlistenFn | null = null;
 let cancelledUnlisten: UnlistenFn | null = null;
+let batchLogUnlisten: UnlistenFn | null = null;
 
 export function useBatch() {
   const store = useBatchStore();
+  const logStore = useLogStore();
   const message = useMessage();
   const { t } = useI18n();
 
@@ -46,6 +50,10 @@ export function useBatch() {
 
     cancellingUnlisten = await listen<void>('batch-cancelling', () => {
       store.setCancelling(true);
+    });
+
+    batchLogUnlisten = await listen<ProcessingLogEntry>('batch-log', (event) => {
+      logStore.addEntry(event.payload);
     });
   }
 
@@ -95,6 +103,7 @@ export function useBatch() {
     cancellingUnlisten?.();
     completeUnlisten?.();
     cancelledUnlisten?.();
+    batchLogUnlisten?.();
   }
 
   return { subscribe, startBatch, cancelBatch, getBatchStatus, unsubscribe };

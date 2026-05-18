@@ -4,9 +4,9 @@ use serde::{Deserialize, Serialize};
 mod tests {
     use super::*;
 
-    /// Verify OperationType has exactly 20 variants (7 existing + 13 new in Phase 6).
+    /// Verify OperationType has exactly 30 variants (20 existing + 10 new in Phase 7).
     #[test]
-    fn operation_type_has_20_variants() {
+    fn operation_type_has_30_variants() {
         let variants = &[
             OperationType::MathOverlay,
             OperationType::PixelShift,
@@ -28,8 +28,22 @@ mod tests {
             OperationType::SolidColorOverlay,
             OperationType::GradientOverlay,
             OperationType::WatermarkBlend,
+            // Phase 7: Audio (5)
+            OperationType::AudioResample,
+            OperationType::AudioVolume,
+            OperationType::AudioPitch,
+            OperationType::AudioEQ,
+            OperationType::AudioChannel,
+            // Phase 7: Crop (1)
+            OperationType::Crop,
+            // Phase 7: Metadata (2)
+            OperationType::MetadataWrite,
+            OperationType::MetadataSelectiveErase,
+            // Phase 7: Duration (2)
+            OperationType::VideoSpeed,
+            OperationType::TrimEdges,
         ];
-        assert_eq!(variants.len(), 20, "OperationType must have exactly 20 variants");
+        assert_eq!(variants.len(), 30, "OperationType must have exactly 30 variants");
     }
 
     /// Verify StrengthTier serializes to camelCase correctly.

@@ -621,7 +621,7 @@ mod tests {
     use rand::SeedableRng;
     use rand::rngs::StdRng;
 
-    /// Map OperationType to a unique index 0..19 for tracking purposes.
+    /// Map OperationType to a unique index 0..29 for tracking purposes.
     fn variant_index(t: OperationType) -> usize {
         match t {
             OperationType::MathOverlay => 0,
@@ -644,6 +644,17 @@ mod tests {
             OperationType::SolidColorOverlay => 17,
             OperationType::GradientOverlay => 18,
             OperationType::WatermarkBlend => 19,
+            // Phase 7 (10 new): 20-29
+            OperationType::AudioResample => 20,
+            OperationType::AudioVolume => 21,
+            OperationType::AudioPitch => 22,
+            OperationType::AudioEQ => 23,
+            OperationType::AudioChannel => 24,
+            OperationType::Crop => 25,
+            OperationType::MetadataWrite => 26,
+            OperationType::MetadataSelectiveErase => 27,
+            OperationType::VideoSpeed => 28,
+            OperationType::TrimEdges => 29,
         }
     }
 

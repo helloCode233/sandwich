@@ -197,7 +197,7 @@ Plans:
 Plans:
 - [x] 07-01-PLAN.md — Rust OperationType enum (+10 variants, schema_version) and model tests
 - [x] 07-02-PLAN.md — TypeScript OperationType union + 10 i18n keys in both locales
-- [ ] 07-03-PLAN.md — 10 new filter builders + FrameDrop select rewrite + dispatch + separated signature change
-- [ ] 07-04-PLAN.md — Seed generation: pre-inject defaults, weight redistribution, 10 generate_operation arms
+- [x] 07-03-PLAN.md — 10 new filter builders + FrameDrop select rewrite + dispatch + separated signature change
+- [x] 07-04-PLAN.md — Seed generation: pre-inject defaults, weight redistribution, 10 generate_operation arms
 - [ ] 07-05-PLAN.md — Executor multi-FilterKind loop + -vsync vfr + probe_global_metadata + MetadataContext wiring
 - [ ] 07-06-PLAN.md — Migration v3 (AudioTweak split, FrameDrop re-parameterize) + lib.rs/mod.rs registration + import migration

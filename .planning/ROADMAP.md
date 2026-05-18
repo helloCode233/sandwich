@@ -189,10 +189,15 @@ Plans:
 
 ### Phase 7: 增强视频指纹，修改音频，视频长度，元数据，轻微裁切成为默认
 
-**Goal:** [To be planned]
-**Requirements**: TBD
+**Goal:** Extend fingerprint modification across 4 dimensions: (1) 5 new audio operation types (Resample, Volume, Pitch, EQ, Channel) replacing AudioTweak; (2) asymmetric crop (0.5-3.5% per edge) as default operation with scale-back; (3) metadata write + selective erase alongside existing full erase; (4) video speed change + trim edges for duration modification. FrameDrop upgraded to true frame decimation (select filter) as default operation alongside crop. 10 new OperationType variants total, AudioTweak kept for backward compat. Migration splits old AudioTweak operations and re-parameterizes FrameDrop.
+**Requirements**: D-01 through D-19 (19 locked decisions from CONTEXT.md)
 **Depends on:** Phase 6
-**Plans:** 0 plans
+**Plans:** 6 plans
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 7 to break down)
+- [ ] 07-01-PLAN.md — Rust OperationType enum (+10 variants, schema_version) and model tests
+- [ ] 07-02-PLAN.md — TypeScript OperationType union + 10 i18n keys in both locales
+- [ ] 07-03-PLAN.md — 10 new filter builders + FrameDrop select rewrite + dispatch + separated signature change
+- [ ] 07-04-PLAN.md — Seed generation: pre-inject defaults, weight redistribution, 10 generate_operation arms
+- [ ] 07-05-PLAN.md — Executor multi-FilterKind loop + -vsync vfr + probe_global_metadata + MetadataContext wiring
+- [ ] 07-06-PLAN.md — Migration v3 (AudioTweak split, FrameDrop re-parameterize) + lib.rs/mod.rs registration + import migration

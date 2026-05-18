@@ -79,6 +79,30 @@ pub fn extract_metadata(
     Ok(VideoMetadata { duration_secs: duration, width, height, size_bytes: size, codec, fps })
 }
 
+/// Run ffprobe to extract all global metadata tags from a video file.
+/// Returns HashMap<key, value> of all metadata fields in the format.
+/// Used by MetadataSelectiveErase to know which fields exist before targeted erasure.
+/// This is separate from extract_metadata() because we only need it when
+/// a MetadataSelectiveErase operation is present in the seed.
+pub fn probe_global_metadata(
+    filepath: &str,
+) -> Result<std::collections::HashMap<String, String>, String> {
+    let ffprobe_bin = ffprobe_path();
+    let output = std::process::Command::new(&ffprobe_bin)
+        .args(["-v", "quiet", "-print_format", "json", "-show_format", filepath])
+        .output()
+        .map_err(|e| format!("ffprobe failed: {}", e))?;
+
+    if !output.status.success() {
+        return Err("Cannot probe file metadata".to_string());
+    }
+
+    let probe: RawProbeOutput = serde_json::from_slice(&output.stdout)
+        .map_err(|e| format!("Failed to parse ffprobe JSON: {}", e))?;
+
+    Ok(probe.format.tags.unwrap_or_default())
+}
+
 // --- Raw ffprobe JSON structures (private, used only for parsing) ---
 
 #[derive(Debug, Deserialize)]
@@ -93,6 +117,8 @@ struct RawFormat {
     duration: String,
     #[serde(default)]
     size: String,
+    #[serde(default)]
+    tags: Option<std::collections::HashMap<String, String>>,
 }
 
 #[derive(Debug, Deserialize)]

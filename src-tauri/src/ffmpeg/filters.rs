@@ -86,7 +86,7 @@ pub fn build_frame_drop_filter(op: &Operation) -> Result<Vec<String>, String> {
     // select='mod(n+1,N)': drops frame when mod(n+1, N) == 0
     // Example N=40: frame 39 -> mod(40,40)=0 -> dropped; frame 40 -> mod(41,40)=1 -> kept
     // setpts=N/FRAME_RATE/TB resets PTS to maintain smooth playback after frame removal
-    let filter = format!("select='mod(n+1\\,{})',setpts=N/FRAME_RATE/TB", interval);
+    let filter = format!("select='mod(n+1,{})',setpts=N/FRAME_RATE/TB", interval);
     Ok(vec!["-vf".to_string(), filter])
 }
 
@@ -175,13 +175,15 @@ pub fn build_audio_pitch_filter(op: &Operation) -> Result<Vec<String>, String> {
     // Clamp pitch factor to +/-2 semitones: 2^(-2/12) ≈ 0.8909, 2^(2/12) ≈ 1.1225
     let pitch_factor = pitch_factor.clamp(0.8909, 1.1225);
 
-    // asetrate uses the target sample rate (original * factor) to shift pitch
-    // atempo uses 1/factor to restore speed
-    // aresample brings it back to original rate
+    // asetrate takes a plain integer — arithmetic expressions (e.g. 48000*1.0595)
+    // are NOT supported and will cause FFmpeg to exit with an error.
+    // Compute the target rate in Rust before formatting.
+    let target_rate = (original_rate as f64 * pitch_factor).round() as u32;
+    // atempo uses 1/factor to restore speed after the pitch shift
+    // aresample brings it back to the original sample rate
     let filter = format!(
-        "asetrate={}*{:.4},atempo={:.4},aresample={}",
-        original_rate,
-        pitch_factor,
+        "asetrate={},atempo={:.4},aresample={}",
+        target_rate,
         1.0 / pitch_factor,
         original_rate
     );
@@ -241,12 +243,18 @@ pub fn build_crop_filter(op: &Operation) -> Result<Vec<String>, String> {
     let bottom_pct = bottom_pct.clamp(0.5, 3.5);
 
     // crop=out_w:out_h:x:y using iw/ih expressions
+    // After crop, iw/ih refer to the cropped dimensions — scale=iw:ih would be a no-op.
+    // Use inverse factor so scale restores original dimensions (D-06: scale-back).
+    let inv_w = 1.0 / (1.0 - left_pct / 100.0 - right_pct / 100.0);
+    let inv_h = 1.0 / (1.0 - top_pct / 100.0 - bottom_pct / 100.0);
     let filter = format!(
-        "crop=iw*(1-{lp}/100-{rp}/100):ih*(1-{tp}/100-{bp}/100):iw*{lp}/100:ih*{tp}/100,scale=iw:ih:flags=lanczos",
+        "crop=iw*(1-{lp}/100-{rp}/100):ih*(1-{tp}/100-{bp}/100):iw*{lp}/100:ih*{tp}/100,scale=iw*{inv_w:.6}:ih*{inv_h:.6}:flags=lanczos",
         lp = left_pct,
         rp = right_pct,
         tp = top_pct,
-        bp = bottom_pct
+        bp = bottom_pct,
+        inv_w = inv_w,
+        inv_h = inv_h
     );
     Ok(vec!["-vf".to_string(), filter])
 }
@@ -276,28 +284,41 @@ pub fn build_video_speed_filter(op: &Operation) -> Result<Vec<String>, String> {
 pub fn build_trim_edges_filter(op: &Operation) -> Result<Vec<String>, String> {
     let trim_frames: u32 = op.params["trimFrames"].as_u64().unwrap_or(10) as u32;
     let mode = op.params["mode"].as_str().unwrap_or("both");
-    let _total_frames: u32 = op.params["totalFrames"].as_u64().unwrap_or(0) as u32;
+    let total_frames: u32 = op.params["totalFrames"].as_u64().unwrap_or(0) as u32;
 
     let trim_frames = trim_frames.clamp(1, 30);
+
+    // Approximate fps for converting frames to seconds (audio trim companion).
+    // total_frames / 30.0 gives a coarse duration estimate; exact fps is not
+    // available at filter-build time (only at execution via ffprobe).
+    let approx_fps: f64 = 30.0;
+    let trim_secs = trim_frames as f64 / approx_fps;
+    let total_secs = total_frames as f64 / approx_fps;
 
     let (vf, af) = match mode {
         "head" => (
             format!("trim=start_frame={},setpts=PTS-STARTPTS", trim_frames),
-            format!("atrim=start={},asetpts=PTS-STARTPTS", trim_frames as f64 / 30.0),
+            format!("atrim=start={},asetpts=PTS-STARTPTS", trim_secs),
         ),
         "tail" => (
-            format!("trim=end_frame={},setpts=PTS-STARTPTS", trim_frames),
-            format!("atrim=duration={},asetpts=PTS-STARTPTS", trim_frames as f64 / 30.0),
+            // end_frame=N: FFmpeg docs — "Number of the first frame that will be dropped."
+            // end_frame = total - trim keeps frames 0..(total-trim-1), drops last trim frames.
+            format!(
+                "trim=start_frame=0:end_frame={},setpts=PTS-STARTPTS",
+                total_frames.saturating_sub(trim_frames)
+            ),
+            format!("atrim=end={},asetpts=PTS-STARTPTS", (total_secs - trim_secs).max(0.0)),
         ),
         "both" => (
             format!(
-                "trim=start_frame={}:end_frame=-{},setpts=PTS-STARTPTS",
-                trim_frames, trim_frames
+                "trim=start_frame={}:end_frame={},setpts=PTS-STARTPTS",
+                trim_frames,
+                total_frames.saturating_sub(trim_frames)
             ),
             format!(
-                "atrim=start={}:end=duration-{},asetpts=PTS-STARTPTS",
-                trim_frames as f64 / 30.0,
-                trim_frames as f64 / 30.0
+                "atrim=start={}:end={},asetpts=PTS-STARTPTS",
+                trim_secs,
+                (total_secs - trim_secs).max(0.0)
             ),
         ),
         _ => return Err(format!("Unknown trim mode: {}", mode)),

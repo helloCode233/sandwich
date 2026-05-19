@@ -165,6 +165,23 @@ pub fn execute_single_file(
     // .input() sets input file, .args() appends CLI arguments, .output() sets output.
     // Note: .output() requires AsRef<str>, so convert PathBuf to string.
     let output_path_str_for_cmd = output_path.to_string_lossy().to_string();
+
+    // Diagnostic: emit the full FFmpeg command line for debugging
+    let cmd_diag = format!(
+        "{} -i {} {} {}",
+        ffmpeg_bin_str,
+        entry.filepath,
+        all_args.join(" "),
+        output_path_str_for_cmd
+    );
+    let _ = app.emit(
+        "batch-log",
+        serde_json::json!({
+            "file": entry.filename,
+            "level": "info",
+            "message": format!("FFmpeg cmd: {}", cmd_diag),
+        }),
+    );
     let mut child = FfmpegCommand::new_with_path(&ffmpeg_bin_str)
         .input(&entry.filepath)
         .args(&all_args)

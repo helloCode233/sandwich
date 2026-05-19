@@ -202,7 +202,8 @@ pub fn build_audio_eq_filter(op: &Operation) -> Result<Vec<String>, String> {
     let gain = gain.clamp(-6.0, 6.0);
     let width = width.clamp(50, 500);
 
-    let filter = format!("equalizer=f={}:t=h:width={}:g={}", frequency, width, gain);
+    let filter =
+        format!("equalizer=frequency={}:width_type=h:width={}:gain={}", frequency, width, gain);
     Ok(vec!["-af".to_string(), filter])
 }
 

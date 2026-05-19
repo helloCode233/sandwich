@@ -104,8 +104,13 @@ pub fn execute_single_file(
     // Assemble final args: merged -vf, merged -af, then other args
     let mut all_args: Vec<String> = Vec::new();
     if !vf_exprs.is_empty() {
+        // Append pad filter to force even output dimensions.
+        // libx264 (yuv420p) requires even width and height — odd dimensions
+        // from accumulated crop/scale floating-point rounding cause exit code 187.
+        // pad=ceil(iw/2)*2:ceil(ih/2)*2 adds 0-1 px padding to make both even.
+        let vf_chain = format!("{},pad=ceil(iw/2)*2:ceil(ih/2)*2", vf_exprs.join(","));
         all_args.push("-vf".to_string());
-        all_args.push(vf_exprs.join(","));
+        all_args.push(vf_chain);
     }
     if !af_exprs.is_empty() {
         all_args.push("-af".to_string());

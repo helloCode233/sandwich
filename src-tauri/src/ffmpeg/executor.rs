@@ -201,6 +201,8 @@ pub fn execute_single_file(
     let filename = entry.filename.clone();
     let total_duration = entry.metadata.duration_secs;
 
+    let mut ffmpeg_log: Vec<String> = Vec::new();
+
     for event in child.iter().map_err(|e| format!("FFmpeg iteration error: {}", e))? {
         // Pitfall 5: Always use SeqCst for cancel flag visibility on ARM
         if cancel_flag.load(Ordering::SeqCst) {
@@ -241,11 +243,24 @@ pub fn execute_single_file(
             }
             ffmpeg_sidecar::event::FfmpegEvent::Log(LogLevel::Warning, msg)
             | ffmpeg_sidecar::event::FfmpegEvent::Log(LogLevel::Error, msg) => {
+                ffmpeg_log.push(msg.clone());
                 let _ = app_clone.emit(
                     "batch-log",
                     serde_json::json!({
                         "file": filename,
                         "level": "warning",
+                        "message": msg,
+                    }),
+                );
+            }
+            ffmpeg_sidecar::event::FfmpegEvent::Log(_, msg) => {
+                // Capture all other log levels (Info, Debug, etc.) too
+                ffmpeg_log.push(msg.clone());
+                let _ = app_clone.emit(
+                    "batch-log",
+                    serde_json::json!({
+                        "file": filename,
+                        "level": "info",
                         "message": msg,
                     }),
                 );
@@ -261,7 +276,21 @@ pub fn execute_single_file(
         Ok(output_path_str)
     } else {
         let exit_code = status.code().unwrap_or(-1);
-        Err(format!("FFmpeg exited with code {}", exit_code))
+        let log_tail: String = if ffmpeg_log.is_empty() {
+            String::new()
+        } else {
+            let start = ffmpeg_log.len().saturating_sub(10);
+            format!("\nFFmpeg last log lines:\n{}", ffmpeg_log[start..].join("\n"))
+        };
+        Err(format!(
+            "FFmpeg exited with code {}. Cmd: {} -i {} {} {}{}",
+            exit_code,
+            ffmpeg_bin_str,
+            entry.filepath,
+            all_args.join(" "),
+            output_path_str,
+            log_tail
+        ))
     }
 }
 

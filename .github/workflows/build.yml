@@ -70,7 +70,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          Copy-Item src-tauri/target/release/sandwich.exe Sandwich.exe
           gh release upload v1.0.0 `
-            src-tauri/target/release/sandwich.exe `
+            Sandwich.exe `
             --clobber `
             --repo ${{ github.repository }}

@@ -522,14 +522,17 @@ fn select_download_urls() -> Vec<Vec<String>> {
     #[cfg(target_os = "windows")]
     {
         return vec![
-            // GitHub Releases (BtbN) -- Windows build with shared libs
+            // GitHub Releases (BtbN) -- Windows static build (no DLLs, self-contained .exe)
+            // Per D-21: shared build avoided — ffmpeg-sidecar unpack_ffmpeg only moves
+            // .exe files, leaving .dll files in the temp dir to be deleted. Static build
+            // eliminates this problem by linking all codecs into the binary.
             vec![
-                "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl-shared.zip"
+                "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
                     .to_string(),
             ],
             // jsDelivr CDN mirror (CN-friendly, DIFFERENT domain)
             vec![
-                "https://cdn.jsdelivr.net/gh/BtbN/FFmpeg-Builds@latest/ffmpeg-master-latest-win64-gpl-shared.zip"
+                "https://cdn.jsdelivr.net/gh/BtbN/FFmpeg-Builds@latest/ffmpeg-master-latest-win64-gpl.zip"
                     .to_string(),
             ],
         ];

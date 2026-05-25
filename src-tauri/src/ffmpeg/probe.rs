@@ -174,8 +174,34 @@ struct RawStream {
     height: Option<u32>,
     #[serde(rename = "r_frame_rate", default)]
     r_frame_rate: Option<String>,
-    #[serde(rename = "sample_rate", default)]
+    /// ffprobe outputs sample_rate as a string (e.g. "44100"), handle both.
+    #[serde(rename = "sample_rate", default, deserialize_with = "parse_optional_u32")]
     sample_rate: Option<u32>,
+}
+
+/// Deserialize an optional u32 that may be encoded as a string in JSON.
+fn parse_optional_u32<'de, D>(deserializer: D) -> Result<Option<u32>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de;
+    struct U32OrString;
+    impl<'de> de::Visitor<'de> for U32OrString {
+        type Value = Option<u32>;
+        fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            f.write_str("a u32 or string")
+        }
+        fn visit_none<E: de::Error>(self) -> Result<Self::Value, E> {
+            Ok(None)
+        }
+        fn visit_u64<E: de::Error>(self, v: u64) -> Result<Self::Value, E> {
+            Ok(Some(v as u32))
+        }
+        fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+            v.parse().map(Some).map_err(|_| de::Error::custom("invalid u32 string"))
+        }
+    }
+    deserializer.deserialize_any(U32OrString)
 }
 
 #[cfg(test)]

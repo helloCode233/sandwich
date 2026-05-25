@@ -130,9 +130,13 @@ pub fn run() {
                 } else {
                     let _ = handle.emit("gpu-encoder-not-detected", ());
                 }
-                let app_state = handle.state::<std::sync::Mutex<state::AppState>>();
-                if let Ok(mut state) = app_state.lock() {
-                    state.gpu_encoder = gpu_enc;
+                // Only update state if GPU found — avoid overwriting a
+                // detection that verify_ffmpeg may have already set.
+                if gpu_enc.is_some() {
+                    let app_state = handle.state::<std::sync::Mutex<state::AppState>>();
+                    if let Ok(mut state) = app_state.lock() {
+                        state.gpu_encoder = gpu_enc;
+                    }
                 }
             });
 

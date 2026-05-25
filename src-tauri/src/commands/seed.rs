@@ -887,8 +887,8 @@ mod tests {
         }
         let seen_count = seen_flags.iter().filter(|&&f| f).count();
         assert_eq!(
-            seen_count, 29,
-            "pick_operation_type must produce all 29 non-deprecated OperationType variants (AudioTweak excluded)"
+            seen_count, 28,
+            "pick_operation_type must produce all 28 active OperationType variants (AudioTweak + Flip excluded)"
         );
     }
 

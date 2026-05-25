@@ -3,7 +3,11 @@ use ffmpeg_sidecar::version::{ffmpeg_version, ffmpeg_version_with_path};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::process::Command;
+use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager};
+
+use crate::ffmpeg::gpu::detect_gpu_encoder;
+use crate::state::AppState;
 
 /// Prevent spawned processes from creating a visible console window on Windows.
 fn no_console_window(cmd: &mut Command) {
@@ -246,6 +250,19 @@ pub async fn verify_ffmpeg(app: AppHandle, path: String) -> Result<FfmpegInfo, S
     store.set("version", serde_json::Value::String(version_str.clone()));
     store.set("download_time", serde_json::Value::String(now));
     store.save().map_err(|e| format!("Failed to save store: {}", e))?;
+
+    // Re-run GPU detection now that FFmpeg is confirmed available
+    let gpu_enc = detect_gpu_encoder(&path);
+    if let Some(ref enc) = gpu_enc {
+        let _ = app.emit("gpu-encoder-detected", enc);
+    } else {
+        let _ = app.emit("gpu-encoder-not-detected", ());
+    }
+    if let Some(app_state) = app.try_state::<Mutex<AppState>>() {
+        if let Ok(mut state) = app_state.lock() {
+            state.gpu_encoder = gpu_enc;
+        }
+    }
 
     // Emit event that FFmpeg is ready
     let info = FfmpegInfo {

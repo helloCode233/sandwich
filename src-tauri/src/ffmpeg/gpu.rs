@@ -2,15 +2,20 @@
 //!
 //! Detects available GPU encoders via `ffmpeg -encoders` at startup and
 //! provides encoder name injection and CPU fallback logic.
+//! For NVENC, also probes capability features (spatial AQ, p-presets, b-frames)
+//! to select optimal encoding parameters for the detected GPU generation.
 
 use std::process::Command;
 
 use crate::models::gpu::GpuEncoder;
+#[cfg(target_os = "windows")]
+use crate::models::gpu::NvencCaps;
 
 /// Detect best available GPU encoder for this platform.
 /// Returns None if no hardware encoder found (CPU fallback to libx264).
-pub fn detect_gpu_encoder(ffmpeg_path: &str) -> Option<GpuEncoder> {
-    let ffmpeg_bin = std::path::Path::new(ffmpeg_path).join(if cfg!(target_os = "windows") {
+/// For NVENC, also probes and attaches capability info for optimal parameter selection.
+pub fn detect_gpu_encoder(ffmpeg_dir: &str) -> Option<GpuEncoder> {
+    let ffmpeg_bin = std::path::Path::new(ffmpeg_dir).join(if cfg!(target_os = "windows") {
         "ffmpeg.exe"
     } else {
         "ffmpeg"
@@ -29,7 +34,8 @@ pub fn detect_gpu_encoder(ffmpeg_path: &str) -> Option<GpuEncoder> {
     #[cfg(target_os = "windows")]
     {
         if stdout.contains("h264_nvenc") {
-            return Some(GpuEncoder::Nvenc);
+            let caps = detect_nvenc_caps(ffmpeg_dir);
+            return Some(GpuEncoder::Nvenc(caps));
         }
         if stdout.contains("h264_amf") {
             return Some(GpuEncoder::Amf);
@@ -43,6 +49,32 @@ pub fn detect_gpu_encoder(ffmpeg_path: &str) -> Option<GpuEncoder> {
     }
 
     None
+}
+
+/// Run `ffmpeg -h encoder=h264_nvenc` and parse supported capabilities.
+///
+/// Detection logic:
+///   - `spatial_aq` in output → NVENC SDK ≥9.0 (driver 456+, Maxwell 2nd gen / 20-series+)
+///   - `preset.*p1` in output → NVENC SDK ≥11.0 (driver 520+, Turing+)
+///   - `bf` in output → b-frames supported
+#[cfg(target_os = "windows")]
+fn detect_nvenc_caps(ffmpeg_dir: &str) -> NvencCaps {
+    let ffmpeg_bin = std::path::Path::new(ffmpeg_dir).join(if cfg!(target_os = "windows") {
+        "ffmpeg.exe"
+    } else {
+        "ffmpeg"
+    });
+
+    let output = match Command::new(&ffmpeg_bin).args(["-h", "encoder=h264_nvenc"]).output() {
+        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).to_string(),
+        _ => return NvencCaps::baseline(),
+    };
+
+    NvencCaps {
+        has_spatial_aq: output.contains("spatial_aq"),
+        has_presets_p: output.contains("preset") && output.contains("p1"),
+        has_bf: output.contains("bf"),
+    }
 }
 
 #[cfg(test)]

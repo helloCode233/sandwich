@@ -5,6 +5,13 @@ import type { VideoEntry } from '@/types/video';
 
 let queueUpdatedUnlisten: UnlistenFn | null = null;
 let videoImportedUnlisten: UnlistenFn | null = null;
+let debugLogUnlisten: UnlistenFn | null = null;
+
+interface DebugLogEvent {
+  file: string;
+  level: string;
+  message: string;
+}
 
 export function useQueue() {
   const store = useQueueStore();
@@ -29,17 +36,22 @@ export function useQueue() {
     videoImportedUnlisten = await listen<VideoEntry>('video-imported', (event) => {
       store.addEntry(event.payload);
     });
+    // ffmpeg-debug-log emits diagnostic info from Rust (import, probe, etc.)
+    debugLogUnlisten = await listen<DebugLogEvent>('ffmpeg-debug-log', (event) => {
+      console.log(`[${event.payload.file}] ${event.payload.message}`);
+    });
     await loadQueue();
   }
 
   /** Import a video file into the queue. Called after file dialog or drag-drop. */
-  async function importVideo(filepath: string): Promise<VideoEntry | null> {
+  async function importVideo(filepath: string): Promise<{ entry: VideoEntry } | { error: string }> {
     try {
       const entry = await invoke<VideoEntry>('import_video', { filepath });
-      return entry;
+      return { entry };
     } catch (err) {
-      console.error('Failed to import video:', err);
-      return null;
+      const msg = typeof err === 'string' ? err : String(err);
+      console.error('Failed to import video:', msg);
+      return { error: msg };
     }
   }
 
@@ -70,6 +82,7 @@ export function useQueue() {
   function unsubscribe(): void {
     queueUpdatedUnlisten?.();
     videoImportedUnlisten?.();
+    debugLogUnlisten?.();
   }
 
   return { loadQueue, subscribe, importVideo, removeFromQueue, clearQueue, unsubscribe };

@@ -62,11 +62,11 @@ async function onAddFileClick() {
 }
 
 async function importFile(filepath: string) {
-  const entry = await importVideo(filepath);
-  if (entry) {
-    message.success(t('queue.imported', { filename: entry.filename }));
+  const result = await importVideo(filepath);
+  if ('entry' in result) {
+    message.success(t('queue.imported', { filename: result.entry.filename }));
   } else {
-    message.error(t('notification.operationFailed', { error: 'Import failed' }));
+    message.error(result.error);
   }
 }
 </script>

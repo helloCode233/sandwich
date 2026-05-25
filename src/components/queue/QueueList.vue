@@ -124,9 +124,11 @@ async function onAddVideoClick() {
   if (selected) {
     const paths = Array.isArray(selected) ? selected : [selected];
     for (const path of paths) {
-      const entry = await importVideo(path);
-      if (entry) {
-        message.success(t('queue.imported', { filename: entry.filename }));
+      const result = await importVideo(path);
+      if ('entry' in result) {
+        message.success(t('queue.imported', { filename: result.entry.filename }));
+      } else {
+        message.error(result.error);
       }
     }
   }

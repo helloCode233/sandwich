@@ -21,7 +21,7 @@ jobs:
           - platform: 'ubuntu-22.04'
             args: ''
           - platform: 'windows-latest'
-            args: '--bundles nsis'
+            args: ''
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -64,7 +64,18 @@ jobs:
       - name: Install frontend dependencies
         run: bun install --frozen-lockfile
 
+      # Windows: portable exe only — no installer, no bundler
+      - name: Build frontend (Windows)
+        if: matrix.platform == 'windows-latest'
+        run: bun run build
+
+      - name: Build Rust binary (Windows)
+        if: matrix.platform == 'windows-latest'
+        run: cargo build --release --manifest-path src-tauri/Cargo.toml
+
+      # macOS / Linux: use tauri-action for DMG / deb / AppImage
       - uses: tauri-apps/tauri-action@v0
+        if: matrix.platform != 'windows-latest'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:

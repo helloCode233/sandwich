@@ -17,6 +17,18 @@ use crate::state::AppState;
 /// Supported video file extensions per D-12.
 const SUPPORTED_EXTENSIONS: &[&str] = &["mp4", "mov", "avi", "mkv", "webm", "flv", "wmv"];
 
+/// Emit a debug log event for frontend diagnostic display.
+fn emit_debug(app: &AppHandle, stage: &str, message: &str) {
+    let _ = app.emit(
+        "ffmpeg-debug-log",
+        serde_json::json!({
+            "file": stage,
+            "level": "info",
+            "message": message,
+        }),
+    );
+}
+
 /// Tauri command: Import a video file into the processing queue.
 ///
 /// Per D-12: filters by supported extensions first, then validates with ffprobe.
@@ -31,6 +43,8 @@ pub async fn import_video(
     app: AppHandle,
     filepath: String,
 ) -> Result<VideoEntry, String> {
+    emit_debug(&app, "import", &format!("import_video called: {}", filepath));
+
     // D-12: Extension filter — quick rejection before spawning ffprobe
     let path = Path::new(&filepath);
     let extension = path
@@ -40,23 +54,51 @@ pub async fn import_video(
         .ok_or_else(|| "File has no extension".to_string())?;
 
     if !SUPPORTED_EXTENSIONS.contains(&extension.as_str()) {
-        return Err(format!(
+        let msg = format!(
             "Unsupported file format '.{}'. Supported formats: {}",
             extension,
             SUPPORTED_EXTENSIONS.join(", ")
-        ));
+        );
+        emit_debug(&app, "import", &format!("ERROR: {}", msg));
+        return Err(msg);
     }
 
     // Check file exists before spawning ffprobe
     if !path.exists() {
-        return Err(format!("File not found: {}", filepath));
+        let msg = format!("File not found: {}", filepath);
+        emit_debug(&app, "import", &format!("ERROR: {}", msg));
+        return Err(msg);
     }
+
+    emit_debug(&app, "import", &format!("extension={} ok, file exists", extension));
 
     // Get the stored FFmpeg directory for ffprobe lookup
     let ffmpeg_dir = get_stored_ffmpeg_dir(&app);
+    emit_debug(
+        &app,
+        "import",
+        &format!("stored ffmpeg dir: {}", ffmpeg_dir.as_deref().unwrap_or("(none, will use PATH)")),
+    );
 
     // D-14: ffprobe validation — validates video stream and extracts metadata
-    let metadata = extract_metadata(&filepath, ffmpeg_dir.as_deref())?;
+    emit_debug(&app, "import", "calling extract_metadata (ffprobe)...");
+    let metadata = match extract_metadata(&filepath, ffmpeg_dir.as_deref()) {
+        Ok(m) => {
+            emit_debug(
+                &app,
+                "import",
+                &format!(
+                    "ffprobe ok: {}x{}, {:.1}fps, {:.1}s, codec={}, size={}",
+                    m.width, m.height, m.fps, m.duration_secs, m.codec, m.size_bytes
+                ),
+            );
+            m
+        }
+        Err(e) => {
+            emit_debug(&app, "import", &format!("ffprobe FAILED: {}", e));
+            return Err(e);
+        }
+    };
 
     let filename = path
         .file_stem()
@@ -67,9 +109,14 @@ pub async fn import_video(
     check_disk_space_for_output(&app)?;
 
     // Extract thumbnail: first frame, scaled to 120px wide, JPEG output to stdout
+    emit_debug(&app, "import", "extracting thumbnail...");
     let thumbnail_base64 = match extract_thumbnail(&filepath, ffmpeg_dir.as_deref()) {
-        Ok(b64) => Some(b64),
+        Ok(b64) => {
+            emit_debug(&app, "import", &format!("thumbnail ok: {} bytes base64", b64.len()));
+            Some(b64)
+        }
         Err(e) => {
+            emit_debug(&app, "import", &format!("thumbnail warning (non-fatal): {}", e));
             // Graceful degradation: import succeeds even if thumbnail fails
             let _ = app.emit(
                 "thumbnail-extraction-warning",

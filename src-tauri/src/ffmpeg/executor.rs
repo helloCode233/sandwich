@@ -70,7 +70,7 @@ pub fn execute_single_file(
         .iter()
         .any(|op| matches!(op.op_type, OperationType::MetadataSelectiveErase))
     {
-        match probe_global_metadata(&entry.filepath) {
+        match probe_global_metadata(&entry.filepath, Some(ffmpeg_path)) {
             Ok(fields) => Some(MetadataContext { fields }),
             Err(e) => {
                 // Log the error but continue — fallback to full metadata erase

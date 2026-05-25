@@ -112,10 +112,21 @@ pub fn extract_metadata(
 /// Used by MetadataSelectiveErase to know which fields exist before targeted erasure.
 /// This is separate from extract_metadata() because we only need it when
 /// a MetadataSelectiveErase operation is present in the seed.
+///
+/// ffmpeg_dir_opt: optional directory containing ffprobe binary.
+/// If None, uses ffprobe from PATH via ffmpeg-sidecar.
 pub fn probe_global_metadata(
     filepath: &str,
+    ffmpeg_dir_opt: Option<&str>,
 ) -> Result<std::collections::HashMap<String, String>, String> {
-    let ffprobe_bin = ffprobe_path();
+    let ffprobe_bin = match ffmpeg_dir_opt {
+        Some(dir) => PathBuf::from(dir).join(if cfg!(target_os = "windows") {
+            "ffprobe.exe"
+        } else {
+            "ffprobe"
+        }),
+        None => ffprobe_path(),
+    };
     let mut cmd = std::process::Command::new(&ffprobe_bin);
     no_console_window(&mut cmd);
     let output = cmd

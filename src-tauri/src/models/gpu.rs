@@ -54,10 +54,9 @@ impl GpuEncoder {
         match self {
             Self::Nvenc(caps) => {
                 let mut args = vec!["-c:v".to_string(), "h264_nvenc".to_string()];
-                // Fastest preset for fingerprint ops (quality isn't the goal)
                 if caps.has_presets_p {
                     args.push("-preset".to_string());
-                    args.push("p1".to_string());
+                    args.push("p4".to_string());
                 } else {
                     args.push("-preset".to_string());
                     args.push("fast".to_string());

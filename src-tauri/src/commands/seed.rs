@@ -26,14 +26,14 @@ fn pick_operation_type(rng: &mut impl Rng) -> OperationType {
         281..=320 => OperationType::FilmGrain,
         321..=360 => OperationType::GaussianBlur,
         361..=400 => OperationType::Sharpen,
-        // Geometric fine-tuning (3): ~12% = 120 buckets, ~40 each
+        // Geometric fine-tuning (2): ~8% = 80 buckets, ~40 each
+        // Note: Flip removed — horizontal mirroring makes text unreadable
         401..=440 => OperationType::MicroRotate,
         441..=480 => OperationType::TinyScale,
-        481..=520 => OperationType::Flip,
-        // Blend overlay (3): ~9% = 90 buckets, ~30 each
-        521..=550 => OperationType::SolidColorOverlay,
-        551..=580 => OperationType::GradientOverlay,
-        581..=610 => OperationType::WatermarkBlend,
+        // Blend overlay (3): ~12% = 120 buckets, ~40 each (absorbed Flip's buckets)
+        481..=520 => OperationType::SolidColorOverlay,
+        521..=560 => OperationType::GradientOverlay,
+        561..=610 => OperationType::WatermarkBlend,
         // Old categories (5, excluding AudioTweak): ~19% = 190 buckets, ~38 each
         611..=648 => OperationType::PixelShift,
         649..=686 => OperationType::GopModify,
@@ -481,10 +481,9 @@ fn generate_operation(
             };
             serde_json::json!({ "scaleFactor": rng.random_range(fac_min..=fac_max) })
         }
-        OperationType::Flip => {
-            // Horizontal only — vertical flip disabled (too visually destructive)
-            serde_json::json!({ "direction": "horizontal" })
-        }
+        // Flip removed from generation pool — makes text unreadable.
+        // Existing seeds with Flip are still handled by the filter builder.
+        OperationType::Flip => unreachable!("Flip is no longer generated"),
         // ── Blend overlay (3): D-01, D-02, D-04, tier-driven ───────────────
         OperationType::SolidColorOverlay => {
             let (mix_min, mix_max) = match strength_tier {

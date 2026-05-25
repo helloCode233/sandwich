@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, watch } from 'vue';
+import { computed, onMounted, onUnmounted, watch } from 'vue';
 import { NCard, NButton, NProgress, NText, NSpace, NIcon } from 'naive-ui';
 import { XCircle, RefreshCw, FolderOpen } from 'lucide-vue-next';
 import { useFfmpegStore } from '@/stores/ffmpeg';
@@ -22,6 +22,23 @@ const {
   unsubscribeAll,
 } = useFfmpeg();
 const { t } = useI18n();
+
+/** Stage-aware label for download progress (not binary-status-aware). */
+const stageLabel = computed(() => {
+  const stage = store.downloadProgress.stage;
+  switch (stage) {
+    case 'connecting':
+      return t('download.connecting');
+    case 'downloading':
+      return t('download.downloading');
+    case 'extracting':
+      return t('download.extracting');
+    case 'verifying':
+      return t('download.verifying');
+    default:
+      return store.status === 'verifying' ? t('download.verifying') : t('download.downloading');
+  }
+});
 
 /** When download+verify completes, notify parent to switch views. */
 watch(
@@ -181,7 +198,7 @@ onUnmounted(() => {
             </NText>
           </NSpace>
           <NText depth="3" class="text-xs text-center">
-            {{ store.status === 'verifying' ? t('download.verifying') : t('download.downloading') }}
+            {{ stageLabel }}
           </NText>
           <NButton v-if="store.status === 'downloading'" type="warning" block @click="onCancel">
             <template #icon>

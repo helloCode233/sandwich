@@ -88,12 +88,20 @@ fn ffmpeg_bin_path(dir: &std::path::Path) -> std::path::PathBuf {
     if cfg!(target_os = "windows") { dir.join("ffmpeg.exe") } else { dir.join("ffmpeg") }
 }
 
-/// Extract major version number from ffmpeg version string (e.g., "6.1.1" -> 6).
+/// Extract major version number from ffmpeg version string.
+///
+/// Handles multiple version string formats:
+///   - Standard:   "ffmpeg version 6.1.1"   → 6
+///   - BtbN/Windows: "ffmpeg version n7.1.1" → 7 (git snapshot prefix)
+///   - Some builds:  "ffmpeg version v5.0"   → 5
 fn extract_major_version(version: &str) -> u32 {
     version
         .split_whitespace()
-        .find(|s| s.chars().next().is_some_and(|c| c.is_ascii_digit()))
-        .and_then(|s| s.split('.').next())
+        .find(|s| s.chars().any(|c| c.is_ascii_digit()))
+        .and_then(|s| {
+            let trimmed = s.trim_start_matches(|c: char| !c.is_ascii_digit());
+            trimmed.split('.').next()
+        })
         .and_then(|s| s.parse().ok())
         .unwrap_or(0)
 }
@@ -304,4 +312,33 @@ pub fn get_default_ffmpeg_dir(app: AppHandle) -> Result<String, String> {
         .map_err(|e| format!("Failed to resolve app data directory: {}", e))?;
     dir.push("ffmpeg");
     Ok(dir.to_string_lossy().to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_extract_major_version_standard() {
+        assert_eq!(extract_major_version("ffmpeg version 6.1.1 Copyright ..."), 6);
+        assert_eq!(extract_major_version("ffmpeg version 4.4"), 4);
+    }
+
+    #[test]
+    fn test_extract_major_version_btbn_n_prefix() {
+        // BtbN Windows builds use git-describe style: n7.1.1
+        assert_eq!(extract_major_version("ffmpeg version n7.1.1-10-g1234abcd-full_build-..."), 7);
+        assert_eq!(extract_major_version("ffmpeg version n6.0"), 6);
+    }
+
+    #[test]
+    fn test_extract_major_version_v_prefix() {
+        assert_eq!(extract_major_version("ffmpeg version v5.0"), 5);
+    }
+
+    #[test]
+    fn test_extract_major_version_empty_or_junk() {
+        assert_eq!(extract_major_version(""), 0);
+        assert_eq!(extract_major_version("not a version string"), 0);
+    }
 }

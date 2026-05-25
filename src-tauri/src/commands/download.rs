@@ -93,6 +93,18 @@ pub async fn start_download(app: AppHandle, target_dir: String) -> Result<(), St
     std::fs::create_dir_all(&temp_dir)
         .map_err(|e| format!("Cannot create temp directory: {}", e))?;
 
+    // Emit initial Connecting progress so frontend has real data immediately
+    let _ = app.emit(
+        "ffmpeg-download-progress",
+        DownloadProgress {
+            percent: 0.0,
+            downloaded_bytes: 0,
+            total_bytes: 0,
+            speed_bytes_per_sec: 0,
+            stage: DownloadStage::Connecting,
+        },
+    );
+
     // Try each URL group in the chain with up to 3 retries per group
     let max_retries = 3;
     let mut last_error = String::new();

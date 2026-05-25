@@ -126,7 +126,11 @@ fn extract_thumbnail(video_path: &str, ffmpeg_dir: Option<&str>) -> Result<Strin
     use std::path::Path;
 
     let ffmpeg_bin_path = if let Some(dir) = ffmpeg_dir {
-        Path::new(dir).join("ffmpeg")
+        if cfg!(target_os = "windows") {
+            Path::new(dir).join("ffmpeg.exe")
+        } else {
+            Path::new(dir).join("ffmpeg")
+        }
     } else {
         ffmpeg_sidecar::paths::ffmpeg_path()
     };

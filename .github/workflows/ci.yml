@@ -24,6 +24,16 @@ jobs:
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            node_modules
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
@@ -54,30 +64,21 @@ jobs:
           toolchain: stable
           components: rustfmt, clippy
 
-      - name: Cache Rust dependencies
-        uses: actions/cache@v4
+      - name: Cache Rust
+        uses: swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            src-tauri/target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
+          workspaces: './src-tauri -> target'
 
       - name: Install system dependencies (Tauri)
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libsoup-3.0-dev libjavascriptcoregtk-4.1-dev
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libsoup-3.0-dev libjavascriptcoregtk-4.1-dev
 
       - name: Cargo fmt check
         run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
 
       - name: Cargo clippy
-        run: cargo clippy --manifest-path src-tauri/Cargo.toml
-
-      - name: Cargo check
-        run: cargo check --manifest-path src-tauri/Cargo.toml
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
 
       - name: Cargo test
         run: cargo test --manifest-path src-tauri/Cargo.toml

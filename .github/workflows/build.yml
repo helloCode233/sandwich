@@ -31,8 +31,8 @@ jobs:
       - name: Install Ubuntu dependencies
         if: matrix.platform == 'ubuntu-22.04'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev \
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libwebkit2gtk-4.1-dev \
             libayatana-appindicator3-dev librsvg2-dev patchelf \
             libsoup-3.0-dev libjavascriptcoregtk-4.1-dev
 
@@ -46,10 +46,20 @@ jobs:
         with:
           toolchain: stable
 
-      - name: Rust cache
+      - name: Cache Rust
         uses: swatinem/rust-cache@v2
         with:
           workspaces: './src-tauri -> target'
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            node_modules
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
 
       - name: Install frontend dependencies
         run: bun install --frozen-lockfile
@@ -69,7 +79,10 @@ jobs:
         if: matrix.platform == 'windows-latest'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
         run: |
+          # Delete both casings from prior runs (case-insensitive on GitHub API)
           gh release delete-asset v1.0.0 sandwich.exe -y --repo ${{ github.repository }} 2>$null
+          gh release delete-asset v1.0.0 Sandwich.exe -y --repo ${{ github.repository }} 2>$null
           Copy-Item src-tauri/target/release/sandwich.exe Sandwich.exe
           gh release upload v1.0.0 Sandwich.exe --repo ${{ github.repository }}

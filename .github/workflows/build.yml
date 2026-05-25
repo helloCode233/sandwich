@@ -64,18 +64,10 @@ jobs:
       - name: Install frontend dependencies
         run: bun install --frozen-lockfile
 
-      # Windows: portable exe only — tauri build with --no-bundle skips NSIS/MSI
-      - uses: tauri-apps/tauri-action@v0
+      # Windows: portable exe only — tauri build with --no-bundle
+      - name: Build Tauri app (Windows portable)
         if: matrix.platform == 'windows-latest'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tagName: v__VERSION__
-          releaseName: 'Sandwich v__VERSION__'
-          releaseBody: 'See assets to download and install.'
-          releaseDraft: true
-          prerelease: false
-          args: '--no-bundle'
+        run: bun run tauri build --no-bundle
 
       # macOS / Linux: use tauri-action for DMG / deb / AppImage
       - uses: tauri-apps/tauri-action@v0
@@ -96,6 +88,11 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: pwsh
         run: |
+          # Ensure release exists (macOS/Linux tauri-action creates draft release)
+          gh release view v1.0.0 --repo ${{ github.repository }} 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create v1.0.0 --draft --title "Sandwich v1.0.0" --notes "See assets to download and install." --repo ${{ github.repository }}
+          }
           # Delete both casings from prior runs (case-insensitive on GitHub API)
           gh release delete-asset v1.0.0 sandwich.exe -y --repo ${{ github.repository }} 2>$null
           gh release delete-asset v1.0.0 Sandwich.exe -y --repo ${{ github.repository }} 2>$null

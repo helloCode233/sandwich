@@ -2,6 +2,7 @@
 import { ref, onMounted, onUnmounted } from 'vue';
 import { NLayout, NLayoutSider, NLayoutContent, NLayoutFooter, NTabs, NTabPane } from 'naive-ui';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { invoke } from '@tauri-apps/api/core';
 import { useBatchStore } from '@/stores/batch';
 import { useFfmpegStore } from '@/stores/ffmpeg';
 import { useSeed } from '@/composables/useSeed';
@@ -65,6 +66,14 @@ onUnmounted(() => {
 
 // Composable subscriptions (app-lifetime — registered once, never duplicated)
 onMounted(async () => {
+  // Query GPU state from Rust (event may have fired before mount)
+  try {
+    const encoder = await invoke<string | null>('get_gpu_status');
+    ffmpegStore.setGpuEncoder(encoder);
+  } catch {
+    /* ignore — event listener will catch late updates */
+  }
+
   await seedComposable.subscribe();
   await queueComposable.subscribe();
   await batchComposable.subscribe();

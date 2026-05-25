@@ -5,7 +5,9 @@ mod models;
 mod state;
 
 use crate::ffmpeg::gpu::detect_gpu_encoder;
-use commands::batch::{cancel_batch, get_batch_status, open_file_manager, start_batch};
+use commands::batch::{
+    cancel_batch, get_batch_status, get_gpu_status, open_file_manager, start_batch,
+};
 use commands::download::{cancel_download, start_download};
 use commands::export_seed::{export_seed, import_seed};
 use commands::ffmpeg::{
@@ -51,6 +53,7 @@ pub fn run() {
             start_batch,
             cancel_batch,
             get_batch_status,
+            get_gpu_status,
             open_file_manager,
             // Phase 6: Seed export/import (D-10, D-12)
             export_seed,

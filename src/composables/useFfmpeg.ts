@@ -94,6 +94,16 @@ export function useFfmpeg() {
     }
   }
 
+  /** Query GPU encoder status from Rust AppState (event may have fired before mount). */
+  async function checkGpuStatus(): Promise<void> {
+    try {
+      const encoder = await invoke<string | null>('get_gpu_status');
+      store.setGpuEncoder(encoder);
+    } catch (err) {
+      console.error('Failed to query GPU status:', err);
+    }
+  }
+
   /** Cancel an active download. */
   async function cancelDownload(): Promise<void> {
     try {
@@ -120,6 +130,7 @@ export function useFfmpeg() {
     startDownload,
     getDefaultDir,
     verifyExisting,
+    checkGpuStatus,
     cancelDownload,
     unsubscribeAll,
   };

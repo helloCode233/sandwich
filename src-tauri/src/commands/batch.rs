@@ -588,6 +588,21 @@ pub async fn get_batch_status(state: State<'_, Mutex<AppState>>) -> Result<Batch
     Ok(batch_state.progress.clone())
 }
 
+/// Tauri command: Get the current GPU encoder status from AppState.
+/// Returns the encoder name string (e.g. "Nvenc", "Amf") or null if CPU only.
+/// Called by the frontend on mount to get the initial GPU state, since the
+/// startup event may have fired before the UI listener was registered.
+#[tauri::command]
+pub fn get_gpu_status(state: State<'_, Mutex<AppState>>) -> Result<Option<String>, String> {
+    let app_state = state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    Ok(app_state.gpu_encoder.as_ref().map(|enc| match enc {
+        GpuEncoder::Nvenc(_) => "Nvenc".to_string(),
+        GpuEncoder::Amf => "Amf".to_string(),
+        GpuEncoder::VideoToolbox => "VideoToolbox".to_string(),
+        GpuEncoder::Vaapi => "Vaapi".to_string(),
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

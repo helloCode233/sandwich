@@ -17,7 +17,27 @@ export const useFfmpegStore = defineStore('ffmpeg', () => {
   const retryCount = ref(0);
   const targetDir = ref<string | null>(null);
 
+  // GPU encoder state (null = not yet checked, string = encoder type, "" = confirmed CPU only)
+  const gpuEncoder = ref<string | null>(null);
+  const gpuChecked = ref(false);
+
   const isReady = computed(() => status.value === 'found' || status.value === 'verified');
+  const hasGpu = computed(() => gpuEncoder.value !== null && gpuEncoder.value !== '');
+  const gpuLabel = computed(() => {
+    if (!gpuEncoder.value) return 'CPU';
+    switch (gpuEncoder.value) {
+      case 'Nvenc':
+        return 'NVIDIA NVENC';
+      case 'Amf':
+        return 'AMD AMF';
+      case 'VideoToolbox':
+        return 'VideoToolbox';
+      case 'Vaapi':
+        return 'VAAPI';
+      default:
+        return gpuEncoder.value;
+    }
+  });
   const needsDownload = computed(() => status.value === 'missing' || status.value === 'outdated');
   const isDownloading = computed(
     () => status.value === 'downloading' || status.value === 'verifying',
@@ -35,6 +55,11 @@ export const useFfmpegStore = defineStore('ffmpeg', () => {
     } else {
       status.value = 'missing';
     }
+  }
+
+  function setGpuEncoder(encoder: string | null) {
+    gpuEncoder.value = encoder;
+    gpuChecked.value = true;
   }
 
   function setDownloadProgress(p: DownloadProgress) {
@@ -71,7 +96,12 @@ export const useFfmpegStore = defineStore('ffmpeg', () => {
     isReady,
     needsDownload,
     isDownloading,
+    gpuEncoder,
+    gpuChecked,
+    hasGpu,
+    gpuLabel,
     setFfmpegInfo,
+    setGpuEncoder,
     setDownloadProgress,
     resetDownload,
   };

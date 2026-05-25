@@ -72,6 +72,7 @@ pub fn detect_gpu_encoder(ffmpeg_dir: &str) -> Option<GpuEncoder> {
 /// Detection logic:
 ///   - `spatial_aq` in output → NVENC SDK ≥9.0 (driver 456+, Maxwell 2nd gen / 20-series+)
 ///   - `preset.*p1` in output → NVENC SDK ≥11.0 (driver 520+, Turing+)
+///   - `rc-lookahead` in output → NVENC SDK ≥8.0 (driver 435+, Pascal+)
 ///   - `bf` in output → b-frames supported
 #[cfg(target_os = "windows")]
 fn detect_nvenc_caps(ffmpeg_dir: &str) -> NvencCaps {
@@ -92,6 +93,7 @@ fn detect_nvenc_caps(ffmpeg_dir: &str) -> NvencCaps {
         has_spatial_aq: output.contains("spatial_aq"),
         has_presets_p: output.contains("preset") && output.contains("p1"),
         has_bf: output.contains("bf"),
+        has_rc_lookahead: output.contains("rc-lookahead"),
     }
 }
 

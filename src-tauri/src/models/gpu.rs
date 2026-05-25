@@ -29,42 +29,57 @@ pub struct NvencCaps {
     pub has_presets_p: bool,
     /// NVENC SDK ≥9.0 (driver 456+) — b-frames for better compression
     pub has_bf: bool,
+    /// NVENC SDK ≥8.0 (driver 435+, Pascal+) — enables lookahead for higher GPU utilization
+    pub has_rc_lookahead: bool,
 }
 
 impl NvencCaps {
     /// Baseline: NVENC SDK 7.0 (driver 418, Kepler) — only named presets + VBR CQ.
     #[cfg(target_os = "windows")]
     pub fn baseline() -> Self {
-        Self { has_spatial_aq: false, has_presets_p: false, has_bf: false }
+        Self { has_spatial_aq: false, has_presets_p: false, has_bf: false, has_rc_lookahead: false }
     }
 }
 
 impl GpuEncoder {
     /// Return encoder-specific FFmpeg arguments including codec, preset, and quality.
     ///
-    /// NVENC driver compatibility tiers:
-    ///   - Baseline (10-series / Pascal, driver 418+): `-preset medium -rc vbr -cq 23`
-    ///   - Enhanced (20-series+ / Turing+, driver 520+): `-preset p4 -spatial-aq 1
-    ///     -temporal-aq 1 -bf 3` — better detail via adaptive quantization,
-    ///     more efficient H.264 via b-frames.
+    /// NVENC driver compatibility tiers (optimized for GPU throughput):
+    ///   - Baseline (Pascal, driver 418+): `-preset fast -rc vbr -cq 23 -surfaces 64`
+    ///   - Enhanced (Turing+, driver 520+): `-preset p1 -rc vbr -cq 23 -rc-lookahead 32
+    ///     -surfaces 64 -b_ref_mode middle -no-scenecut 1 -spatial-aq 1 -temporal-aq 1 -bf 3`
     ///
     /// If any NVENC param is unsupported, batch.rs D-05 auto-retries with CPU.
     pub fn encoder_args(&self) -> Vec<String> {
         match self {
             Self::Nvenc(caps) => {
                 let mut args = vec!["-c:v".to_string(), "h264_nvenc".to_string()];
-                // Preset: p4 for Turing+, medium for Pascal
+                // Fastest preset for fingerprint ops (quality isn't the goal)
                 if caps.has_presets_p {
                     args.push("-preset".to_string());
-                    args.push("p4".to_string());
+                    args.push("p1".to_string());
                 } else {
                     args.push("-preset".to_string());
-                    args.push("medium".to_string());
+                    args.push("fast".to_string());
                 }
                 args.push("-rc".to_string());
                 args.push("vbr".to_string());
                 args.push("-cq".to_string());
                 args.push("23".to_string());
+                // Lookahead for higher GPU utilization (Pascal+)
+                if caps.has_rc_lookahead {
+                    args.push("-rc-lookahead".to_string());
+                    args.push("32".to_string());
+                }
+                // B-frame reference mode (Pascal+)
+                args.push("-b_ref_mode".to_string());
+                args.push("middle".to_string());
+                // Disable scene change detection — adds latency
+                args.push("-no-scenecut".to_string());
+                args.push("1".to_string());
+                // Increase encode surfaces for parallelism
+                args.push("-surfaces".to_string());
+                args.push("64".to_string());
                 // Turing+ optimizations
                 if caps.has_spatial_aq {
                     args.push("-spatial-aq".to_string());

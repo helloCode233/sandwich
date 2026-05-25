@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
 import { NLayout, NLayoutSider, NLayoutContent, NLayoutFooter, NTabs, NTabPane } from 'naive-ui';
+import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { useBatchStore } from '@/stores/batch';
+import { useFfmpegStore } from '@/stores/ffmpeg';
 import { useSeed } from '@/composables/useSeed';
 import { useQueue } from '@/composables/useQueue';
 import { useBatch } from '@/composables/useBatch';
@@ -15,12 +17,17 @@ import BatchSummary from '@/components/batch/BatchSummary.vue';
 import LogPanel from '@/components/log/LogPanel.vue';
 
 const batchStore = useBatchStore();
+const ffmpegStore = useFfmpegStore();
 const seedComposable = useSeed();
 const queueComposable = useQueue();
 const batchComposable = useBatch();
 const { t } = useI18n();
 
 const rightPanelTab = ref<'queue' | 'log'>('queue');
+
+// GPU encoder event listeners
+let gpuDetectedUnlisten: UnlistenFn | null = null;
+let gpuNotDetectedUnlisten: UnlistenFn | null = null;
 
 // Panel sizing (D-01: default 50/50, draggable divider)
 const leftWidth = ref(Math.floor(window.innerWidth / 2));
@@ -61,12 +68,33 @@ onMounted(async () => {
   await seedComposable.subscribe();
   await queueComposable.subscribe();
   await batchComposable.subscribe();
+  // GPU encoder status events
+  // Payload: unit variants serialize as string (e.g. "VideoToolbox"),
+  // struct variants serialize as object (e.g. {"Nvenc": {...}})
+  gpuDetectedUnlisten = await listen<string | Record<string, unknown>>(
+    'gpu-encoder-detected',
+    (event) => {
+      const payload = event.payload;
+      if (typeof payload === 'string') {
+        ffmpegStore.setGpuEncoder(payload);
+      } else if (payload && typeof payload === 'object') {
+        // Externally-tagged enum: key is the variant name
+        const key = Object.keys(payload)[0];
+        if (key) ffmpegStore.setGpuEncoder(key);
+      }
+    },
+  );
+  gpuNotDetectedUnlisten = await listen('gpu-encoder-not-detected', () => {
+    ffmpegStore.setGpuEncoder('');
+  });
 });
 
 onUnmounted(() => {
   seedComposable.unsubscribe();
   queueComposable.unsubscribe();
   batchComposable.unsubscribe();
+  gpuDetectedUnlisten?.();
+  gpuNotDetectedUnlisten?.();
 });
 </script>
 

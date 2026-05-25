@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import { NSelect, NButton, NIcon, NText, NSpace, useDialog } from 'naive-ui';
+import { NSelect, NButton, NIcon, NText, NSpace, NTag, useDialog } from 'naive-ui';
 import { Play, Square, FolderOpen } from 'lucide-vue-next';
 import { useMessage } from 'naive-ui';
 import { invoke } from '@tauri-apps/api/core';
@@ -9,12 +9,14 @@ import { Store } from '@tauri-apps/plugin-store';
 import { useSeedStore } from '@/stores/seed';
 import { useQueueStore } from '@/stores/queue';
 import { useBatchStore } from '@/stores/batch';
+import { useFfmpegStore } from '@/stores/ffmpeg';
 import { useBatch } from '@/composables/useBatch';
 import { useI18n } from 'vue-i18n';
 
 const seedStore = useSeedStore();
 const queueStore = useQueueStore();
 const batchStore = useBatchStore();
+const ffmpegStore = useFfmpegStore();
 const { startBatch, cancelBatch } = useBatch();
 const message = useMessage();
 const dialog = useDialog();
@@ -233,6 +235,14 @@ onMounted(() => {
         <NButton size="small" quaternary @click="onOpenOutputDir">
           {{ t('batch.openDir') }}
         </NButton>
+      </div>
+
+      <!-- GPU Acceleration Status -->
+      <div v-if="ffmpegStore.gpuChecked" class="flex items-center justify-center">
+        <NTag v-if="ffmpegStore.hasGpu" :bordered="false" size="small" type="success" round>
+          GPU: {{ ffmpegStore.gpuLabel }}
+        </NTag>
+        <NTag v-else :bordered="false" size="small" type="default" round> CPU </NTag>
       </div>
 
       <!-- Start / Cancel Button -->

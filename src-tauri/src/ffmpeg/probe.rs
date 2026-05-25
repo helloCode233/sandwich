@@ -11,6 +11,16 @@ use serde::Deserialize;
 
 use crate::models::video::VideoMetadata;
 
+/// Prevent spawned processes from creating a visible console window on Windows.
+fn no_console_window(_cmd: &mut Command) {
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+}
+
 /// Run ffprobe on a video file and extract structured metadata.
 ///
 /// ffmpeg_dir_opt: optional directory containing ffprobe binary.
@@ -31,7 +41,9 @@ pub fn extract_metadata(
     };
 
     // Run ffprobe with JSON output
-    let output = Command::new(&ffprobe_bin)
+    let mut cmd = Command::new(&ffprobe_bin);
+    no_console_window(&mut cmd);
+    let output = cmd
         .args(["-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", filepath])
         .output()
         .map_err(|e| format!("ffprobe execution failed: {}", e))?;
@@ -104,7 +116,9 @@ pub fn probe_global_metadata(
     filepath: &str,
 ) -> Result<std::collections::HashMap<String, String>, String> {
     let ffprobe_bin = ffprobe_path();
-    let output = std::process::Command::new(&ffprobe_bin)
+    let mut cmd = std::process::Command::new(&ffprobe_bin);
+    no_console_window(&mut cmd);
+    let output = cmd
         .args(["-v", "quiet", "-print_format", "json", "-show_format", filepath])
         .output()
         .map_err(|e| format!("ffprobe failed: {}", e))?;

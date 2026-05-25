@@ -2,7 +2,18 @@ use ffmpeg_sidecar::command::ffmpeg_is_installed;
 use ffmpeg_sidecar::version::{ffmpeg_version, ffmpeg_version_with_path};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use std::process::Command;
 use tauri::{AppHandle, Emitter, Manager};
+
+/// Prevent spawned processes from creating a visible console window on Windows.
+fn no_console_window(_cmd: &mut Command) {
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+}
 use tauri_plugin_store::StoreExt;
 
 /// Returned to the frontend after FFmpeg detection.
@@ -209,8 +220,9 @@ pub async fn verify_ffmpeg(app: AppHandle, path: String) -> Result<FfmpegInfo, S
             ffprobe_bin.display()
         ));
     }
-    std::process::Command::new(&ffprobe_bin)
-        .arg("-version")
+    let mut cmd = Command::new(&ffprobe_bin);
+    no_console_window(&mut cmd);
+    cmd.arg("-version")
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .output()

@@ -11,6 +11,16 @@ use crate::models::gpu::GpuEncoder;
 #[cfg(target_os = "windows")]
 use crate::models::gpu::NvencCaps;
 
+/// Prevent spawned processes from creating a visible console window on Windows.
+fn no_console_window(_cmd: &mut Command) {
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+}
+
 /// Detect best available GPU encoder for this platform.
 /// Returns None if no hardware encoder found (CPU fallback to libx264).
 /// For NVENC, also probes and attaches capability info for optimal parameter selection.
@@ -21,7 +31,9 @@ pub fn detect_gpu_encoder(ffmpeg_dir: &str) -> Option<GpuEncoder> {
         "ffmpeg"
     });
 
-    let output = Command::new(&ffmpeg_bin).args(["-hide_banner", "-encoders"]).output().ok()?;
+    let mut cmd = Command::new(&ffmpeg_bin);
+    no_console_window(&mut cmd);
+    let output = cmd.args(["-hide_banner", "-encoders"]).output().ok()?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
 
@@ -65,7 +77,9 @@ fn detect_nvenc_caps(ffmpeg_dir: &str) -> NvencCaps {
         "ffmpeg"
     });
 
-    let output = match Command::new(&ffmpeg_bin).args(["-h", "encoder=h264_nvenc"]).output() {
+    let mut cmd = Command::new(&ffmpeg_bin);
+    no_console_window(&mut cmd);
+    let output = match cmd.args(["-h", "encoder=h264_nvenc"]).output() {
         Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).to_string(),
         _ => return NvencCaps::baseline(),
     };

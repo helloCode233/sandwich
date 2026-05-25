@@ -15,13 +15,57 @@ pub enum GpuEncoder {
 }
 
 impl GpuEncoder {
-    /// Return the FFmpeg -c:v encoder name
-    pub fn encoder_name(&self) -> &str {
+    /// Return encoder-specific FFmpeg arguments including codec, preset, and quality.
+    ///
+    /// NVENC: `-rc vbr -cq 23` gives quality-based encoding equivalent to CRF 23,
+    /// avoiding the default CBR 2Mbps which produces terrible quality.
+    /// `-spatial-aq 1 -temporal-aq 1` enable adaptive quantization for better detail.
+    ///
+    /// AMF: `-quality balanced -rc cqp -qp_i/p 23` matches NVENC quality level.
+    ///
+    /// VideoToolbox: `-realtime 0` disables real-time mode for better compression.
+    ///
+    /// VAAPI: `-compression_level 1` enables better quality at the cost of speed.
+    pub fn encoder_args(&self) -> Vec<String> {
         match self {
-            Self::VideoToolbox => "h264_videotoolbox",
-            Self::Nvenc => "h264_nvenc",
-            Self::Amf => "h264_amf",
-            Self::Vaapi => "h264_vaapi",
+            Self::Nvenc => vec![
+                "-c:v".to_string(),
+                "h264_nvenc".to_string(),
+                "-preset".to_string(),
+                "p4".to_string(),
+                "-rc".to_string(),
+                "vbr".to_string(),
+                "-cq".to_string(),
+                "23".to_string(),
+                "-spatial-aq".to_string(),
+                "1".to_string(),
+                "-temporal-aq".to_string(),
+                "1".to_string(),
+            ],
+            Self::Amf => vec![
+                "-c:v".to_string(),
+                "h264_amf".to_string(),
+                "-quality".to_string(),
+                "balanced".to_string(),
+                "-rc".to_string(),
+                "cqp".to_string(),
+                "-qp_i".to_string(),
+                "23".to_string(),
+                "-qp_p".to_string(),
+                "23".to_string(),
+            ],
+            Self::VideoToolbox => vec![
+                "-c:v".to_string(),
+                "h264_videotoolbox".to_string(),
+                "-realtime".to_string(),
+                "0".to_string(),
+            ],
+            Self::Vaapi => vec![
+                "-c:v".to_string(),
+                "h264_vaapi".to_string(),
+                "-compression_level".to_string(),
+                "1".to_string(),
+            ],
         }
     }
 }

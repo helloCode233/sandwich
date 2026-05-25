@@ -17,6 +17,7 @@ use commands::queue::{clear_queue, get_queue, remove_from_queue, reorder_queue};
 use commands::seed::{copy_seed, delete_seed, generate_seed, list_seeds, rename_seed};
 use tauri::Emitter;
 use tauri::Manager;
+use tauri_plugin_store::StoreExt;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -106,11 +107,20 @@ pub fn run() {
             // --- Phase 5: GPU encoder detection (PERF-01, D-04, D-05) ---
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
-                let ffmpeg_path = ffmpeg_sidecar::paths::ffmpeg_path();
-                let ffmpeg_dir = ffmpeg_path
-                    .parent()
-                    .map(|p: &std::path::Path| p.to_string_lossy().to_string())
-                    .unwrap_or_default();
+                // Prefer the user-configured FFmpeg path from the store over
+                // ffmpeg-sidecar's default. They differ because the app's download
+                // flow saves to app_data_dir/ffmpeg/, not ffmpeg-sidecar's default.
+                let ffmpeg_dir = if let Ok(store) = handle.store("ffmpeg-config.json")
+                    && let Some(val) = store.get("ffmpeg_path")
+                    && let Some(s) = val.as_str()
+                {
+                    s.to_string()
+                } else {
+                    ffmpeg_sidecar::paths::ffmpeg_path()
+                        .parent()
+                        .map(|p: &std::path::Path| p.to_string_lossy().to_string())
+                        .unwrap_or_default()
+                };
                 let gpu_enc = detect_gpu_encoder(&ffmpeg_dir);
                 if let Some(ref enc) = gpu_enc {
                     let _ = handle.emit("gpu-encoder-detected", enc);

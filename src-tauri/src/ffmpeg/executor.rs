@@ -194,13 +194,11 @@ pub fn execute_single_file(
         seed.operations.iter().any(|op| matches!(op.op_type, OperationType::FrameDrop));
 
     // Inject GPU encoder or CPU fallback (Phase 5: PERF-01, D-04, D-05)
-    let codec = gpu_encoder.map(|e| e.encoder_name()).unwrap_or("libx264");
-    let mut encoder_args = vec![
-        "-c:v".to_string(),
-        codec.to_string(),
-        "-preset".to_string(),
-        if gpu_encoder.is_some() { "fast" } else { "medium" }.to_string(),
-    ];
+    let mut encoder_args: Vec<String> = if let Some(enc) = gpu_encoder {
+        enc.encoder_args()
+    } else {
+        vec!["-c:v".to_string(), "libx264".to_string(), "-preset".to_string(), "medium".to_string()]
+    };
     // Phase 7: -vsync vfr must come BEFORE encoder args to take effect
     if has_frame_drop {
         let mut vsync_args = vec!["-vsync".to_string(), "vfr".to_string()];

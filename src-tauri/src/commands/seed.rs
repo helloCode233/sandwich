@@ -79,8 +79,8 @@ fn validate_coverage(operations: &[Operation], total_frames: u32) -> bool {
         } else {
             ((op.start_frame + op.duration_frames) as usize).min(total_frames as usize)
         };
-        for i in start..end {
-            covered[i] = true;
+        for c in &mut covered[start..end] {
+            *c = true;
         }
     }
     let covered_count = covered.iter().filter(|&&c| c).count();
@@ -171,25 +171,25 @@ pub async fn generate_seed(
     }
 
     // D-09: Coverage validation with retry (up to 100 attempts)
-    if let Some(frames) = total_frames {
-        if frames > 0 {
-            let mut retries = 0;
-            while !validate_coverage(&operations, frames) && retries < 100 {
-                // Re-randomize start_frame/duration_frames for all ops
-                for op in &mut operations {
-                    let (start, dur) = random_frame_range(&mut rng, op.op_type, frames);
-                    op.start_frame = start;
-                    op.duration_frames = dur;
-                }
-                retries += 1;
+    if let Some(frames) = total_frames
+        && frames > 0
+    {
+        let mut retries = 0;
+        while !validate_coverage(&operations, frames) && retries < 100 {
+            // Re-randomize start_frame/duration_frames for all ops
+            for op in &mut operations {
+                let (start, dur) = random_frame_range(&mut rng, op.op_type, frames);
+                op.start_frame = start;
+                op.duration_frames = dur;
             }
-            // Fallback: set last operation to cover full video
-            if !validate_coverage(&operations, frames) {
-                if let Some(last) = operations.last_mut() {
-                    last.start_frame = 0;
-                    last.duration_frames = 0; // 0 = full video
-                }
-            }
+            retries += 1;
+        }
+        // Fallback: set last operation to cover full video
+        if !validate_coverage(&operations, frames)
+            && let Some(last) = operations.last_mut()
+        {
+            last.start_frame = 0;
+            last.duration_frames = 0; // 0 = full video
         }
     }
 
@@ -689,8 +689,6 @@ fn generate_operation(
                 "trimFrames": rng.random_range(trim_min..=trim_max),
             })
         }
-        // Phase 7: Stub for future variants not yet implemented
-        _ => serde_json::json!({}),
     };
 
     Operation { op_type, start_frame, duration_frames, params }

@@ -35,6 +35,7 @@ impl Default for AppState {
 pub struct BatchState {
     /// Cancel flag checked between files and within FFmpeg iteration.
     /// D-10: set by cancel_batch command, checked by processing loop.
+    #[allow(dead_code)]
     pub cancel_flag: AtomicBool,
     /// Current processing status.
     pub status: BatchStatus,

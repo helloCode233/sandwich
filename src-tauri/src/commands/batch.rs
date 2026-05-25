@@ -31,12 +31,11 @@ fn get_cancel_storage() -> &'static TokioMutex<Option<Arc<AtomicBool>>> {
 
 /// Read the stored FFmpeg directory from ffmpeg-config.json.
 fn get_ffmpeg_dir(app: &AppHandle) -> Option<String> {
-    if let Ok(store) = app.store("ffmpeg-config.json") {
-        if let Some(value) = store.get("ffmpeg_path") {
-            if let Some(path_str) = value.as_str() {
-                return Some(path_str.to_string());
-            }
-        }
+    if let Ok(store) = app.store("ffmpeg-config.json")
+        && let Some(value) = store.get("ffmpeg_path")
+        && let Some(path_str) = value.as_str()
+    {
+        return Some(path_str.to_string());
     }
     None
 }
@@ -44,14 +43,13 @@ fn get_ffmpeg_dir(app: &AppHandle) -> Option<String> {
 /// Read concurrency preference from store (D-08, D-09).
 /// Returns 1 as default if unset or invalid.
 fn get_concurrency_preference(app: &AppHandle) -> u32 {
-    if let Ok(store) = app.store("sandwich-config.json") {
-        if let Some(value) = store.get("concurrency") {
-            if let Some(n) = value.as_u64() {
-                let n = n as u32;
-                if (1..=4).contains(&n) {
-                    return n;
-                }
-            }
+    if let Ok(store) = app.store("sandwich-config.json")
+        && let Some(value) = store.get("concurrency")
+        && let Some(n) = value.as_u64()
+    {
+        let n = n as u32;
+        if (1..=4).contains(&n) {
+            return n;
         }
     }
     1 // Default per D-08
@@ -60,10 +58,10 @@ fn get_concurrency_preference(app: &AppHandle) -> u32 {
 /// Expand a leading tilde in a path to the user's home directory.
 /// Rust's Path/PathBuf and OS syscalls do not expand ~ — only shells do.
 fn expand_tilde(path: &str) -> String {
-    if path.starts_with('~') {
-        if let Ok(home) = std::env::var("HOME") {
-            return path.replacen('~', &home, 1);
-        }
+    if path.starts_with('~')
+        && let Ok(home) = std::env::var("HOME")
+    {
+        return path.replacen('~', &home, 1);
     }
     path.to_string()
 }

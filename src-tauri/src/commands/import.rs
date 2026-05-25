@@ -109,12 +109,11 @@ pub async fn import_video(
 
 /// Read the stored FFmpeg directory from ffmpeg-config.json (Phase 1 store).
 fn get_stored_ffmpeg_dir(app: &AppHandle) -> Option<String> {
-    if let Ok(store) = app.store("ffmpeg-config.json") {
-        if let Some(value) = store.get("ffmpeg_path") {
-            if let Some(path_str) = value.as_str() {
-                return Some(path_str.to_string());
-            }
-        }
+    if let Ok(store) = app.store("ffmpeg-config.json")
+        && let Some(value) = store.get("ffmpeg_path")
+        && let Some(path_str) = value.as_str()
+    {
+        return Some(path_str.to_string());
     }
     None
 }
@@ -179,16 +178,16 @@ fn check_disk_space_for_output(app: &AppHandle) -> Result<(), String> {
         std::fs::create_dir_all(output_path).ok();
     }
 
-    if let Ok(available) = fs2::available_space(output_path) {
-        if available < 100_000_000 {
-            let _ = app.emit(
-                "low-disk-space",
-                serde_json::json!({
-                    "available_bytes": available,
-                    "message": "Low disk space — less than 100MB available on output volume.",
-                }),
-            );
-        }
+    if let Ok(available) = fs2::available_space(output_path)
+        && available < 100_000_000
+    {
+        let _ = app.emit(
+            "low-disk-space",
+            serde_json::json!({
+                "available_bytes": available,
+                "message": "Low disk space — less than 100MB available on output volume.",
+            }),
+        );
     }
 
     Ok(())
@@ -196,19 +195,18 @@ fn check_disk_space_for_output(app: &AppHandle) -> Result<(), String> {
 
 /// Get the output directory from preferences, or default.
 fn get_output_dir(app: &AppHandle) -> String {
-    if let Ok(store) = app.store("sandwich-config.json") {
-        if let Some(value) = store.get("output_dir") {
-            if let Some(dir_str) = value.as_str() {
-                let s = dir_str.to_string();
-                if s.starts_with('~') {
-                    // Expand legacy tilde-prefixed paths
-                    if let Ok(home) = std::env::var("HOME") {
-                        return s.replacen('~', &home, 1);
-                    }
-                }
-                return s;
+    if let Ok(store) = app.store("sandwich-config.json")
+        && let Some(value) = store.get("output_dir")
+        && let Some(dir_str) = value.as_str()
+    {
+        let s = dir_str.to_string();
+        if s.starts_with('~') {
+            // Expand legacy tilde-prefixed paths
+            if let Ok(home) = std::env::var("HOME") {
+                return s.replacen('~', &home, 1);
             }
         }
+        return s;
     }
 
     #[cfg(target_os = "windows")]

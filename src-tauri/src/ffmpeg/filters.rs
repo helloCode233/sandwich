@@ -170,7 +170,9 @@ pub fn build_audio_volume_filter(op: &Operation) -> Result<Vec<String>, String> 
 ///   1. asetrate: change sample rate (alters both pitch AND speed)
 ///   2. atempo: restore original speed (counteracts speed change, pitch stays shifted)
 ///   3. aresample: bring sample rate back to original
+///
 /// This avoids rubberband (external library, violates D-05 pure built-in constraint).
+///
 /// Safety: pitchFactor clamped to [2^(-2/12), 2^(2/12)] ≈ [0.8909, 1.1225].
 pub fn build_audio_pitch_filter(op: &Operation) -> Result<Vec<String>, String> {
     let pitch_factor: f64 = op.params["pitchFactor"].as_f64().unwrap_or(1.0);
@@ -368,13 +370,12 @@ pub fn build_metadata_write_filter(op: &Operation) -> Result<Vec<String>, String
     ];
     let mut args = Vec::new();
     for (ffmpeg_key, param_key) in &fields {
-        if let Some(val) = op.params.get(param_key) {
-            if let Some(s) = val.as_str() {
-                if !s.is_empty() {
-                    args.push("-metadata".to_string());
-                    args.push(format!("{}={}", ffmpeg_key, s));
-                }
-            }
+        if let Some(val) = op.params.get(param_key)
+            && let Some(s) = val.as_str()
+            && !s.is_empty()
+        {
+            args.push("-metadata".to_string());
+            args.push(format!("{}={}", ffmpeg_key, s));
         }
     }
     Ok(args)

@@ -66,6 +66,7 @@ mod tests {
 /// Configuration for a batch processing run.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
 pub struct BatchConfig {
     /// ID of the seed to apply.
     pub seed_id: String,
@@ -200,5 +201,5 @@ pub fn file_md5(path: &Path) -> Result<String, String> {
         }
         hasher.consume(&buf[..n]);
     }
-    Ok(format!("{:x}", hasher.compute()))
+    Ok(format!("{:x}", hasher.finalize()))
 }

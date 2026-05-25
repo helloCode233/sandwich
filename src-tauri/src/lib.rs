@@ -66,29 +66,25 @@ pub fn run() {
                 use tauri_plugin_store::StoreExt;
 
                 // Load persisted seeds from seeds.json
-                if let Ok(store) = handle.store("seeds.json") {
-                    if let Some(value) = store.get("seeds") {
-                        if let Ok(seeds) = serde_json::from_value::<Vec<models::seed::Seed>>(value)
-                        {
-                            let app_state = handle.state::<Mutex<state::AppState>>();
-                            if let Ok(mut state) = app_state.lock() {
-                                state.seeds = seeds;
-                            }
-                        }
+                if let Ok(store) = handle.store("seeds.json")
+                    && let Some(value) = store.get("seeds")
+                    && let Ok(seeds) = serde_json::from_value::<Vec<models::seed::Seed>>(value)
+                {
+                    let app_state = handle.state::<Mutex<state::AppState>>();
+                    if let Ok(mut state) = app_state.lock() {
+                        state.seeds = seeds;
                     }
                 }
 
                 // Load persisted queue from queue.json
-                if let Ok(store) = handle.store("queue.json") {
-                    if let Some(value) = store.get("queue") {
-                        if let Ok(queue) =
-                            serde_json::from_value::<Vec<models::video::VideoEntry>>(value)
-                        {
-                            let app_state = handle.state::<Mutex<state::AppState>>();
-                            if let Ok(mut state) = app_state.lock() {
-                                state.queue = queue;
-                            }
-                        }
+                if let Ok(store) = handle.store("queue.json")
+                    && let Some(value) = store.get("queue")
+                    && let Ok(queue) =
+                        serde_json::from_value::<Vec<models::video::VideoEntry>>(value)
+                {
+                    let app_state = handle.state::<Mutex<state::AppState>>();
+                    if let Ok(mut state) = app_state.lock() {
+                        state.queue = queue;
                     }
                 }
 

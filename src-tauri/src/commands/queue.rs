@@ -79,7 +79,7 @@ pub async fn reorder_queue(
     {
         let mut app_state = state.lock().map_err(|e| format!("Lock error: {}", e))?;
         // Assign correct order_index to each entry
-        let mut indexed: Vec<VideoEntry> = entries
+        let indexed: Vec<VideoEntry> = entries
             .into_iter()
             .enumerate()
             .map(|(i, mut entry)| {

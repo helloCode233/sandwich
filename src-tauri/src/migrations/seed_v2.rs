@@ -24,7 +24,7 @@ pub fn migrate_seeds(app: &AppHandle) -> Result<usize, String> {
     }
 
     let state = app.state::<Mutex<AppState>>();
-    let mut app_state = state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let app_state = state.lock().map_err(|e| format!("Lock error: {}", e))?;
 
     // D-19: Skip if no seeds
     if app_state.seeds.is_empty() {

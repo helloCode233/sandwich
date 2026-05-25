@@ -8,7 +8,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use ffmpeg_sidecar::command::FfmpegCommand;
 use ffmpeg_sidecar::event::LogLevel;
-use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
 use crate::ffmpeg::filters::{FilterKind, MetadataContext, build_filter_args_separated};

@@ -125,16 +125,12 @@ pub struct Operation {
 /// Three-tier strength preset for seed generation (D-03, D-07).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[derive(Default)]
 pub enum StrengthTier {
     Conservative,
+    #[default]
     Standard,
     Aggressive,
-}
-
-impl Default for StrengthTier {
-    fn default() -> Self {
-        StrengthTier::Standard
-    }
 }
 
 /// The 30 operation types covering all fingerprint modification categories.

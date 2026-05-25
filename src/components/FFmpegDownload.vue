@@ -181,7 +181,6 @@ onUnmounted(() => {
             :indicator-placement="'inside'"
             :height="28"
             :status="store.status === 'verifying' ? 'success' : 'default'"
-            :processing="store.status === 'downloading'"
           />
           <NSpace justify="space-between" class="w-full">
             <NText depth="3">

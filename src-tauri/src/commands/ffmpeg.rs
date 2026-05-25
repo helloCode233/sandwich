@@ -46,22 +46,14 @@ pub async fn detect_ffmpeg_internal() -> FfmpegInfo {
         match ffmpeg_version() {
             Ok(version_str) => {
                 let major_version = extract_major_version(&version_str);
-                if major_version >= 4 {
-                    FfmpegInfo {
-                        found: true,
-                        path: std::env::var("PATH").ok(),
-                        version: Some(version_str),
-                        outdated: false,
-                        needs_download: false,
-                    }
-                } else {
-                    FfmpegInfo {
-                        found: true,
-                        path: std::env::var("PATH").ok(),
-                        version: Some(version_str),
-                        outdated: true,
-                        needs_download: true,
-                    }
+                // Accept modern versions (>=4) and unparseable snapshots (==0)
+                let outdated = major_version > 0 && major_version < 4;
+                FfmpegInfo {
+                    found: true,
+                    path: std::env::var("PATH").ok(),
+                    version: Some(version_str),
+                    outdated,
+                    needs_download: outdated,
                 }
             }
             Err(_) => FfmpegInfo {
@@ -91,16 +83,25 @@ fn ffmpeg_bin_path(dir: &std::path::Path) -> std::path::PathBuf {
 /// Extract major version number from ffmpeg version string.
 ///
 /// Handles multiple version string formats:
-///   - Standard:   "ffmpeg version 6.1.1"   → 6
-///   - BtbN/Windows: "ffmpeg version n7.1.1" → 7 (git snapshot prefix)
-///   - Some builds:  "ffmpeg version v5.0"   → 5
+///   - Standard:     "ffmpeg version 6.1.1"           → 6
+///   - BtbN release: "ffmpeg version n7.1.1-10-..."   → 7
+///   - BtbN master:  "ffmpeg version N-123616-g3ba..." → 123616 (recent snapshot)
+///   - Some builds:  "ffmpeg version v5.0"             → 5
+///
+/// For git-describe formats without a dotted version, the commit count
+/// is used. Any reasonable build will have a count ≫ 4.
 fn extract_major_version(version: &str) -> u32 {
     version
         .split_whitespace()
         .find(|s| s.chars().any(|c| c.is_ascii_digit()))
         .and_then(|s| {
+            // Strip leading non-digit chars (n, v, N, V, -, etc.)
             let trimmed = s.trim_start_matches(|c: char| !c.is_ascii_digit());
-            trimmed.split('.').next()
+            // Split on dots, take first segment, then extract leading digits
+            // (for git-describe formats like "123616-g3baab604db" which have no dots)
+            let first_seg = trimmed.split('.').next()?;
+            let digits: String = first_seg.chars().take_while(|c| c.is_ascii_digit()).collect();
+            if digits.is_empty() { None } else { Some(digits) }
         })
         .and_then(|s| s.parse().ok())
         .unwrap_or(0)
@@ -123,12 +124,13 @@ pub async fn detect_ffmpeg(app: AppHandle) -> Result<FfmpegInfo, String> {
             match ffmpeg_version_with_path(&bin) {
                 Ok(version_str) => {
                     let major = extract_major_version(&version_str);
+                    let outdated = major > 0 && major < 4;
                     return Ok(FfmpegInfo {
                         found: true,
                         path: Some(path_str.to_string()),
                         version: Some(version_str),
-                        outdated: major < 4,
-                        needs_download: major < 4,
+                        outdated,
+                        needs_download: outdated,
                     });
                 }
                 Err(_) => {
@@ -160,12 +162,13 @@ pub async fn get_ffmpeg_status(app: AppHandle) -> Result<FfmpegInfo, String> {
             match ffmpeg_version_with_path(&ffmpeg_bin) {
                 Ok(version_str) => {
                     let major = extract_major_version(&version_str);
+                    let outdated = major > 0 && major < 4;
                     return Ok(FfmpegInfo {
                         found: true,
                         path: Some(path_str.to_string()),
                         version: Some(version_str),
-                        outdated: major < 4,
-                        needs_download: major < 4,
+                        outdated,
+                        needs_download: outdated,
                     });
                 }
                 Err(_e) => {
@@ -214,6 +217,10 @@ pub async fn verify_ffmpeg(app: AppHandle, path: String) -> Result<FfmpegInfo, S
         .map_err(|e| format!("ffprobe verification failed at {}: {}", ffprobe_bin.display(), e))?;
 
     let major = extract_major_version(&version_str);
+    // Only flag as outdated if we positively identified a version < 4.
+    // Unparseable strings (major == 0) mean a git snapshot or custom build —
+    // the binary runs fine, treat as modern.
+    let outdated = major > 0 && major < 4;
     let now = chrono::Utc::now().to_rfc3339();
 
     // Persist to store
@@ -229,8 +236,8 @@ pub async fn verify_ffmpeg(app: AppHandle, path: String) -> Result<FfmpegInfo, S
         found: true,
         path: Some(path),
         version: Some(version_str),
-        outdated: major < 4,
-        needs_download: major < 4,
+        outdated,
+        needs_download: outdated,
     };
     let _ = app.emit("ffmpeg-ready", info.clone());
 
@@ -334,6 +341,14 @@ mod tests {
     #[test]
     fn test_extract_major_version_v_prefix() {
         assert_eq!(extract_major_version("ffmpeg version v5.0"), 5);
+    }
+
+    #[test]
+    fn test_extract_major_version_git_describe_no_dots() {
+        // BtbN master/nightly builds use uppercase N with commit count
+        assert_eq!(extract_major_version("ffmpeg version N-123616-g3baab604db-20260524"), 123616);
+        // n prefix with git describe but no dotted version
+        assert_eq!(extract_major_version("ffmpeg version n-500-gabcd1234"), 500);
     }
 
     #[test]

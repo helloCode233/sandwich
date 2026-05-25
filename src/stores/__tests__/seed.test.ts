@@ -16,50 +16,65 @@ describe('useSeedStore', () => {
     createdAt: new Date().toISOString(),
   });
 
-  it('initializes with empty seeds, null selection, zero count', () => {
+  it('initializes with empty seeds, empty selection, zero count', () => {
     const store = useSeedStore();
     expect(store.seeds).toEqual([]);
-    expect(store.selectedSeedId).toBeNull();
-    expect(store.selectedSeed).toBeNull();
+    expect(store.selectedSeedIds).toEqual([]);
+    expect(store.selectedSeeds).toEqual([]);
     expect(store.seedCount).toBe(0);
+    expect(store.hasSelection).toBe(false);
   });
 
   it('setSeeds replaces the seed list and clears stale selection', () => {
     const store = useSeedStore();
-    store.selectSeed('gone-id');
+    store.toggleSeed('gone-id');
     store.setSeeds([mockSeed('a', 'Alpha'), mockSeed('b', 'Beta')]);
     expect(store.seeds).toHaveLength(2);
     expect(store.seedCount).toBe(2);
-    // Stale selection cleared
-    expect(store.selectedSeedId).toBeNull();
+    // Stale selection cleared (gone-id no longer in list)
+    expect(store.selectedSeedIds).toEqual([]);
   });
 
-  it('selectSeed sets id and selectedSeed computed returns correct seed', () => {
+  it('toggleSeed adds and removes seed from selection', () => {
     const store = useSeedStore();
     store.setSeeds([mockSeed('a', 'Alpha'), mockSeed('b', 'Beta')]);
-    store.selectSeed('b');
-    expect(store.selectedSeedId).toBe('b');
-    expect(store.selectedSeed?.alias).toBe('Beta');
+    store.toggleSeed('b');
+    expect(store.selectedSeedIds).toEqual(['b']);
+    expect(store.selectedSeeds).toHaveLength(1);
+    expect(store.selectedSeeds[0].alias).toBe('Beta');
+    // Toggle again removes
+    store.toggleSeed('b');
+    expect(store.selectedSeedIds).toEqual([]);
   });
 
-  it('selectSeed(null) deselects', () => {
-    const store = useSeedStore();
-    store.setSeeds([mockSeed('a', 'Alpha')]);
-    store.selectSeed('a');
-    store.selectSeed(null);
-    expect(store.selectedSeedId).toBeNull();
-    expect(store.selectedSeed).toBeNull();
-  });
-
-  it('removeSeed removes the seed and clears selection if it was selected', () => {
+  it('deselectAll clears multi-selection', () => {
     const store = useSeedStore();
     store.setSeeds([mockSeed('a', 'Alpha'), mockSeed('b', 'Beta')]);
-    store.selectSeed('b');
+    store.toggleSeed('a');
+    store.toggleSeed('b');
+    expect(store.selectedSeedIds).toHaveLength(2);
+    store.deselectAll();
+    expect(store.selectedSeedIds).toEqual([]);
+    expect(store.selectedSeeds).toEqual([]);
+  });
+
+  it('selectAll selects every seed', () => {
+    const store = useSeedStore();
+    store.setSeeds([mockSeed('a', 'Alpha'), mockSeed('b', 'Beta')]);
+    store.selectAll();
+    expect(store.selectedSeedIds).toEqual(['a', 'b']);
+    expect(store.hasSelection).toBe(true);
+  });
+
+  it('removeSeed removes the seed and clears it from selection', () => {
+    const store = useSeedStore();
+    store.setSeeds([mockSeed('a', 'Alpha'), mockSeed('b', 'Beta')]);
+    store.toggleSeed('b');
     store.removeSeed('b');
     expect(store.seeds).toHaveLength(1);
     expect(store.seeds[0].id).toBe('a');
     // Selection cleared because removed seed was selected
-    expect(store.selectedSeedId).toBeNull();
+    expect(store.selectedSeedIds).toEqual([]);
   });
 
   it('addSeed appends a seed to the list', () => {

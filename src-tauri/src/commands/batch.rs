@@ -55,11 +55,18 @@ fn get_concurrency_preference(app: &AppHandle) -> u32 {
     1 // Default per D-08
 }
 
+/// Resolve the user's home directory across platforms.
+/// macOS/Linux: `HOME` env var. Windows: `HOME` first (Git Bash sets it),
+/// falls back to `USERPROFILE` (standard on native Windows).
+fn home_dir() -> Option<String> {
+    std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE")).ok()
+}
+
 /// Expand a leading tilde in a path to the user's home directory.
 /// Rust's Path/PathBuf and OS syscalls do not expand ~ — only shells do.
 fn expand_tilde(path: &str) -> String {
     if path.starts_with('~')
-        && let Ok(home) = std::env::var("HOME")
+        && let Some(home) = home_dir()
     {
         return path.replacen('~', &home, 1);
     }
@@ -546,11 +553,7 @@ pub async fn cancel_batch(state: State<'_, Mutex<AppState>>, app: AppHandle) -> 
 /// Tauri command: Open a directory in the system file manager.
 #[tauri::command]
 pub fn open_file_manager(path: String) -> Result<(), String> {
-    let expanded = if path.starts_with('~') {
-        std::env::var("HOME").map(|home| path.replacen('~', &home, 1)).unwrap_or(path)
-    } else {
-        path
-    };
+    let expanded = expand_tilde(&path);
     #[cfg(target_os = "macos")]
     {
         std::process::Command::new("open")

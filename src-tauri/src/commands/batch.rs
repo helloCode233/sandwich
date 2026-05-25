@@ -6,7 +6,7 @@
 //! - `get_batch_status` — returns live BatchProgress
 
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -62,13 +62,16 @@ fn home_dir() -> Option<String> {
     std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE")).ok()
 }
 
-/// Expand a leading tilde in a path to the user's home directory.
+/// Expand a leading tilde in a path to the user's home directory,
+/// normalizing separators to the platform's native form.
 /// Rust's Path/PathBuf and OS syscalls do not expand ~ — only shells do.
 fn expand_tilde(path: &str) -> String {
     if path.starts_with('~')
         && let Some(home) = home_dir()
     {
-        return path.replacen('~', &home, 1);
+        let expanded = path.replacen('~', &home, 1);
+        // Normalize to platform native separators (Windows: / → \)
+        return PathBuf::from(&expanded).to_string_lossy().to_string();
     }
     path.to_string()
 }
@@ -551,9 +554,12 @@ pub async fn cancel_batch(state: State<'_, Mutex<AppState>>, app: AppHandle) -> 
 }
 
 /// Tauri command: Open a directory in the system file manager.
+/// Creates the directory if it doesn't exist (first run before any batch).
 #[tauri::command]
 pub fn open_file_manager(path: String) -> Result<(), String> {
     let expanded = expand_tilde(&path);
+    // Ensure directory exists so file manager opens the right location
+    let _ = std::fs::create_dir_all(&expanded);
     #[cfg(target_os = "macos")]
     {
         std::process::Command::new("open")

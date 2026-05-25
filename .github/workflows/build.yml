@@ -70,8 +70,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          gh release delete-asset v1.0.0 sandwich.exe -y --repo ${{ github.repository }} 2>$null
           Copy-Item src-tauri/target/release/sandwich.exe Sandwich.exe
-          gh release upload v1.0.0 `
-            Sandwich.exe `
-            --clobber `
-            --repo ${{ github.repository }}
+          gh release upload v1.0.0 Sandwich.exe --repo ${{ github.repository }}

@@ -19,7 +19,14 @@ impl GpuEncoder {
     ///
     /// NVENC: `-rc vbr -cq 23` gives quality-based encoding equivalent to CRF 23,
     /// avoiding the default CBR 2Mbps which produces terrible quality.
-    /// `-spatial-aq 1 -temporal-aq 1` enable adaptive quantization for better detail.
+    ///
+    /// NVENC driver compatibility:
+    ///   - `-preset medium` (named): driver 418+ (2019), all Kepler+ GPUs
+    ///   - `-preset p1-p7` (numeric): driver 520+ (2022) — NOT used, too narrow
+    ///   - `-rc vbr -cq`: driver 418+, widely supported
+    ///   - `-spatial-aq`/`-temporal-aq`: driver 456+ (2020), Maxwell+ — NOT used
+    ///     to keep compatibility with older driver versions common on consumer machines.
+    ///   If any NVENC param is unsupported, batch.rs D-05 auto-retries with CPU.
     ///
     /// AMF: `-quality balanced -rc cqp -qp_i/p 23` matches NVENC quality level.
     ///
@@ -32,15 +39,11 @@ impl GpuEncoder {
                 "-c:v".to_string(),
                 "h264_nvenc".to_string(),
                 "-preset".to_string(),
-                "p4".to_string(),
+                "medium".to_string(),
                 "-rc".to_string(),
                 "vbr".to_string(),
                 "-cq".to_string(),
                 "23".to_string(),
-                "-spatial-aq".to_string(),
-                "1".to_string(),
-                "-temporal-aq".to_string(),
-                "1".to_string(),
             ],
             Self::Amf => vec![
                 "-c:v".to_string(),

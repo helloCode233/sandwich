@@ -253,6 +253,24 @@ pub async fn start_batch(
 
                     let modified = md5_before != md5_after && md5_after != "N/A";
 
+                    // Emit per-file log entry for the log panel (before data moves)
+                    let _ = app.emit(
+                        "batch-log",
+                        ProcessingLogEntry {
+                            id: uuid::Uuid::new_v4().to_string(),
+                            timestamp: chrono::Utc::now().to_rfc3339(),
+                            file: entry.filename.clone(),
+                            seed_alias: seed.alias.clone(),
+                            status: "success".to_string(),
+                            md5_before: md5_before.clone(),
+                            md5_after: md5_after.clone(),
+                            modified,
+                            output_path: Some(output_path.clone()),
+                            error_message: None,
+                            duration_ms: elapsed_ms,
+                        },
+                    );
+
                     succeeded_files.push(FileSuccess {
                         path: output_path,
                         seed_alias: seed.alias.clone(),
@@ -317,6 +335,25 @@ pub async fn start_batch(
                                     .cloned()
                                     .unwrap_or(("N/A".to_string(), 0));
                                 let modified = md5_before != md5_after && md5_after != "N/A";
+
+                                // Emit per-file log entry (CPU fallback success)
+                                let _ = app.emit(
+                                    "batch-log",
+                                    ProcessingLogEntry {
+                                        id: uuid::Uuid::new_v4().to_string(),
+                                        timestamp: chrono::Utc::now().to_rfc3339(),
+                                        file: entry.filename.clone(),
+                                        seed_alias: seed.alias.clone(),
+                                        status: "success".to_string(),
+                                        md5_before: md5_before.clone(),
+                                        md5_after: md5_after.clone(),
+                                        modified,
+                                        output_path: Some(output_path.clone()),
+                                        error_message: None,
+                                        duration_ms: retry_elapsed,
+                                    },
+                                );
+
                                 succeeded_files.push(FileSuccess {
                                     path: output_path,
                                     seed_alias: seed.alias.clone(),
@@ -353,12 +390,32 @@ pub async fn start_batch(
                                         error: combined.clone(),
                                     },
                                 );
+
+                                // Emit per-file log entry (GPU+CPU both failed)
+                                let _ = app.emit(
+                                    "batch-log",
+                                    ProcessingLogEntry {
+                                        id: uuid::Uuid::new_v4().to_string(),
+                                        timestamp: chrono::Utc::now().to_rfc3339(),
+                                        file: entry.filename.clone(),
+                                        seed_alias: seed.alias.clone(),
+                                        status: "failure".to_string(),
+                                        md5_before: String::new(),
+                                        md5_after: String::new(),
+                                        modified: false,
+                                        output_path: None,
+                                        error_message: Some(combined.clone()),
+                                        duration_ms: retry_elapsed,
+                                    },
+                                );
+
                                 failed_files.push(FileResult {
                                     file: entry.filename.clone(),
                                     seed: seed.alias.clone(),
                                     error: combined,
                                 });
                                 failed_durations.push(retry_elapsed);
+
                                 let app_state =
                                     state.lock().map_err(|e| format!("Lock error: {}", e))?;
                                 let mut batch_state = app_state
@@ -384,12 +441,32 @@ pub async fn start_batch(
                             error: e.clone(),
                         },
                     );
+
+                    // Emit per-file log entry (failure) — before e is moved
+                    let _ = app.emit(
+                        "batch-log",
+                        ProcessingLogEntry {
+                            id: uuid::Uuid::new_v4().to_string(),
+                            timestamp: chrono::Utc::now().to_rfc3339(),
+                            file: entry.filename.clone(),
+                            seed_alias: seed.alias.clone(),
+                            status: "failure".to_string(),
+                            md5_before: String::new(),
+                            md5_after: String::new(),
+                            modified: false,
+                            output_path: None,
+                            error_message: Some(e.clone()),
+                            duration_ms: elapsed_ms,
+                        },
+                    );
+
                     failed_files.push(FileResult {
                         file: entry.filename.clone(),
                         seed: seed.alias.clone(),
                         error: e,
                     });
                     failed_durations.push(elapsed_ms);
+
                     let app_state = state.lock().map_err(|e| format!("Lock error: {}", e))?;
                     let mut batch_state = app_state
                         .batch_state
@@ -422,49 +499,6 @@ pub async fn start_batch(
     {
         let mut storage = get_cancel_storage().lock().await;
         *storage = None;
-    }
-
-    // D-16: Emit processing log entries for the history panel
-    let now = chrono::Utc::now().to_rfc3339();
-    let log_succeeded: Vec<ProcessingLogEntry> = succeeded_files
-        .iter()
-        .zip(succeeded_durations.iter())
-        .map(|(s, &elapsed_ms)| ProcessingLogEntry {
-            id: uuid::Uuid::new_v4().to_string(),
-            timestamp: now.clone(),
-            file: s.source_file.clone(),
-            seed_alias: s.seed_alias.clone(),
-            status: "success".to_string(),
-            md5_before: s.md5_before.clone(),
-            md5_after: s.md5_after.clone(),
-            modified: s.modified,
-            output_path: Some(s.path.clone()),
-            error_message: None,
-            duration_ms: elapsed_ms,
-        })
-        .collect();
-
-    let log_failed: Vec<ProcessingLogEntry> = failed_files
-        .iter()
-        .zip(failed_durations.iter())
-        .map(|(f, &elapsed_ms)| ProcessingLogEntry {
-            id: uuid::Uuid::new_v4().to_string(),
-            timestamp: now.clone(),
-            file: f.file.clone(),
-            seed_alias: f.seed.clone(),
-            status: "failure".to_string(),
-            md5_before: String::new(),
-            md5_after: String::new(),
-            modified: false,
-            output_path: None,
-            error_message: Some(f.error.clone()),
-            duration_ms: elapsed_ms,
-        })
-        .collect();
-
-    // Emit log entries one by one (frontend accumulates them)
-    for entry in log_succeeded.iter().chain(log_failed.iter()) {
-        let _ = app.emit("batch-log", entry);
     }
 
     let result = BatchResult { succeeded: succeeded_files, failed: failed_files };

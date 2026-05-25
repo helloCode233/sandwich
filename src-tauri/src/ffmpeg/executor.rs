@@ -15,7 +15,7 @@ use crate::ffmpeg::filters::{FilterKind, MetadataContext, build_filter_args_sepa
 use crate::ffmpeg::probe::probe_global_metadata;
 use crate::models::batch::PerFileProgress;
 use crate::models::gpu::GpuEncoder;
-use crate::models::seed::{OperationType, Seed};
+use crate::models::seed::{Operation, OperationType, Seed};
 use crate::models::video::VideoEntry;
 
 /// Execute FFmpeg processing for a single video entry using the given seed.
@@ -76,7 +76,7 @@ pub fn execute_single_file(
             Err(e) => {
                 // Log the error but continue — fallback to full metadata erase
                 let _ = app.emit(
-                    "batch-log",
+                    "ffmpeg-debug-log",
                     serde_json::json!({
                         "file": entry.filename,
                         "level": "warning",
@@ -90,8 +90,61 @@ pub fn execute_single_file(
         None
     };
 
+    let total_video_frames = (entry.metadata.duration_secs * entry.metadata.fps as f64) as u32;
+
+    // Crop's scale-back formula (iw*inv_w:ih*inv_h) breaks when FFmpeg
+    // truncates crop dimensions — e.g. 927.12 crops to 926, then
+    // 926*1.035=958 instead of 960. Explicit target dimensions fix this.
+    let orig_w = entry.metadata.width;
+    let orig_h = entry.metadata.height;
+    let audio_sample_rate = entry.metadata.sample_rate;
+
     for op in &seed.operations {
-        let results = build_filter_args_separated(op, metadata_ctx.as_ref())?;
+        // TrimEdges needs totalFrames to set end_frame. totalFrames is
+        // video-specific (depends on input duration/fps), so the executor
+        // injects it at runtime rather than storing it in the seed.
+        // Without this, totalFrames defaults to 0 → end_frame=0 → empty output.
+        //
+        // Crop needs orig_w/orig_h for reliable scale-back to original
+        // dimensions (FFmpeg's crop+scale rounding causes 2px height loss).
+        //
+        // AudioPitch needs the actual audio sample rate from ffprobe.
+        // The seed stores a generic default (48000) that may not match
+        // the input file — e.g. input is 44100 Hz → asetrate miscomputes
+        // the pitch shift, causing 12% audio duration shrinkage.
+        let op_ref: &Operation;
+        let mut op_with_frames;
+        let needs_injection = matches!(op.op_type, OperationType::TrimEdges)
+            || matches!(op.op_type, OperationType::Crop)
+            || matches!(op.op_type, OperationType::AudioPitch);
+        if needs_injection {
+            op_with_frames = op.clone();
+            if matches!(op.op_type, OperationType::TrimEdges)
+                && !op_with_frames.params["totalFrames"].is_number()
+            {
+                op_with_frames.params["totalFrames"] = serde_json::json!(total_video_frames);
+            }
+            if matches!(op.op_type, OperationType::Crop) {
+                if !op_with_frames.params["origW"].is_number() {
+                    op_with_frames.params["origW"] = serde_json::json!(orig_w);
+                }
+                if !op_with_frames.params["origH"].is_number() {
+                    op_with_frames.params["origH"] = serde_json::json!(orig_h);
+                }
+            }
+            if matches!(op.op_type, OperationType::AudioPitch)
+                && audio_sample_rate > 0
+                && op_with_frames.params["originalRate"].as_u64().unwrap_or(0)
+                    != audio_sample_rate as u64
+            {
+                op_with_frames.params["originalRate"] = serde_json::json!(audio_sample_rate);
+            }
+            op_ref = &op_with_frames;
+        } else {
+            op_ref = op;
+        }
+
+        let results = build_filter_args_separated(op_ref, metadata_ctx.as_ref())?;
         for (kind, _args) in results {
             match kind {
                 FilterKind::VideoFilter(expr) => vf_exprs.push(expr),
@@ -107,8 +160,9 @@ pub fn execute_single_file(
         // Append pad filter to force even output dimensions.
         // libx264 (yuv420p) requires even width and height — odd dimensions
         // from accumulated crop/scale floating-point rounding cause exit code 187.
-        // pad=ceil(iw/2)*2:ceil(ih/2)*2 adds 0-1 px padding to make both even.
-        let vf_chain = format!("{},pad=ceil(iw/2)*2:ceil(ih/2)*2", vf_exprs.join(","));
+        // pad=iw+mod(iw,2):ih+mod(ih,2) adds 0-1 px padding to make both even.
+        // Using mod() avoids potential ceil() issues in FFmpeg's expression evaluator.
+        let vf_chain = format!("{},pad=iw+mod(iw\\,2):ih+mod(ih\\,2)", vf_exprs.join(","));
         all_args.push("-vf".to_string());
         all_args.push(vf_chain);
     }
@@ -180,7 +234,7 @@ pub fn execute_single_file(
         output_path_str_for_cmd
     );
     let _ = app.emit(
-        "batch-log",
+        "ffmpeg-debug-log",
         serde_json::json!({
             "file": entry.filename,
             "level": "info",
@@ -250,7 +304,7 @@ pub fn execute_single_file(
             | ffmpeg_sidecar::event::FfmpegEvent::Log(LogLevel::Error, msg) => {
                 ffmpeg_log.push(msg.clone());
                 let _ = app_clone.emit(
-                    "batch-log",
+                    "ffmpeg-debug-log",
                     serde_json::json!({
                         "file": filename,
                         "level": "warning",
@@ -262,7 +316,7 @@ pub fn execute_single_file(
                 // Capture all other log levels (Info, Debug, etc.) too
                 ffmpeg_log.push(msg.clone());
                 let _ = app_clone.emit(
-                    "batch-log",
+                    "ffmpeg-debug-log",
                     serde_json::json!({
                         "file": filename,
                         "level": "info",

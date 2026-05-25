@@ -27,20 +27,24 @@ pub fn build_math_overlay_filter(op: &Operation) -> Result<Vec<String>, String> 
     let opacity = opacity.clamp(0.01, 0.15);
     let frequency = frequency.clamp(20.0, 200.0);
 
-    // Build geq expression based on pattern
+    // Build geq expression based on pattern.
+    // CRITICAL: FFmpeg's geq filter wraps uint8 values (mod 256) instead of
+    // clamping. Any luma expression that can exceed 255 must be wrapped with
+    // clip(..., 0, 255). Without clip, white pixels (Y≈235) overflow to
+    // near-black — e.g. 235 * 1.095 = 257 → 257 % 256 = 1.
     let expr = match pattern {
         "ripple" => format!(
-            "lum='lum(X,Y)*(1+{opacity}*sin(2*PI*{freq}*X/W)*sin(2*PI*{freq}*Y/H))':cb='cb(X,Y)':cr='cr(X,Y)'",
+            "lum='clip(lum(X,Y)*(1+{opacity}*sin(2*PI*{freq}*X/W)*sin(2*PI*{freq}*Y/H)), 0, 255)':cb='cb(X,Y)':cr='cr(X,Y)'",
             opacity = opacity,
             freq = frequency / 100.0
         ),
         "stripes" => format!(
-            "lum='lum(X,Y)*(1+{opacity}*sin(2*PI*{freq}*X/W))':cb='cb(X,Y)':cr='cr(X,Y)'",
+            "lum='clip(lum(X,Y)*(1+{opacity}*sin(2*PI*{freq}*X/W)), 0, 255)':cb='cb(X,Y)':cr='cr(X,Y)'",
             opacity = opacity,
             freq = frequency / 100.0
         ),
         "concentric" => format!(
-            "lum='lum(X,Y)*(1+{opacity}*sin(2*PI*{freq}*hypot(X-W/2,Y-H/2)/W))':cb='cb(X,Y)':cr='cr(X,Y)'",
+            "lum='clip(lum(X,Y)*(1+{opacity}*sin(2*PI*{freq}*hypot(X-W/2,Y-H/2)/W)), 0, 255)':cb='cb(X,Y)':cr='cr(X,Y)'",
             opacity = opacity,
             freq = frequency / 100.0
         ),
@@ -246,16 +250,33 @@ pub fn build_crop_filter(op: &Operation) -> Result<Vec<String>, String> {
     // crop=out_w:out_h:x:y using iw/ih expressions
     // After crop, iw/ih refer to the cropped dimensions — scale=iw:ih would be a no-op.
     // Use inverse factor so scale restores original dimensions (D-06: scale-back).
-    let inv_w = 1.0 / (1.0 - left_pct / 100.0 - right_pct / 100.0);
-    let inv_h = 1.0 / (1.0 - top_pct / 100.0 - bottom_pct / 100.0);
+    //
+    // CRITICAL: YUV 4:2:0 chroma subsampling requires even crop offsets.
+    // Odd X/Y offsets shift chroma by 1 luma-pixel relative to luma, producing
+    // black-white ghosting artifacts on sharp edges (subtitles, UI elements).
+    // 2*floor(iw*PCT/200) rounds the offset down to the nearest even integer.
+    //
+    // CRITICAL: FFmpeg truncates crop dimensions (927.12 → 926 even), then
+    // scale=iw*inv:ih*inv compounds the error (926*1.035=958 instead of 960).
+    // When origW/origH are provided (injected by executor), use explicit scale
+    // targets to survive FFmpeg's rounding.
+    let has_orig_dims = op.params["origW"].is_number() && op.params["origH"].is_number();
+    let scale_expr = if has_orig_dims {
+        let orig_w = op.params["origW"].as_u64().unwrap_or(544);
+        let orig_h = op.params["origH"].as_u64().unwrap_or(960);
+        format!("scale={}:{}:flags=lanczos", orig_w, orig_h)
+    } else {
+        let inv_w = 1.0 / (1.0 - left_pct / 100.0 - right_pct / 100.0);
+        let inv_h = 1.0 / (1.0 - top_pct / 100.0 - bottom_pct / 100.0);
+        format!("scale=iw*{:.6}:ih*{:.6}:flags=lanczos", inv_w, inv_h)
+    };
     let filter = format!(
-        "crop=iw*(1-{lp}/100-{rp}/100):ih*(1-{tp}/100-{bp}/100):iw*{lp}/100:ih*{tp}/100,scale=iw*{inv_w:.6}:ih*{inv_h:.6}:flags=lanczos",
+        "crop=iw*(1-{lp}/100-{rp}/100):ih*(1-{tp}/100-{bp}/100):2*floor(iw*{lp}/200):2*floor(ih*{tp}/200),{scale}",
         lp = left_pct,
         rp = right_pct,
         tp = top_pct,
         bp = bottom_pct,
-        inv_w = inv_w,
-        inv_h = inv_h
+        scale = scale_expr,
     );
     Ok(vec!["-vf".to_string(), filter])
 }
@@ -634,15 +655,15 @@ pub fn build_watermark_blend_filter(op: &Operation) -> Result<Vec<String>, Strin
 
     let filter = match pattern {
         "grid" => format!(
-            "geq=lum='lum(X,Y)*(1+{op}*if(mod(floor(X/40)+floor(Y/40),2),1,-1))':cb='cb(X,Y)':cr='cr(X,Y)'",
+            "geq=lum='clip(lum(X,Y)*(1+{op}*if(mod(floor(X/40)+floor(Y/40),2),1,-1)), 0, 255)':cb='cb(X,Y)':cr='cr(X,Y)'",
             op = opacity
         ),
         "diagonal" => format!(
-            "geq=lum='lum(X,Y)*(1+{op}*if(mod(floor((X+Y)/40),2),1,-1))':cb='cb(X,Y)':cr='cr(X,Y)'",
+            "geq=lum='clip(lum(X,Y)*(1+{op}*if(mod(floor((X+Y)/40),2),1,-1)), 0, 255)':cb='cb(X,Y)':cr='cr(X,Y)'",
             op = opacity
         ),
         "ripple" => format!(
-            "geq=lum='lum(X,Y)*(1+{op}*sin(2*PI*X/W/8)*cos(2*PI*Y/H/8))':cb='cb(X,Y)':cr='cr(X,Y)'",
+            "geq=lum='clip(lum(X,Y)*(1+{op}*sin(2*PI*X/W/8)*cos(2*PI*Y/H/8)), 0, 255)':cb='cb(X,Y)':cr='cr(X,Y)'",
             op = opacity
         ),
         _ => return Err(format!("Unknown watermark blend pattern: {}", pattern)),

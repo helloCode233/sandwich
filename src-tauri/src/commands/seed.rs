@@ -143,6 +143,33 @@ pub async fn generate_seed(
         operations.push(op);
     }
 
+    // Guarantee at least one semi-transparent operation per seed.
+    // Blend overlays and MathOverlay create visible semi-transparent layers
+    // that help differentiate fingerprints from purely geometric/color tweaks.
+    let semi_transparent_types: &[OperationType] = &[
+        OperationType::SolidColorOverlay,
+        OperationType::GradientOverlay,
+        OperationType::WatermarkBlend,
+        OperationType::MathOverlay,
+    ];
+    let has_semi_transparent =
+        operations.iter().any(|op| semi_transparent_types.contains(&op.op_type));
+    if !has_semi_transparent {
+        // Replace a random non-pre-injected operation (index >= 2, after Crop+FrameDrop)
+        let replace_idx = if operations.len() > 2 {
+            rng.random_range(2..operations.len())
+        } else {
+            operations.len() // will push instead
+        };
+        let st_type = semi_transparent_types[rng.random_range(0..semi_transparent_types.len())];
+        let st_op = generate_operation(&mut rng, st_type, strength_tier, total_frames);
+        if replace_idx < operations.len() {
+            operations[replace_idx] = st_op;
+        } else {
+            operations.push(st_op);
+        }
+    }
+
     // D-09: Coverage validation with retry (up to 100 attempts)
     if let Some(frames) = total_frames {
         if frames > 0 {
@@ -328,11 +355,11 @@ fn generate_operation(
         }
         // ── Color processing (4): D-01, D-02, D-04, tier-driven ─────────────
         OperationType::HueRotate => {
-            // Barely visible curves-driven shifts: tiny hue rotation + near-neutral saturation
+            // Subtle hue shifts — capped to avoid noticeable color distortion
             let (angle_min, angle_max) = match strength_tier {
-                StrengthTier::Conservative => (-3.0, 3.0),
-                StrengthTier::Standard => (-8.0, 8.0),
-                StrengthTier::Aggressive => (-20.0, 20.0),
+                StrengthTier::Conservative => (-1.5, 1.5),
+                StrengthTier::Standard => (-3.0, 3.0),
+                StrengthTier::Aggressive => (-5.0, 5.0),
             };
             let (sat_min, sat_max) = match strength_tier {
                 StrengthTier::Conservative => (0.97, 1.03),
@@ -455,8 +482,8 @@ fn generate_operation(
             serde_json::json!({ "scaleFactor": rng.random_range(fac_min..=fac_max) })
         }
         OperationType::Flip => {
-            let direction = if rng.random_bool(0.5) { "horizontal" } else { "vertical" };
-            serde_json::json!({ "direction": direction })
+            // Horizontal only — vertical flip disabled (too visually destructive)
+            serde_json::json!({ "direction": "horizontal" })
         }
         // ── Blend overlay (3): D-01, D-02, D-04, tier-driven ───────────────
         OperationType::SolidColorOverlay => {

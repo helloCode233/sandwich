@@ -76,7 +76,23 @@ pub fn extract_metadata(
         })
         .unwrap_or(0.0);
 
-    Ok(VideoMetadata { duration_secs: duration, width, height, size_bytes: size, codec, fps })
+    // Extract audio sample rate from first audio stream (for AudioPitch).
+    let sample_rate = probe
+        .streams
+        .iter()
+        .find(|s| s.codec_type == "audio")
+        .and_then(|s| s.sample_rate)
+        .unwrap_or(0);
+
+    Ok(VideoMetadata {
+        duration_secs: duration,
+        width,
+        height,
+        size_bytes: size,
+        codec,
+        fps,
+        sample_rate,
+    })
 }
 
 /// Run ffprobe to extract all global metadata tags from a video file.
@@ -129,6 +145,8 @@ struct RawStream {
     height: Option<u32>,
     #[serde(rename = "r_frame_rate", default)]
     r_frame_rate: Option<String>,
+    #[serde(rename = "sample_rate", default)]
+    sample_rate: Option<u32>,
 }
 
 #[cfg(test)]

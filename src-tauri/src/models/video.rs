@@ -38,6 +38,7 @@ mod tests {
                 size_bytes: 2000000,
                 codec: "hevc".into(),
                 fps: 24.0,
+                sample_rate: 0,
             },
             status: VideoStatus::Valid,
             thumbnail_base64: Some("abc123base64".into()),
@@ -90,6 +91,10 @@ pub struct VideoMetadata {
     pub codec: String,
     /// Frames per second.
     pub fps: f32,
+    /// Audio sample rate in Hz. 0 if no audio stream.
+    /// Used by AudioPitch to set the correct asetrate target.
+    #[serde(default)]
+    pub sample_rate: u32,
 }
 
 /// Validity status for a queued video entry.

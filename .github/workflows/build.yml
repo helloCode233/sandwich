@@ -64,14 +64,18 @@ jobs:
       - name: Install frontend dependencies
         run: bun install --frozen-lockfile
 
-      # Windows: portable exe only — no installer, no bundler
-      - name: Build frontend (Windows)
+      # Windows: portable exe only — tauri build with --no-bundle skips NSIS/MSI
+      - uses: tauri-apps/tauri-action@v0
         if: matrix.platform == 'windows-latest'
-        run: bun run build
-
-      - name: Build Rust binary (Windows)
-        if: matrix.platform == 'windows-latest'
-        run: cargo build --release --manifest-path src-tauri/Cargo.toml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: v__VERSION__
+          releaseName: 'Sandwich v__VERSION__'
+          releaseBody: 'See assets to download and install.'
+          releaseDraft: true
+          prerelease: false
+          args: '--no-bundle'
 
       # macOS / Linux: use tauri-action for DMG / deb / AppImage
       - uses: tauri-apps/tauri-action@v0

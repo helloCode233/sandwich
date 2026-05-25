@@ -12,12 +12,16 @@ use serde::Deserialize;
 use crate::models::video::VideoMetadata;
 
 /// Prevent spawned processes from creating a visible console window on Windows.
-fn no_console_window(_cmd: &mut Command) {
+fn no_console_window(cmd: &mut Command) {
     #[cfg(target_os = "windows")]
     {
         use std::os::windows::process::CommandExt;
         const CREATE_NO_WINDOW: u32 = 0x08000000;
         cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = cmd;
     }
 }
 

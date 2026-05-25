@@ -63,11 +63,11 @@ fn migrate_imported_seed(mut seed: Seed) -> Result<Seed, String> {
                     _ => {}
                 }
             }
-            OperationType::FrameDrop => {
-                if op.params.get("offset").is_some() || op.params.get("period").is_some() {
-                    let interval = rng.random_range(30u32..=50u32);
-                    op.params = serde_json::json!({ "interval": interval });
-                }
+            OperationType::FrameDrop
+                if op.params.get("offset").is_some() || op.params.get("period").is_some() =>
+            {
+                let interval = rng.random_range(30u32..=50u32);
+                op.params = serde_json::json!({ "interval": interval });
             }
             _ => {}
         }

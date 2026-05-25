@@ -78,16 +78,15 @@ pub fn migrate_seeds(app: &AppHandle) -> Result<usize, String> {
                         _ => {}
                     }
                 }
-                // FrameDrop: setpts jitter -> select-based (D-17)
-                OperationType::FrameDrop => {
+                OperationType::FrameDrop
+                    if op.params.get("offset").is_some() || op.params.get("period").is_some() =>
+                {
                     // Old FrameDrop has setpts params (offset, period).
                     // New FrameDrop uses select filter with interval.
                     // Only migrate if we detect old-format params.
-                    if op.params.get("offset").is_some() || op.params.get("period").is_some() {
-                        let interval = rng.random_range(30u32..=50u32); // D-18 range
-                        op.params = serde_json::json!({ "interval": interval });
-                        migrated_count += 1;
-                    }
+                    let interval = rng.random_range(30u32..=50u32); // D-18 range
+                    op.params = serde_json::json!({ "interval": interval });
+                    migrated_count += 1;
                 }
                 _ => {}
             }

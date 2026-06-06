@@ -434,3 +434,135 @@ fn test_trim_edges_produces_valid_output() {
     assert!(out.exists());
     let _ = std::fs::remove_file(&out);
 }
+
+// =========================================================================
+// UAT Gap 3: FrameDrop frame count verification + full filter chain test
+// =========================================================================
+
+/// UAT Gap 3: Verify FrameDrop select filter actually reduces frame count.
+/// Without -vsync vfr, ffmpeg inserts duplicate frames to maintain CFR,
+/// making the output frame count equal to input. With -vsync vfr,
+/// the output should have fewer frames.
+#[test]
+fn test_frame_drop_reduces_frame_count() {
+    if !ffmpeg_available() {
+        return;
+    }
+    let src = generate_test_video().expect("test video");
+    let out = src.with_file_name("test_framedrop_out.mp4");
+
+    // Source is 2s * 30fps = 60 frames (approximately, may vary)
+    let src_frames = count_frames(&src.to_string_lossy()).expect("count source frames");
+    assert!(src_frames >= 50, "Source should have ~60 frames, got {}", src_frames);
+
+    // FrameDrop with aggressive interval=25 (drop 1 frame every 25)
+    // Expected: ~60/25 ≈ 2-3 frames dropped → ~57-58 output frames
+    let op = make_test_op(OperationType::FrameDrop, serde_json::json!({"interval": 25}));
+    let args = build_frame_drop_filter(&op).expect("build FrameDrop filter");
+    let vf_args = vec![args[1].clone()];
+
+    // CRITICAL: -vsync vfr is required. The executor injects this automatically
+    // when FrameDrop is present (executor.rs lines 189-209), but in this
+    // integration test we must add it manually.
+    let ffmpeg = ffmpeg_path();
+    let ffmpeg_str = if ffmpeg.exists() {
+        ffmpeg.to_string_lossy().to_string()
+    } else {
+        "ffmpeg".to_string()
+    };
+
+    let status = Command::new(&ffmpeg_str)
+        .arg("-i").arg(src.to_string_lossy().to_string())
+        .arg("-vf").arg(&vf_args[0])
+        .arg("-vsync").arg("vfr")     // D-17: prevent duplicate frame insertion
+        .arg("-c:v").arg("libx264")
+        .arg("-preset").arg("ultrafast")
+        .arg("-y")
+        .arg(out.to_string_lossy().to_string())
+        .status()
+        .expect("FFmpeg FrameDrop run");
+
+    assert!(status.success(), "FrameDrop filter should execute successfully");
+
+    // Verify frame count decreased
+    let out_frames = count_frames(&out.to_string_lossy()).expect("count output frames");
+    assert!(
+        out_frames < src_frames,
+        "FrameDrop must reduce frame count. Input: {} frames, Output: {} frames. \
+         If equal, -vsync vfr may not be working (ffmpeg inserting duplicates).",
+        src_frames, out_frames
+    );
+    assert!(
+        out_frames >= src_frames - 5,
+        "FrameDrop should not drop more than ~5 frames for 60-frame input at interval=25. \
+         Got {} output frames from {} input frames.",
+        out_frames, src_frames
+    );
+
+    let _ = std::fs::remove_file(&out);
+}
+
+/// Verify multiple Phase 7 filters can be chained in a single FFmpeg command.
+/// Mirrors the executor's comma-joining behavior for -vf and -af chains.
+#[test]
+fn test_multiple_phase7_filters_chained() {
+    if !ffmpeg_available() {
+        return;
+    }
+    let src = generate_test_video().expect("test video");
+    let out = src.with_file_name("test_chain_out.mp4");
+
+    // Build 3 video filters: FrameDrop + Crop + setpts (from VideoSpeed)
+    let fd_op = make_test_op(OperationType::FrameDrop, serde_json::json!({"interval": 40}));
+    let crop_op = make_test_op(
+        OperationType::Crop,
+        serde_json::json!({
+            "leftPct": 1.0, "rightPct": 1.0, "topPct": 1.0, "bottomPct": 1.0,
+            "origW": 320, "origH": 240,
+        }),
+    );
+    let vs_op = make_test_op(OperationType::VideoSpeed, serde_json::json!({"speedFactor": 1.02}));
+
+    let fd_vf = build_frame_drop_filter(&fd_op).expect("FrameDrop");
+    let crop_vf = build_crop_filter(&crop_op).expect("Crop");
+    let vs_args = build_video_speed_filter(&vs_op).expect("VideoSpeed");
+
+    // Collect video filter expressions (without -vf prefix) and comma-join
+    let vf_exprs: Vec<String> = vec![
+        fd_vf[1].clone(),
+        crop_vf[1].clone(),
+        vs_args[1].clone(),   // setpts
+    ];
+    // Collect audio filter expressions
+    let af_exprs: Vec<String> = vec![
+        vs_args[3].clone(),   // atempo
+    ];
+
+    let ffmpeg = ffmpeg_path();
+    let ffmpeg_str = if ffmpeg.exists() {
+        ffmpeg.to_string_lossy().to_string()
+    } else {
+        "ffmpeg".to_string()
+    };
+
+    let mut cmd = Command::new(&ffmpeg_str);
+    cmd.arg("-i").arg(src.to_string_lossy().to_string());
+    if !vf_exprs.is_empty() {
+        cmd.arg("-vf").arg(vf_exprs.join(","));
+    }
+    if !af_exprs.is_empty() {
+        cmd.arg("-af").arg(af_exprs.join(","));
+    }
+    cmd.arg("-vsync").arg("vfr");
+    cmd.arg("-c:v").arg("libx264");
+    cmd.arg("-preset").arg("ultrafast");
+    cmd.arg("-y");
+    cmd.arg(out.to_string_lossy().to_string());
+
+    let status = cmd.status().expect("FFmpeg chain run");
+    assert!(status.success(), "Chained Phase 7 filters (FrameDrop+Crop+VideoSpeed) should execute successfully");
+    assert!(out.exists() && out.metadata().map(|m| m.len() > 0).unwrap_or(false),
+        "Chain output should be non-empty");
+
+    let _ = std::fs::remove_file(&out);
+}

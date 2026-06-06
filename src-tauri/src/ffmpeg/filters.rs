@@ -220,9 +220,10 @@ pub fn build_audio_channel_filter(op: &Operation) -> Result<Vec<String>, String>
     let mode = op.params["mode"].as_str().unwrap_or("swap");
 
     let filter = match mode {
-        "swap" => "channelmap=map=FL-FR|FR-FL".to_string(),
-        "mono" => "pan=mono|c0=0.5*FL+0.5*FR".to_string(),
-        "stereo" => "channelmap=map=FL-FC|FR-FC".to_string(),
+        "swap" => "aformat=channel_layouts=stereo,channelmap=map=FL-FR|FR-FL".to_string(),
+        "mono" => "aformat=channel_layouts=mono".to_string(),
+        "stereo" => "aformat=channel_layouts=stereo,channelmap=map=FL-FC|FR-FC:channel_layout=2.1"
+            .to_string(),
         _ => return Err(format!("Unknown channel mode: {}", mode)),
     };
 

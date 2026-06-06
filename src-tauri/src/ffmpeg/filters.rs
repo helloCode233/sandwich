@@ -752,13 +752,25 @@ pub fn build_micro_rotate_filter(op: &Operation) -> Result<Vec<String>, String> 
 /// Build FFmpeg filter arguments for tiny scaling via `scale` filter.
 /// Uses lanczos flags for high-quality resampling.
 /// Safety backstop: scaleFactor clamped to [0.99, 1.01] per D-01.
-pub fn build_tiny_scale_filter(op: &Operation) -> Result<Vec<String>, String> {
+///
+/// GPU path (NVENC + hwaccel): uses scale_cuda (direct CUDA equivalent).
+/// scale_cuda does not support flags=lanczos — omitted in GPU path.
+pub fn build_tiny_scale_filter(
+    op: &Operation,
+    gpu_encoder: Option<&GpuEncoder>,
+    hwaccel_active: bool,
+) -> Result<Vec<String>, String> {
     let scale_factor: f64 = op.params["scaleFactor"].as_f64().unwrap_or(1.0);
 
     let scale_factor = scale_factor.clamp(0.99, 1.01);
 
-    let filter = format!("scale=iw*{}:ih*{}:flags=lanczos", scale_factor, scale_factor);
-    Ok(vec!["-vf".to_string(), filter])
+    if hwaccel_active && gpu_encoder.is_some_and(|e| e.supports_gpu_filters()) {
+        let filter = format!("scale_cuda=iw*{}:ih*{}", scale_factor, scale_factor);
+        Ok(vec!["-vf".to_string(), filter])
+    } else {
+        let filter = format!("scale=iw*{}:ih*{}:flags=lanczos", scale_factor, scale_factor);
+        Ok(vec!["-vf".to_string(), filter])
+    }
 }
 
 /// Build FFmpeg filter arguments for horizontal or vertical flip.
@@ -900,7 +912,7 @@ pub fn build_filter_args(
         OperationType::Sharpen => build_sharpen_filter(op, gpu_encoder, hwaccel_active),
         // Phase 6: Geometric fine-tuning
         OperationType::MicroRotate => build_micro_rotate_filter(op),
-        OperationType::TinyScale => build_tiny_scale_filter(op),
+        OperationType::TinyScale => build_tiny_scale_filter(op, gpu_encoder, hwaccel_active),
         OperationType::Flip => build_flip_filter(op, gpu_encoder, hwaccel_active),
         // Phase 6: Blend overlay
         OperationType::SolidColorOverlay => build_solid_color_overlay_filter(op),
@@ -1013,7 +1025,7 @@ pub fn build_filter_args_separated(
             Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
         OperationType::TinyScale => {
-            let args = build_tiny_scale_filter(op)?;
+            let args = build_tiny_scale_filter(op, gpu_encoder, hwaccel_active)?;
             let expr = args.get(1).cloned().unwrap_or_default();
             Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
@@ -1447,7 +1459,7 @@ mod tests {
     #[test]
     fn test_tiny_scale_basic() {
         let op = make_op(OperationType::TinyScale, serde_json::json!({"scaleFactor": 0.995}));
-        let args = build_tiny_scale_filter(&op).unwrap();
+        let args = build_tiny_scale_filter(&op, None, false).unwrap();
         assert!(args[0] == "-vf");
         assert!(args[1].contains("scale="));
         assert!(args[1].contains("iw*0.995"));

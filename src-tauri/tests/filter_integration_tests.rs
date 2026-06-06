@@ -385,17 +385,24 @@ fn test_metadata_write_injects_fake_fields() {
             .expect("FFmpeg run");
     assert!(ok, "MetadataWrite should produce valid output");
 
-    // Verify metadata was injected
+    // Verify metadata was injected at the global/format level.
+    // NOTE: MP4 muxer silently drops the `author` key and FFmpeg always overwrites
+    // the `encoder` key. These are format-level limitations, not filter bugs.
     let tags = probe_global_metadata(&out.to_string_lossy(), None).unwrap_or_default();
     assert_eq!(
         tags.get("title").map(|s| s.as_str()),
         Some("Integration Test"),
-        "title metadata should be injected"
+        "title metadata should be injected at global level"
     );
     assert_eq!(
-        tags.get("author").map(|s| s.as_str()),
-        Some("sandwich-ci"),
-        "author metadata should be injected"
+        tags.get("comment").map(|s| s.as_str()),
+        Some("auto-generated"),
+        "comment metadata should be injected at global level"
+    );
+    assert_eq!(
+        tags.get("copyright").map(|s| s.as_str()),
+        Some("Copyright 2026"),
+        "copyright metadata should be injected at global level"
     );
 
     let _ = std::fs::remove_file(&out);

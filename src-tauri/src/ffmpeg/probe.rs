@@ -142,13 +142,21 @@ pub fn probe_global_metadata(
         return Err("Cannot probe file metadata".to_string());
     }
 
-    let probe: RawProbeOutput = serde_json::from_slice(&output.stdout)
+    let probe: RawFormatOutput = serde_json::from_slice(&output.stdout)
         .map_err(|e| format!("Failed to parse ffprobe JSON: {}", e))?;
 
     Ok(probe.format.tags.unwrap_or_default())
 }
 
 // --- Raw ffprobe JSON structures (private, used only for parsing) ---
+
+/// Parsed JSON from `ffprobe -show_format` (format-only, no streams).
+/// Used by probe_global_metadata. Separate from RawProbeOutput because
+/// -show_format output has no `streams` field.
+#[derive(Debug, Deserialize)]
+struct RawFormatOutput {
+    format: RawFormat,
+}
 
 #[derive(Debug, Deserialize)]
 struct RawProbeOutput {

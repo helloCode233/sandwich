@@ -363,13 +363,26 @@ pub fn build_crop_filter(
 /// Speed factor 0.95-1.05x. Video PTS / factor, audio tempo = factor.
 /// This is a multi-filter operation: returns BOTH video and audio filter expressions.
 /// Safety: speedFactor clamped to [0.95, 1.05].
-pub fn build_video_speed_filter(op: &Operation) -> Result<Vec<String>, String> {
+///
+/// GPU path (NVENC + hwaccel): uses fps_cuda to change effective frame rate for speed
+/// change effect, keeping video processing entirely on GPU. Audio stays CPU atempo.
+pub fn build_video_speed_filter(
+    op: &Operation,
+    gpu_encoder: Option<&GpuEncoder>,
+    hwaccel_active: bool,
+) -> Result<Vec<String>, String> {
     let speed_factor: f64 = op.params["speedFactor"].as_f64().unwrap_or(1.0);
     let speed_factor = speed_factor.clamp(0.95, 1.05);
 
-    // setpts: speed up video by inverse factor
+    let vf_expr = if hwaccel_active && gpu_encoder.is_some_and(|e| e.supports_gpu_filters()) {
+        // GPU: fps_cuda changes effective frame rate to create speed change effect
+        format!("fps_cuda=fps={:.4},setpts=N/FRAME_RATE/TB", 30.0 / speed_factor)
+    } else {
+        // CPU: setpts speeds up/slows down video by inverse factor
+        format!("setpts={:.4}*PTS", 1.0 / speed_factor)
+    };
+
     // atempo: speed up audio to match — FFmpeg requires 0.5-2.0, our range is safe
-    let vf_expr = format!("setpts={:.4}*PTS", 1.0 / speed_factor);
     let af_expr = format!("atempo={:.4}", speed_factor);
 
     // Return as combined filter args: -vf setpts=... -af atempo=...
@@ -798,7 +811,7 @@ pub fn build_filter_args(
         OperationType::MetadataWrite => build_metadata_write_filter(op),
         OperationType::MetadataSelectiveErase => build_metadata_selective_erase_filter(op, None),
         // Phase 7: Duration (2)
-        OperationType::VideoSpeed => build_video_speed_filter(op),
+        OperationType::VideoSpeed => build_video_speed_filter(op, gpu_encoder, hwaccel_active),
         OperationType::TrimEdges => build_trim_edges_filter(op),
     }
 }
@@ -960,8 +973,8 @@ pub fn build_filter_args_separated(
         }
         // Phase 7: Duration (2) — VideoSpeed returns BOTH VideoFilter and AudioFilter
         OperationType::VideoSpeed => {
-            let args = build_video_speed_filter(op)?;
-            // args = ["-vf", "setpts=N*PTS", "-af", "atempo=N"]
+            let args = build_video_speed_filter(op, gpu_encoder, hwaccel_active)?;
+            // args = ["-vf", "fps_cuda=..." or "setpts=N*PTS", "-af", "atempo=N"]
             let vf_expr = args.get(1).cloned().unwrap_or_default();
             let af_expr = args.get(3).cloned().unwrap_or_default();
             Ok(vec![

@@ -83,23 +83,51 @@ fn ffprobe_bin() -> PathBuf {
 }
 
 /// Run ffprobe to count video frames in a file.
+/// Uses -count_frames to force actual frame counting (needed for containers
+/// that don't store frame count in stream header). Falls back from
+/// `nb_read_frames` to `nb_frames` if the former is N/A or absent.
 fn count_frames(filepath: &str) -> Result<u32, String> {
     let output = Command::new(ffprobe_bin())
         .args([
             "-v",
             "quiet",
+            "-count_frames",
             "-select_streams",
             "v:0",
             "-show_entries",
-            "stream=nb_read_frames",
+            "stream=nb_read_frames,nb_frames",
             "-of",
-            "csv=p=0",
+            "json",
             filepath,
         ])
         .output()
         .map_err(|e| format!("ffprobe: {}", e))?;
-    let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    text.parse::<u32>().map_err(|e| format!("parse frame count '{}': {}", text, e))
+
+    let text = String::from_utf8(output.stdout).map_err(|e| format!("ffprobe stdout: {}", e))?;
+
+    let parsed: serde_json::Value =
+        serde_json::from_str(&text).map_err(|e| format!("ffprobe json: {}", e))?;
+
+    let stream = parsed
+        .get("streams")
+        .and_then(|s| s.get(0))
+        .ok_or_else(|| format!("ffprobe: no video stream found in {}", filepath))?;
+
+    // Try nb_read_frames first (populated when -count_frames is used)
+    if let Some(n) = stream.get("nb_read_frames").and_then(|v| v.as_str()) {
+        if n != "N/A" {
+            return n.parse::<u32>().map_err(|e| format!("parse nb_read_frames '{}': {}", n, e));
+        }
+    }
+
+    // Fall back to nb_frames
+    if let Some(n) = stream.get("nb_frames").and_then(|v| v.as_str()) {
+        if n != "N/A" {
+            return n.parse::<u32>().map_err(|e| format!("parse nb_frames '{}': {}", n, e));
+        }
+    }
+
+    Err(format!("ffprobe: could not determine frame count for {}", filepath))
 }
 
 /// Get video resolution via ffprobe.

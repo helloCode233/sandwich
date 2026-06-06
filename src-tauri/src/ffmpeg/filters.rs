@@ -550,21 +550,38 @@ pub fn build_metadata_selective_erase_filter(
 /// Build FFmpeg filter arguments for hue rotation.
 /// Strength tier: conservative +/-15deg, standard +/-45deg, aggressive +/-90deg.
 /// Safety backstop: hue angle clamped to [-90, 90], saturation [0.5, 1.5].
-pub fn build_hue_rotate_filter(op: &Operation) -> Result<Vec<String>, String> {
+///
+/// GPU path (NVENC + hwaccel): uses hue_cuda (direct CUDA equivalent of hue filter).
+pub fn build_hue_rotate_filter(
+    op: &Operation,
+    gpu_encoder: Option<&GpuEncoder>,
+    hwaccel_active: bool,
+) -> Result<Vec<String>, String> {
     let hue_angle: f64 = op.params["hueAngle"].as_f64().unwrap_or(0.0);
     let saturation: f64 = op.params["saturation"].as_f64().unwrap_or(1.0);
 
     let hue_angle = hue_angle.clamp(-90.0, 90.0);
     let saturation = saturation.clamp(0.5, 1.5);
 
-    let filter = format!("hue=h={}:s={}", hue_angle, saturation);
-    Ok(vec!["-vf".to_string(), filter])
+    if hwaccel_active && gpu_encoder.is_some_and(|e| e.supports_gpu_filters()) {
+        let filter = format!("hue_cuda=h={}:s={}", hue_angle, saturation);
+        Ok(vec!["-vf".to_string(), filter])
+    } else {
+        let filter = format!("hue=h={}:s={}", hue_angle, saturation);
+        Ok(vec!["-vf".to_string(), filter])
+    }
 }
 
 /// Build FFmpeg filter arguments for saturation adjustment via `eq` filter.
 /// Strength tier affects saturation, contrast, and brightness ranges.
 /// Safety backstop: sat [0.5, 2.0], contrast [0.8, 1.3], brightness [-0.3, 0.3].
-pub fn build_saturation_adjust_filter(op: &Operation) -> Result<Vec<String>, String> {
+///
+/// GPU path (NVENC + hwaccel): uses eq_cuda (direct CUDA equivalent of eq filter).
+pub fn build_saturation_adjust_filter(
+    op: &Operation,
+    gpu_encoder: Option<&GpuEncoder>,
+    hwaccel_active: bool,
+) -> Result<Vec<String>, String> {
     let saturation: f64 = op.params["saturation"].as_f64().unwrap_or(1.0);
     let contrast: f64 = op.params["contrast"].as_f64().unwrap_or(1.0);
     let brightness: f64 = op.params["brightness"].as_f64().unwrap_or(0.0);
@@ -573,14 +590,29 @@ pub fn build_saturation_adjust_filter(op: &Operation) -> Result<Vec<String>, Str
     let contrast = contrast.clamp(0.8, 1.3);
     let brightness = brightness.clamp(-0.3, 0.3);
 
-    let filter =
-        format!("eq=saturation={}:contrast={}:brightness={}", saturation, contrast, brightness);
+    let filter = format!(
+        "{}saturation={}:contrast={}:brightness={}",
+        if hwaccel_active && gpu_encoder.is_some_and(|e| e.supports_gpu_filters()) {
+            "eq_cuda="
+        } else {
+            "eq="
+        },
+        saturation,
+        contrast,
+        brightness,
+    );
     Ok(vec!["-vf".to_string(), filter])
 }
 
 /// Build FFmpeg filter arguments for brightness/contrast adjustment via `eq` filter.
 /// Safety backstop: brightness [-0.3, 0.3], contrast [0.7, 1.5], gamma [0.8, 1.3].
-pub fn build_brightness_contrast_filter(op: &Operation) -> Result<Vec<String>, String> {
+///
+/// GPU path (NVENC + hwaccel): uses eq_cuda (direct CUDA equivalent of eq filter).
+pub fn build_brightness_contrast_filter(
+    op: &Operation,
+    gpu_encoder: Option<&GpuEncoder>,
+    hwaccel_active: bool,
+) -> Result<Vec<String>, String> {
     let brightness: f64 = op.params["brightness"].as_f64().unwrap_or(0.0);
     let contrast: f64 = op.params["contrast"].as_f64().unwrap_or(1.0);
     let gamma: f64 = op.params["gamma"].as_f64().unwrap_or(1.0);
@@ -589,14 +621,31 @@ pub fn build_brightness_contrast_filter(op: &Operation) -> Result<Vec<String>, S
     let contrast = contrast.clamp(0.7, 1.5);
     let gamma = gamma.clamp(0.8, 1.3);
 
-    let filter = format!("eq=brightness={}:contrast={}:gamma={}", brightness, contrast, gamma);
+    let filter = format!(
+        "{}brightness={}:contrast={}:gamma={}",
+        if hwaccel_active && gpu_encoder.is_some_and(|e| e.supports_gpu_filters()) {
+            "eq_cuda="
+        } else {
+            "eq="
+        },
+        brightness,
+        contrast,
+        gamma,
+    );
     Ok(vec!["-vf".to_string(), filter])
 }
 
 /// Build FFmpeg filter arguments for color balance adjustment.
 /// Adjusts red/green/blue shadow channels via `colorbalance` filter.
 /// Safety backstop: rs, gs, bs all clamped to [-0.3, 0.3].
-pub fn build_color_balance_filter(op: &Operation) -> Result<Vec<String>, String> {
+///
+/// GPU path (NVENC + hwaccel): colorbalance has no CUDA equivalent, so we approximate
+/// using eq_cuda with brightness set to the average of RGB channel adjustments.
+pub fn build_color_balance_filter(
+    op: &Operation,
+    gpu_encoder: Option<&GpuEncoder>,
+    hwaccel_active: bool,
+) -> Result<Vec<String>, String> {
     let rs: f64 = op.params["rs"].as_f64().unwrap_or(0.0);
     let gs: f64 = op.params["gs"].as_f64().unwrap_or(0.0);
     let bs: f64 = op.params["bs"].as_f64().unwrap_or(0.0);
@@ -605,8 +654,16 @@ pub fn build_color_balance_filter(op: &Operation) -> Result<Vec<String>, String>
     let gs = gs.clamp(-0.3, 0.3);
     let bs = bs.clamp(-0.3, 0.3);
 
-    let filter = format!("colorbalance=rs={}:gs={}:bs={}", rs, gs, bs);
-    Ok(vec!["-vf".to_string(), filter])
+    if hwaccel_active && gpu_encoder.is_some_and(|e| e.supports_gpu_filters()) {
+        // GPU: approximate colorbalance with eq_cuda brightness
+        // Average of R/G/B shadow adjustments as rough global brightness substitute
+        let avg_brightness = (rs + gs + bs) / 3.0;
+        let filter = format!("eq_cuda=brightness={}", avg_brightness);
+        Ok(vec!["-vf".to_string(), filter])
+    } else {
+        let filter = format!("colorbalance=rs={}:gs={}:bs={}", rs, gs, bs);
+        Ok(vec!["-vf".to_string(), filter])
+    }
 }
 
 // =========================================================================
@@ -803,10 +860,14 @@ pub fn build_filter_args(
         OperationType::AudioTweak => build_audio_tweak_filter(op),
         OperationType::Remux => build_remux_filter(op),
         // Phase 6: Color processing (D-01, D-02)
-        OperationType::HueRotate => build_hue_rotate_filter(op),
-        OperationType::SaturationAdjust => build_saturation_adjust_filter(op),
-        OperationType::BrightnessContrast => build_brightness_contrast_filter(op),
-        OperationType::ColorBalance => build_color_balance_filter(op),
+        OperationType::HueRotate => build_hue_rotate_filter(op, gpu_encoder, hwaccel_active),
+        OperationType::SaturationAdjust => {
+            build_saturation_adjust_filter(op, gpu_encoder, hwaccel_active)
+        }
+        OperationType::BrightnessContrast => {
+            build_brightness_contrast_filter(op, gpu_encoder, hwaccel_active)
+        }
+        OperationType::ColorBalance => build_color_balance_filter(op, gpu_encoder, hwaccel_active),
         // Phase 6: Noise texture
         OperationType::FilmGrain => build_film_grain_filter(op),
         OperationType::GaussianBlur => build_gaussian_blur_filter(op),
@@ -886,22 +947,22 @@ pub fn build_filter_args_separated(
         }
         // Phase 6: All color/noise/geometric/blend ops are VideoFilter
         OperationType::HueRotate => {
-            let args = build_hue_rotate_filter(op)?;
+            let args = build_hue_rotate_filter(op, gpu_encoder, hwaccel_active)?;
             let expr = args.get(1).cloned().unwrap_or_default();
             Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
         OperationType::SaturationAdjust => {
-            let args = build_saturation_adjust_filter(op)?;
+            let args = build_saturation_adjust_filter(op, gpu_encoder, hwaccel_active)?;
             let expr = args.get(1).cloned().unwrap_or_default();
             Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
         OperationType::BrightnessContrast => {
-            let args = build_brightness_contrast_filter(op)?;
+            let args = build_brightness_contrast_filter(op, gpu_encoder, hwaccel_active)?;
             let expr = args.get(1).cloned().unwrap_or_default();
             Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
         OperationType::ColorBalance => {
-            let args = build_color_balance_filter(op)?;
+            let args = build_color_balance_filter(op, gpu_encoder, hwaccel_active)?;
             let expr = args.get(1).cloned().unwrap_or_default();
             Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
@@ -1184,7 +1245,7 @@ mod tests {
             OperationType::HueRotate,
             serde_json::json!({"hueAngle": 45.0, "saturation": 1.2}),
         );
-        let args = build_hue_rotate_filter(&op).unwrap();
+        let args = build_hue_rotate_filter(&op, None, false).unwrap();
         assert!(args[0] == "-vf");
         assert!(args[1].contains("hue=h=45"));
         assert!(args[1].contains(":s=1.2"));
@@ -1196,7 +1257,7 @@ mod tests {
             OperationType::HueRotate,
             serde_json::json!({"hueAngle": 200.0, "saturation": 1.0}),
         );
-        let args = build_hue_rotate_filter(&op).unwrap();
+        let args = build_hue_rotate_filter(&op, None, false).unwrap();
         // Clamp hueAngle > 90.0 to 90.0
         assert!(args[1].contains("hue=h=90"));
     }
@@ -1207,7 +1268,7 @@ mod tests {
             OperationType::SaturationAdjust,
             serde_json::json!({"saturation": 1.5, "contrast": 1.1, "brightness": 0.1}),
         );
-        let args = build_saturation_adjust_filter(&op).unwrap();
+        let args = build_saturation_adjust_filter(&op, None, false).unwrap();
         assert!(args[0] == "-vf");
         assert!(args[1].contains("eq="));
         assert!(args[1].contains("saturation=1.5"));
@@ -1221,7 +1282,7 @@ mod tests {
             OperationType::BrightnessContrast,
             serde_json::json!({"brightness": 0.0, "contrast": 1.0, "gamma": 1.0}),
         );
-        let args = build_brightness_contrast_filter(&op).unwrap();
+        let args = build_brightness_contrast_filter(&op, None, false).unwrap();
         assert!(args[0] == "-vf");
         assert!(args[1].contains("eq="));
         assert!(args[1].contains("brightness=0"));
@@ -1235,7 +1296,7 @@ mod tests {
             OperationType::ColorBalance,
             serde_json::json!({"rs": 0.1, "gs": -0.1, "bs": 0.05}),
         );
-        let args = build_color_balance_filter(&op).unwrap();
+        let args = build_color_balance_filter(&op, None, false).unwrap();
         assert!(args[0] == "-vf");
         assert!(args[1].contains("colorbalance=rs=0.1"));
         assert!(args[1].contains(":gs=-0.1"));

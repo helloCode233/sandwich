@@ -813,7 +813,14 @@ pub fn build_flip_filter(
 
 /// Build FFmpeg filter arguments for semi-transparent solid color overlay.
 /// Uses `colorize` filter. Opacity (mix) clamped to [0.01, 0.15] per D-01.
-pub fn build_solid_color_overlay_filter(op: &Operation) -> Result<Vec<String>, String> {
+///
+/// GPU path (NVENC + hwaccel): no CUDA equivalent for colorize filter exists.
+/// The CPU filter is used as-is; frames are downloaded from GPU for processing.
+pub fn build_solid_color_overlay_filter(
+    op: &Operation,
+    _gpu_encoder: Option<&GpuEncoder>,
+    _hwaccel_active: bool,
+) -> Result<Vec<String>, String> {
     let hue: f64 = op.params["hue"].as_f64().unwrap_or(0.0);
     let saturation: f64 = op.params["saturation"].as_f64().unwrap_or(0.5);
     let lightness: f64 = op.params["lightness"].as_f64().unwrap_or(0.5);
@@ -832,7 +839,14 @@ pub fn build_solid_color_overlay_filter(op: &Operation) -> Result<Vec<String>, S
 /// Uses `geq` filter with alpha-based gradient expressions.
 /// Opacity clamped to [0.01, 0.15] per D-01.
 /// Note: Gradient quality may need visual tuning per RESEARCH experimentation note.
-pub fn build_gradient_overlay_filter(op: &Operation) -> Result<Vec<String>, String> {
+///
+/// GPU path (NVENC + hwaccel): no CUDA equivalent for geq filter exists.
+/// The CPU filter is used as-is; frames are downloaded from GPU for processing.
+pub fn build_gradient_overlay_filter(
+    op: &Operation,
+    _gpu_encoder: Option<&GpuEncoder>,
+    _hwaccel_active: bool,
+) -> Result<Vec<String>, String> {
     let gradient_type = op.params["type"].as_str().unwrap_or("linear");
     let opacity: f64 = op.params["opacity"].as_f64().unwrap_or(0.08);
 
@@ -856,7 +870,14 @@ pub fn build_gradient_overlay_filter(op: &Operation) -> Result<Vec<String>, Stri
 /// Build FFmpeg filter arguments for subtle watermark-like pattern blend.
 /// Uses `geq` filter for pattern-based luminance modulation at low opacity.
 /// Opacity clamped to [0.01, 0.15] per D-01.
-pub fn build_watermark_blend_filter(op: &Operation) -> Result<Vec<String>, String> {
+///
+/// GPU path (NVENC + hwaccel): no CUDA equivalent for geq filter exists.
+/// The CPU filter is used as-is; frames are downloaded from GPU for processing.
+pub fn build_watermark_blend_filter(
+    op: &Operation,
+    _gpu_encoder: Option<&GpuEncoder>,
+    _hwaccel_active: bool,
+) -> Result<Vec<String>, String> {
     let pattern = op.params["pattern"].as_str().unwrap_or("grid");
     let opacity: f64 = op.params["opacity"].as_f64().unwrap_or(0.08);
 
@@ -915,9 +936,15 @@ pub fn build_filter_args(
         OperationType::TinyScale => build_tiny_scale_filter(op, gpu_encoder, hwaccel_active),
         OperationType::Flip => build_flip_filter(op, gpu_encoder, hwaccel_active),
         // Phase 6: Blend overlay
-        OperationType::SolidColorOverlay => build_solid_color_overlay_filter(op),
-        OperationType::GradientOverlay => build_gradient_overlay_filter(op),
-        OperationType::WatermarkBlend => build_watermark_blend_filter(op),
+        OperationType::SolidColorOverlay => {
+            build_solid_color_overlay_filter(op, gpu_encoder, hwaccel_active)
+        }
+        OperationType::GradientOverlay => {
+            build_gradient_overlay_filter(op, gpu_encoder, hwaccel_active)
+        }
+        OperationType::WatermarkBlend => {
+            build_watermark_blend_filter(op, gpu_encoder, hwaccel_active)
+        }
         // Phase 7: Audio (5)
         OperationType::AudioResample => build_audio_resample_filter(op),
         OperationType::AudioVolume => build_audio_volume_filter(op),
@@ -1035,17 +1062,17 @@ pub fn build_filter_args_separated(
             Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
         OperationType::SolidColorOverlay => {
-            let args = build_solid_color_overlay_filter(op)?;
+            let args = build_solid_color_overlay_filter(op, gpu_encoder, hwaccel_active)?;
             let expr = args.get(1).cloned().unwrap_or_default();
             Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
         OperationType::GradientOverlay => {
-            let args = build_gradient_overlay_filter(op)?;
+            let args = build_gradient_overlay_filter(op, gpu_encoder, hwaccel_active)?;
             let expr = args.get(1).cloned().unwrap_or_default();
             Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
         OperationType::WatermarkBlend => {
-            let args = build_watermark_blend_filter(op)?;
+            let args = build_watermark_blend_filter(op, gpu_encoder, hwaccel_active)?;
             let expr = args.get(1).cloned().unwrap_or_default();
             Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
@@ -1426,7 +1453,7 @@ mod tests {
             OperationType::SolidColorOverlay,
             serde_json::json!({"hue": 120.0, "saturation": 0.5, "lightness": 0.5, "mix": 0.5}),
         );
-        let args = build_solid_color_overlay_filter(&op).unwrap();
+        let args = build_solid_color_overlay_filter(&op, None, false).unwrap();
         assert!(args[0] == "-vf");
         assert!(args[1].contains("colorize="));
         // mix=0.5 should clamp to 0.15 per D-01
@@ -1439,7 +1466,7 @@ mod tests {
             OperationType::GradientOverlay,
             serde_json::json!({"type": "linear", "opacity": 0.1}),
         );
-        let args = build_gradient_overlay_filter(&op).unwrap();
+        let args = build_gradient_overlay_filter(&op, None, false).unwrap();
         assert!(args[0] == "-vf");
         assert!(args[1].contains("geq="));
         assert!(args[1].contains("r='r(X,Y)'"));
@@ -1451,7 +1478,7 @@ mod tests {
             OperationType::WatermarkBlend,
             serde_json::json!({"pattern": "ripple", "opacity": 0.08}),
         );
-        let args = build_watermark_blend_filter(&op).unwrap();
+        let args = build_watermark_blend_filter(&op, None, false).unwrap();
         assert!(args[0] == "-vf");
         assert!(args[1].contains("geq="));
     }

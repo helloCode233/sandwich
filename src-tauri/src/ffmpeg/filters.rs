@@ -241,9 +241,14 @@ pub fn build_audio_channel_filter(op: &Operation) -> Result<Vec<String>, String>
 /// crop=W:H:X:Y extracts a sub-rectangle, then scale=OW:OH scales back with lanczos resampling.
 /// Each side percentage is independently random: leftPct, rightPct, topPct, bottomPct.
 /// Safety: each percentage clamped to [0.5, 3.5]. Expressions use iw/ih for resolution independence.
+///
+/// When `hwaccel_active` is true (NVENC + hardware decode), input frames are already in GPU
+/// memory. The GPU filter path omits hwupload_cuda/hwdownload wrapping — frames stay on GPU
+/// and feed directly into NVENC encoding without a round-trip to CPU memory.
 pub fn build_crop_filter(
     op: &Operation,
     gpu_encoder: Option<&GpuEncoder>,
+    hwaccel_active: bool,
 ) -> Result<Vec<String>, String> {
     let left_pct: f64 = op.params["leftPct"].as_f64().unwrap_or(1.0);
     let right_pct: f64 = op.params["rightPct"].as_f64().unwrap_or(1.0);
@@ -271,21 +276,14 @@ pub fn build_crop_filter(
     // targets to survive FFmpeg's rounding.
 
     // Determine if GPU filters should be used (NVENC only)
-    let (crop_name, scale_name, gpu_wrap) = if let Some(enc) = gpu_encoder {
-        if enc.supports_gpu_filters() {
-            // NVENC: use CUDA-accelerated filters with hwupload/hwdownload
-            ("crop_cuda", "scale_cuda", ("hwupload_cuda", "hwdownload,format=nv12"))
-        } else {
-            ("crop", "scale", ("", ""))
-        }
-    } else {
-        ("crop", "scale", ("", ""))
-    };
+    let use_gpu_filters = gpu_encoder.map_or(false, |e| e.supports_gpu_filters());
+    let (crop_name, scale_name) =
+        if use_gpu_filters { ("crop_cuda", "scale_cuda") } else { ("crop", "scale") };
 
     let has_orig_dims = op.params["origW"].is_number() && op.params["origH"].is_number();
 
     // Build scale expression — GPU path uses simpler syntax without flags=lanczos
-    let scale_expr = if gpu_wrap.0.is_empty() {
+    let scale_expr = if !use_gpu_filters {
         // CPU path: use flags=lanczos
         if has_orig_dims {
             let orig_w = op.params["origW"].as_u64().unwrap_or(544);
@@ -309,29 +307,38 @@ pub fn build_crop_filter(
         }
     };
 
-    let filter = if gpu_wrap.0.is_empty() {
-        // CPU path (unchanged)
+    // Build the crop arg expressions (common to all paths)
+    let crop_args = format!(
+        "iw*(1-{lp}/100-{rp}/100):ih*(1-{tp}/100-{bp}/100):2*floor(iw*{lp}/200):2*floor(ih*{tp}/200)",
+        lp = left_pct,
+        rp = right_pct,
+        tp = top_pct,
+        bp = bottom_pct,
+    );
+
+    let filter = if use_gpu_filters && !hwaccel_active {
+        // GPU path without hwaccel: upload CPU→GPU, GPU filters, download GPU→CPU
         format!(
-            "{crop}=iw*(1-{lp}/100-{rp}/100):ih*(1-{tp}/100-{bp}/100):2*floor(iw*{lp}/200):2*floor(ih*{tp}/200),{scale}",
+            "hwupload_cuda,{crop}={crop_args},{scale},hwdownload,format=nv12",
             crop = crop_name,
-            lp = left_pct,
-            rp = right_pct,
-            tp = top_pct,
-            bp = bottom_pct,
+            crop_args = crop_args,
+            scale = scale_expr,
+        )
+    } else if use_gpu_filters && hwaccel_active {
+        // GPU path with hwaccel: frames already on GPU from NVDec, stay on GPU for NVENC
+        format!(
+            "{crop}={crop_args},{scale}",
+            crop = crop_name,
+            crop_args = crop_args,
             scale = scale_expr,
         )
     } else {
-        // GPU path: hwupload → GPU filters → hwdownload
+        // CPU path: standard crop+scale with lanczos
         format!(
-            "{upload},{crop}=iw*(1-{lp}/100-{rp}/100):ih*(1-{tp}/100-{bp}/100):2*floor(iw*{lp}/200):2*floor(ih*{tp}/200),{scale},{download}",
-            upload = gpu_wrap.0,
+            "{crop}={crop_args},{scale}",
             crop = crop_name,
-            lp = left_pct,
-            rp = right_pct,
-            tp = top_pct,
-            bp = bottom_pct,
+            crop_args = crop_args,
             scale = scale_expr,
-            download = gpu_wrap.1,
         )
     };
     Ok(vec!["-vf".to_string(), filter])
@@ -765,7 +772,7 @@ pub fn build_filter_args(op: &Operation) -> Result<Vec<String>, String> {
         OperationType::AudioEQ => build_audio_eq_filter(op),
         OperationType::AudioChannel => build_audio_channel_filter(op),
         // Phase 7: Crop (1)
-        OperationType::Crop => build_crop_filter(op, None),
+        OperationType::Crop => build_crop_filter(op, None, false),
         // Phase 7: Metadata (2)
         OperationType::MetadataWrite => build_metadata_write_filter(op),
         OperationType::MetadataSelectiveErase => build_metadata_selective_erase_filter(op, None),
@@ -796,6 +803,7 @@ pub fn build_filter_args_separated(
     op: &Operation,
     metadata_ctx: Option<&MetadataContext>,
     gpu_encoder: Option<&GpuEncoder>,
+    hwaccel_active: bool,
 ) -> Result<Vec<(FilterKind, Vec<String>)>, String> {
     match op.op_type {
         OperationType::MathOverlay => {
@@ -916,7 +924,7 @@ pub fn build_filter_args_separated(
         }
         // Phase 7: Crop (1) — VideoFilter
         OperationType::Crop => {
-            let args = build_crop_filter(op, gpu_encoder)?;
+            let args = build_crop_filter(op, gpu_encoder, hwaccel_active)?;
             let expr = args.get(1).cloned().unwrap_or_default();
             Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
@@ -1280,7 +1288,7 @@ mod tests {
             OperationType::HueRotate,
             serde_json::json!({"hueAngle": 30.0, "saturation": 1.0}),
         );
-        let result = build_filter_args_separated(&op, None, None).unwrap();
+        let result = build_filter_args_separated(&op, None, None, false).unwrap();
         let (kind, _args) = &result[0];
         match kind {
             FilterKind::VideoFilter(expr) => assert!(expr.contains("hue=h=30")),
@@ -1291,7 +1299,7 @@ mod tests {
     #[test]
     fn test_separated_gop_modify_returns_other() {
         let op = make_op(OperationType::GopModify, serde_json::json!({"gopSize": 60}));
-        let result = build_filter_args_separated(&op, None, None).unwrap();
+        let result = build_filter_args_separated(&op, None, None, false).unwrap();
         let (kind, _args) = &result[0];
         match kind {
             FilterKind::Other(_) => {} // expected
@@ -1392,7 +1400,7 @@ mod tests {
                     "type": "linear",
                 }),
             );
-            let result = build_filter_args_separated(&op, None, None);
+            let result = build_filter_args_separated(&op, None, None, false);
             assert!(result.is_ok(), "Failed for {:?}: {:?}", t, result.err());
         }
     }

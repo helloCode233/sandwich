@@ -89,6 +89,12 @@ pub fn execute_single_file(
         None
     };
 
+    // Phase 7 Plan 13: hardware decode acceleration with NVENC.
+    // When NVENC GPU encoder is active, enable CUDA hardware decoding so
+    // video frames stay in GPU memory end-to-end (NVDec → GPU filters → NVENC)
+    // instead of paying the CPU↔GPU round-trip on every frame.
+    let hwaccel_active = gpu_encoder.map_or(false, |e| matches!(e, GpuEncoder::Nvenc(_)));
+
     let total_video_frames = (entry.metadata.duration_secs * entry.metadata.fps as f64) as u32;
 
     // Crop's scale-back formula (iw*inv_w:ih*inv_h) breaks when FFmpeg
@@ -143,7 +149,12 @@ pub fn execute_single_file(
             op_ref = op;
         }
 
-        let results = build_filter_args_separated(op_ref, metadata_ctx.as_ref(), gpu_encoder)?;
+        let results = build_filter_args_separated(
+            op_ref,
+            metadata_ctx.as_ref(),
+            gpu_encoder,
+            hwaccel_active,
+        )?;
         for (kind, _args) in results {
             match kind {
                 FilterKind::VideoFilter(expr) => vf_exprs.push(expr),
@@ -155,6 +166,16 @@ pub fn execute_single_file(
 
     // Assemble final args: merged -vf, merged -af, then other args
     let mut all_args: Vec<String> = Vec::new();
+
+    // Phase 7 Plan 13: when hardware decode is active and the video filter chain
+    // contains only CPU filters (no crop_cuda/scale_cuda), frames must be downloaded
+    // from GPU memory to CPU memory before the filter chain can process them.
+    // GPU crop filters handle this internally (they stay on GPU end-to-end).
+    let has_gpu_crop = vf_exprs.iter().any(|expr| expr.contains("crop_cuda"));
+    if hwaccel_active && !has_gpu_crop && !vf_exprs.is_empty() {
+        vf_exprs.insert(0, "hwdownload,format=nv12".to_string());
+    }
+
     if !vf_exprs.is_empty() {
         // Append pad filter to force even output dimensions.
         // libx264 (yuv420p) requires even width and height — odd dimensions
@@ -223,8 +244,11 @@ pub fn execute_single_file(
     let output_path_str_for_cmd = output_path.to_string_lossy().to_string();
 
     // Diagnostic: emit the full FFmpeg command line for debugging
+    let hwaccel_str =
+        if hwaccel_active { "-hwaccel cuda -hwaccel_output_format cuda " } else { "" };
     let cmd_diag = format!(
-        "{} -i {} {} {}",
+        "{}{}-i {} {} {}",
+        hwaccel_str,
         ffmpeg_bin_str,
         entry.filepath,
         all_args.join(" "),
@@ -238,9 +262,25 @@ pub fn execute_single_file(
             "message": format!("FFmpeg cmd: {}", cmd_diag),
         }),
     );
-    let mut child = FfmpegCommand::new_with_path(&ffmpeg_bin_str)
-        .input(&entry.filepath)
-        .args(&all_args)
+
+    // Phase 7 Plan 13: when hardware decode (NVDec) is active, -hwaccel cuda
+    // and -hwaccel_output_format cuda must appear BEFORE -i input in the FFmpeg
+    // command line. We construct the full argument list manually and pass it to
+    // FfmpegCommand::args() (without .input()) to ensure correct ordering.
+    let mut ffmpeg_cmd = FfmpegCommand::new_with_path(&ffmpeg_bin_str);
+    let mut spawn_args: Vec<String> = Vec::with_capacity(all_args.len() + 6);
+    if hwaccel_active {
+        spawn_args.push("-hwaccel".to_string());
+        spawn_args.push("cuda".to_string());
+        spawn_args.push("-hwaccel_output_format".to_string());
+        spawn_args.push("cuda".to_string());
+    }
+    spawn_args.push("-i".to_string());
+    spawn_args.push(entry.filepath.clone());
+    spawn_args.extend(all_args.clone());
+
+    let mut child = ffmpeg_cmd
+        .args(&spawn_args)
         .output(&output_path_str_for_cmd)
         .spawn()
         .map_err(|e| format!("FFmpeg spawn failed: {}", e))?;
@@ -339,8 +379,9 @@ pub fn execute_single_file(
             format!("\nFFmpeg last log lines:\n{}", ffmpeg_log[start..].join("\n"))
         };
         Err(format!(
-            "FFmpeg exited with code {}. Cmd: {} -i {} {} {}{}",
+            "FFmpeg exited with code {}. Cmd: {}{}-i {} {} {}{}",
             exit_code,
+            hwaccel_str,
             ffmpeg_bin_str,
             entry.filepath,
             all_args.join(" "),

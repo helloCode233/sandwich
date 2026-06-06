@@ -1,7 +1,7 @@
 mod commands;
-mod ffmpeg;
+pub mod ffmpeg;
 mod migrations;
-mod models;
+pub mod models;
 mod state;
 
 use crate::ffmpeg::gpu::detect_gpu_encoder;

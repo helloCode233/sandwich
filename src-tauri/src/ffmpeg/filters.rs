@@ -371,13 +371,17 @@ pub fn build_metadata_write_filter(op: &Operation) -> Result<Vec<String>, String
         ("copyright", "copyright"),
         ("encoder", "encoder"),
     ];
-    let mut args = Vec::new();
+    // -map_metadata 0 ensures a metadata track exists in the output
+    // (critical for lavfi-generated sources that start with no metadata).
+    // -metadata:g writes to the global/format scope so ffprobe's format.tags
+    // (read by probe_global_metadata) can find these fields.
+    let mut args = vec!["-map_metadata".to_string(), "0".to_string()];
     for (ffmpeg_key, param_key) in &fields {
         if let Some(val) = op.params.get(param_key)
             && let Some(s) = val.as_str()
             && !s.is_empty()
         {
-            args.push("-metadata".to_string());
+            args.push("-metadata:g".to_string());
             args.push(format!("{}={}", ffmpeg_key, s));
         }
     }

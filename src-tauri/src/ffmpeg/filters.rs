@@ -680,16 +680,36 @@ pub fn build_tiny_scale_filter(op: &Operation) -> Result<Vec<String>, String> {
 
 /// Build FFmpeg filter arguments for horizontal or vertical flip.
 /// Validates direction against known variants; errors on unknown values.
-pub fn build_flip_filter(op: &Operation) -> Result<Vec<String>, String> {
+///
+/// GPU path (NVENC + hwaccel):
+///   horizontal → hflip_cuda (direct GPU equivalent)
+///   vertical   → transpose_cuda=clock,transpose_cuda=clock,hflip_cuda (180° rotate + hflip = vflip)
+///   both       → transpose_cuda=clock,transpose_cuda=clock (180° rotation = hflip+vflip)
+pub fn build_flip_filter(
+    op: &Operation,
+    gpu_encoder: Option<&GpuEncoder>,
+    hwaccel_active: bool,
+) -> Result<Vec<String>, String> {
     let direction = op.params["direction"].as_str().unwrap_or("horizontal");
 
-    let filter = match direction {
-        "horizontal" => "hflip",
-        "vertical" => "vflip",
-        _ => return Err(format!("Unknown flip direction: {}", direction)),
-    };
-
-    Ok(vec!["-vf".to_string(), filter.to_string()])
+    if hwaccel_active && gpu_encoder.is_some_and(|e| e.supports_gpu_filters()) {
+        let filter = match direction {
+            "horizontal" => "hflip_cuda".to_string(),
+            "vertical" => {
+                format!("{},{},hflip_cuda", "transpose_cuda=clock", "transpose_cuda=clock")
+            }
+            "both" => "transpose_cuda=clock,transpose_cuda=clock".to_string(),
+            _ => return Err(format!("Unknown flip direction: {}", direction)),
+        };
+        Ok(vec!["-vf".to_string(), filter])
+    } else {
+        let filter = match direction {
+            "horizontal" => "hflip",
+            "vertical" => "vflip",
+            _ => return Err(format!("Unknown flip direction: {}", direction)),
+        };
+        Ok(vec!["-vf".to_string(), filter.to_string()])
+    }
 }
 
 // =========================================================================
@@ -794,7 +814,7 @@ pub fn build_filter_args(
         // Phase 6: Geometric fine-tuning
         OperationType::MicroRotate => build_micro_rotate_filter(op),
         OperationType::TinyScale => build_tiny_scale_filter(op),
-        OperationType::Flip => build_flip_filter(op),
+        OperationType::Flip => build_flip_filter(op, gpu_encoder, hwaccel_active),
         // Phase 6: Blend overlay
         OperationType::SolidColorOverlay => build_solid_color_overlay_filter(op),
         OperationType::GradientOverlay => build_gradient_overlay_filter(op),
@@ -911,7 +931,7 @@ pub fn build_filter_args_separated(
             Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
         OperationType::Flip => {
-            let args = build_flip_filter(op)?;
+            let args = build_flip_filter(op, gpu_encoder, hwaccel_active)?;
             let expr = args.get(1).cloned().unwrap_or_default();
             Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
@@ -1264,7 +1284,7 @@ mod tests {
     #[test]
     fn test_flip_horizontal() {
         let op = make_op(OperationType::Flip, serde_json::json!({"direction": "horizontal"}));
-        let args = build_flip_filter(&op).unwrap();
+        let args = build_flip_filter(&op, None, false).unwrap();
         assert!(args[0] == "-vf");
         assert!(args[1] == "hflip");
     }
@@ -1272,9 +1292,33 @@ mod tests {
     #[test]
     fn test_flip_vertical() {
         let op = make_op(OperationType::Flip, serde_json::json!({"direction": "vertical"}));
-        let args = build_flip_filter(&op).unwrap();
+        let args = build_flip_filter(&op, None, false).unwrap();
         assert!(args[0] == "-vf");
         assert!(args[1] == "vflip");
+    }
+
+    #[test]
+    fn test_flip_horizontal_gpu() {
+        let op = make_op(OperationType::Flip, serde_json::json!({"direction": "horizontal"}));
+        let caps = NvencCaps::baseline();
+        let gpu = GpuEncoder::Nvenc(caps);
+        let args = build_flip_filter(&op, Some(&gpu), true).unwrap();
+        assert!(args[0] == "-vf");
+        assert!(args[1].contains("hflip_cuda"), "GPU path should use hflip_cuda, got: {}", args[1]);
+    }
+
+    #[test]
+    fn test_flip_both_gpu() {
+        let op = make_op(OperationType::Flip, serde_json::json!({"direction": "both"}));
+        let caps = NvencCaps::baseline();
+        let gpu = GpuEncoder::Nvenc(caps);
+        let args = build_flip_filter(&op, Some(&gpu), true).unwrap();
+        assert!(args[0] == "-vf");
+        assert!(
+            args[1].contains("transpose_cuda"),
+            "GPU both should use transpose_cuda, got: {}",
+            args[1]
+        );
     }
 
     #[test]

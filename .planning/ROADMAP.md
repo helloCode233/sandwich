@@ -213,7 +213,7 @@ Plans:
 **Goal:** Extend fingerprint modification across 4 dimensions: (1) 5 new audio operation types (Resample, Volume, Pitch, EQ, Channel) replacing AudioTweak; (2) asymmetric crop (0.5-3.5% per edge) as default operation with scale-back; (3) metadata write + selective erase alongside existing full erase; (4) video speed change + trim edges for duration modification. FrameDrop upgraded to true frame decimation (select filter) as default operation alongside crop. 10 new OperationType variants total, AudioTweak kept for backward compat. Migration splits old AudioTweak operations and re-parameterizes FrameDrop.
 **Requirements**: D-01 through D-19 (19 locked decisions from CONTEXT.md)
 **Depends on:** Phase 6
-**Plans:** 6 plans
+**Plans:** 7/8 plans executed
 
 Plans:
 **Wave 1**
@@ -228,5 +228,5 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 07-05-PLAN.md — Executor multi-FilterKind loop + -vsync vfr + probe_global_metadata + MetadataContext wiring
-- [ ] 07-06-PLAN.md — Migration v3 (AudioTweak split, FrameDrop re-parameterize) + lib.rs/mod.rs registration + import migration
+- [x] 07-05-PLAN.md — Executor multi-FilterKind loop + -vsync vfr + probe_global_metadata + MetadataContext wiring
+- [x] 07-06-PLAN.md — Migration v3 (AudioTweak split, FrameDrop re-parameterize) + lib.rs/mod.rs registration + import migration

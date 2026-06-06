@@ -84,15 +84,30 @@ pub fn build_pixel_shift_filter(op: &Operation) -> Result<Vec<String>, String> {
 /// D-19: tier-driven — Conservative 40-50, Standard 30-45, Aggressive 25-35.
 /// Requires -vsync vfr to prevent ffmpeg from inserting duplicate frames.
 /// Safety: interval clamped to [15, 100].
-pub fn build_frame_drop_filter(op: &Operation) -> Result<Vec<String>, String> {
+///
+/// GPU path (NVENC + hwaccel): uses fps_cuda to approximate frame dropping by reducing
+/// the output frame rate. fps = 30.0 * (interval-1) / interval drops ~1 frame per interval
+/// while keeping all processing on the GPU.
+pub fn build_frame_drop_filter(
+    op: &Operation,
+    gpu_encoder: Option<&GpuEncoder>,
+    hwaccel_active: bool,
+) -> Result<Vec<String>, String> {
     let interval: u32 = op.params["interval"].as_u64().unwrap_or(40) as u32;
     let interval = interval.clamp(15, 100);
 
-    // select='mod(n+1,N)': drops frame when mod(n+1, N) == 0
-    // Example N=40: frame 39 -> mod(40,40)=0 -> dropped; frame 40 -> mod(41,40)=1 -> kept
-    // setpts=N/FRAME_RATE/TB resets PTS to maintain smooth playback after frame removal
-    let filter = format!("select='mod(n+1,{})',setpts=N/FRAME_RATE/TB", interval);
-    Ok(vec!["-vf".to_string(), filter])
+    if hwaccel_active && gpu_encoder.is_some_and(|e| e.supports_gpu_filters()) {
+        // GPU: fps_cuda to reduce frame rate, setpts to reset timestamps
+        let fps = 30.0 * (interval as f64 - 1.0) / interval as f64;
+        let filter = format!("fps_cuda=fps={:.2},setpts=N/FRAME_RATE/TB", fps);
+        Ok(vec!["-vf".to_string(), filter])
+    } else {
+        // CPU: select='mod(n+1,N)': drops frame when mod(n+1, N) == 0
+        // Example N=40: frame 39 -> mod(40,40)=0 -> dropped; frame 40 -> mod(41,40)=1 -> kept
+        // setpts=N/FRAME_RATE/TB resets PTS to maintain smooth playback after frame removal
+        let filter = format!("select='mod(n+1,{})',setpts=N/FRAME_RATE/TB", interval);
+        Ok(vec!["-vf".to_string(), filter])
+    }
 }
 
 /// Build FFmpeg arguments for GOP modification.
@@ -739,11 +754,17 @@ pub fn build_watermark_blend_filter(op: &Operation) -> Result<Vec<String>, Strin
 }
 
 /// Dispatch to the correct filter builder based on OperationType.
-pub fn build_filter_args(op: &Operation) -> Result<Vec<String>, String> {
+/// gpu_encoder and hwaccel_active enable GPU-native filter paths when NVENC is active.
+/// Pass None, false to always use CPU filters.
+pub fn build_filter_args(
+    op: &Operation,
+    gpu_encoder: Option<&GpuEncoder>,
+    hwaccel_active: bool,
+) -> Result<Vec<String>, String> {
     match op.op_type {
         OperationType::MathOverlay => build_math_overlay_filter(op),
         OperationType::PixelShift => build_pixel_shift_filter(op),
-        OperationType::FrameDrop => build_frame_drop_filter(op),
+        OperationType::FrameDrop => build_frame_drop_filter(op, gpu_encoder, hwaccel_active),
         OperationType::GopModify => build_gop_modify_filter(op),
         OperationType::MetadataErase => build_metadata_erase_filter(op),
         OperationType::AudioTweak => build_audio_tweak_filter(op),
@@ -819,8 +840,8 @@ pub fn build_filter_args_separated(
             Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
         OperationType::FrameDrop => {
-            let args = build_frame_drop_filter(op)?;
-            // args = ["-vf", "select='mod(n+1,N)',setpts=..."]
+            let args = build_frame_drop_filter(op, gpu_encoder, hwaccel_active)?;
+            // args = ["-vf", "fps_cuda=fps=..." or "select='mod(n+1,N)',setpts=..."]
             let expr = args.get(1).cloned().unwrap_or_default();
             Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
@@ -959,7 +980,7 @@ pub fn build_filter_args_separated(
         }
         _ => {
             // GopModify, MetadataErase, Remux — pass through as Other
-            let args = build_filter_args(op)?;
+            let args = build_filter_args(op, gpu_encoder, hwaccel_active)?;
             Ok(vec![(FilterKind::Other(args.clone()), args)])
         }
     }
@@ -968,6 +989,7 @@ pub fn build_filter_args_separated(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::gpu::NvencCaps;
     use crate::models::seed::{Operation, OperationType};
 
     fn make_op(op_type: OperationType, params: serde_json::Value) -> Operation {
@@ -1029,7 +1051,7 @@ mod tests {
                 "interval": 45
             }),
         );
-        let args = build_frame_drop_filter(&op).unwrap();
+        let args = build_frame_drop_filter(&op, None, false).unwrap();
         assert!(args[1].contains("select='mod(n+1"), "Should use select filter, got: {}", args[1]);
         assert!(
             args[1].contains("setpts=N/FRAME_RATE/TB"),
@@ -1037,6 +1059,26 @@ mod tests {
             args[1]
         );
         assert!(args[1].contains("45"), "Should use the passed interval value");
+    }
+
+    #[test]
+    fn test_frame_drop_select_based_gpu() {
+        // GPU path: verify fps_cuda is used when NVENC + hwaccel is active
+        let op = make_op(
+            OperationType::FrameDrop,
+            serde_json::json!({
+                "interval": 40
+            }),
+        );
+        let caps = NvencCaps::baseline();
+        let gpu = GpuEncoder::Nvenc(caps);
+        let args = build_frame_drop_filter(&op, Some(&gpu), true).unwrap();
+        assert!(args[1].contains("fps_cuda"), "GPU path should use fps_cuda, got: {}", args[1]);
+        assert!(
+            args[1].contains("setpts=N/FRAME_RATE/TB"),
+            "Should include setpts for PTS reset, got: {}",
+            args[1]
+        );
     }
 
     #[test]
@@ -1048,7 +1090,7 @@ mod tests {
                 "interval": 2
             }),
         );
-        let args = build_frame_drop_filter(&op).unwrap();
+        let args = build_frame_drop_filter(&op, None, false).unwrap();
         assert!(args[1].contains("15"), "Should clamp interval to >=15, got: {}", args[1]);
     }
 
@@ -1096,7 +1138,7 @@ mod tests {
                 *t,
                 serde_json::json!({"pattern": "ripple", "opacity": 0.08, "frequency": 80.0, "dx": 0, "dy": 0, "interval": 30, "gopSize": 60, "effect": "volume", "db": 0.5}),
             );
-            let result = build_filter_args(&op);
+            let result = build_filter_args(&op, None, false);
             assert!(result.is_ok(), "Failed for {:?}: {:?}", t, result.err());
         }
     }
@@ -1277,7 +1319,7 @@ mod tests {
             OperationType::HueRotate,
             serde_json::json!({"hueAngle": 45.0, "saturation": 1.2}),
         );
-        let args = build_filter_args(&op).unwrap();
+        let args = build_filter_args(&op, None, false).unwrap();
         assert!(args[0] == "-vf");
         assert!(args[1].contains("hue=h=45"));
     }
@@ -1351,7 +1393,7 @@ mod tests {
                     "type": "linear",
                 }),
             );
-            let result = build_filter_args(&op);
+            let result = build_filter_args(&op, None, false);
             assert!(result.is_ok(), "Failed for {:?}: {:?}", t, result.err());
         }
     }
@@ -1408,7 +1450,7 @@ mod tests {
     #[test]
     fn test_dispatch_flip_horizontal() {
         let op = make_op(OperationType::Flip, serde_json::json!({"direction": "horizontal"}));
-        let args = build_filter_args(&op).unwrap();
+        let args = build_filter_args(&op, None, false).unwrap();
         assert!(args[0] == "-vf");
         assert!(args[1] == "hflip");
     }

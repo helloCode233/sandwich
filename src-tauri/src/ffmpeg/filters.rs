@@ -3,6 +3,7 @@
 //! Each function takes an `Operation` reference and returns `Vec<String>` of
 //! FFmpeg CLI arguments. SEED-04 safety constraints are enforced via clamping.
 
+use crate::models::gpu::GpuEncoder;
 use crate::models::seed::{Operation, OperationType};
 use std::collections::HashMap;
 
@@ -240,7 +241,10 @@ pub fn build_audio_channel_filter(op: &Operation) -> Result<Vec<String>, String>
 /// crop=W:H:X:Y extracts a sub-rectangle, then scale=OW:OH scales back with lanczos resampling.
 /// Each side percentage is independently random: leftPct, rightPct, topPct, bottomPct.
 /// Safety: each percentage clamped to [0.5, 3.5]. Expressions use iw/ih for resolution independence.
-pub fn build_crop_filter(op: &Operation) -> Result<Vec<String>, String> {
+pub fn build_crop_filter(
+    op: &Operation,
+    gpu_encoder: Option<&GpuEncoder>,
+) -> Result<Vec<String>, String> {
     let left_pct: f64 = op.params["leftPct"].as_f64().unwrap_or(1.0);
     let right_pct: f64 = op.params["rightPct"].as_f64().unwrap_or(1.0);
     let top_pct: f64 = op.params["topPct"].as_f64().unwrap_or(1.0);
@@ -265,24 +269,71 @@ pub fn build_crop_filter(op: &Operation) -> Result<Vec<String>, String> {
     // scale=iw*inv:ih*inv compounds the error (926*1.035=958 instead of 960).
     // When origW/origH are provided (injected by executor), use explicit scale
     // targets to survive FFmpeg's rounding.
-    let has_orig_dims = op.params["origW"].is_number() && op.params["origH"].is_number();
-    let scale_expr = if has_orig_dims {
-        let orig_w = op.params["origW"].as_u64().unwrap_or(544);
-        let orig_h = op.params["origH"].as_u64().unwrap_or(960);
-        format!("scale={}:{}:flags=lanczos", orig_w, orig_h)
+
+    // Determine if GPU filters should be used (NVENC only)
+    let (crop_name, scale_name, gpu_wrap) = if let Some(enc) = gpu_encoder {
+        if enc.supports_gpu_filters() {
+            // NVENC: use CUDA-accelerated filters with hwupload/hwdownload
+            ("crop_cuda", "scale_cuda", ("hwupload_cuda", "hwdownload,format=nv12"))
+        } else {
+            ("crop", "scale", ("", ""))
+        }
     } else {
-        let inv_w = 1.0 / (1.0 - left_pct / 100.0 - right_pct / 100.0);
-        let inv_h = 1.0 / (1.0 - top_pct / 100.0 - bottom_pct / 100.0);
-        format!("scale=iw*{:.6}:ih*{:.6}:flags=lanczos", inv_w, inv_h)
+        ("crop", "scale", ("", ""))
     };
-    let filter = format!(
-        "crop=iw*(1-{lp}/100-{rp}/100):ih*(1-{tp}/100-{bp}/100):2*floor(iw*{lp}/200):2*floor(ih*{tp}/200),{scale}",
-        lp = left_pct,
-        rp = right_pct,
-        tp = top_pct,
-        bp = bottom_pct,
-        scale = scale_expr,
-    );
+
+    let has_orig_dims = op.params["origW"].is_number() && op.params["origH"].is_number();
+
+    // Build scale expression — GPU path uses simpler syntax without flags=lanczos
+    let scale_expr = if gpu_wrap.0.is_empty() {
+        // CPU path: use flags=lanczos
+        if has_orig_dims {
+            let orig_w = op.params["origW"].as_u64().unwrap_or(544);
+            let orig_h = op.params["origH"].as_u64().unwrap_or(960);
+            format!("{}={}:{}:flags=lanczos", scale_name, orig_w, orig_h)
+        } else {
+            let inv_w = 1.0 / (1.0 - left_pct / 100.0 - right_pct / 100.0);
+            let inv_h = 1.0 / (1.0 - top_pct / 100.0 - bottom_pct / 100.0);
+            format!("{}=iw*{:.6}:ih*{:.6}:flags=lanczos", scale_name, inv_w, inv_h)
+        }
+    } else {
+        // GPU path: scale_cuda doesn't support flags=lanczos — omit them
+        if has_orig_dims {
+            let orig_w = op.params["origW"].as_u64().unwrap_or(544);
+            let orig_h = op.params["origH"].as_u64().unwrap_or(960);
+            format!("{}={}:{}", scale_name, orig_w, orig_h)
+        } else {
+            let inv_w = 1.0 / (1.0 - left_pct / 100.0 - right_pct / 100.0);
+            let inv_h = 1.0 / (1.0 - top_pct / 100.0 - bottom_pct / 100.0);
+            format!("{}=iw*{:.6}:ih*{:.6}", scale_name, inv_w, inv_h)
+        }
+    };
+
+    let filter = if gpu_wrap.0.is_empty() {
+        // CPU path (unchanged)
+        format!(
+            "{crop}=iw*(1-{lp}/100-{rp}/100):ih*(1-{tp}/100-{bp}/100):2*floor(iw*{lp}/200):2*floor(ih*{tp}/200),{scale}",
+            crop = crop_name,
+            lp = left_pct,
+            rp = right_pct,
+            tp = top_pct,
+            bp = bottom_pct,
+            scale = scale_expr,
+        )
+    } else {
+        // GPU path: hwupload → GPU filters → hwdownload
+        format!(
+            "{upload},{crop}=iw*(1-{lp}/100-{rp}/100):ih*(1-{tp}/100-{bp}/100):2*floor(iw*{lp}/200):2*floor(ih*{tp}/200),{scale},{download}",
+            upload = gpu_wrap.0,
+            crop = crop_name,
+            lp = left_pct,
+            rp = right_pct,
+            tp = top_pct,
+            bp = bottom_pct,
+            scale = scale_expr,
+            download = gpu_wrap.1,
+        )
+    };
     Ok(vec!["-vf".to_string(), filter])
 }
 
@@ -714,7 +765,7 @@ pub fn build_filter_args(op: &Operation) -> Result<Vec<String>, String> {
         OperationType::AudioEQ => build_audio_eq_filter(op),
         OperationType::AudioChannel => build_audio_channel_filter(op),
         // Phase 7: Crop (1)
-        OperationType::Crop => build_crop_filter(op),
+        OperationType::Crop => build_crop_filter(op, None),
         // Phase 7: Metadata (2)
         OperationType::MetadataWrite => build_metadata_write_filter(op),
         OperationType::MetadataSelectiveErase => build_metadata_selective_erase_filter(op, None),
@@ -864,7 +915,7 @@ pub fn build_filter_args_separated(
         }
         // Phase 7: Crop (1) — VideoFilter
         OperationType::Crop => {
-            let args = build_crop_filter(op)?;
+            let args = build_crop_filter(op, None)?;
             let expr = args.get(1).cloned().unwrap_or_default();
             Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }

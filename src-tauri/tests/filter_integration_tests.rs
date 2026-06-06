@@ -366,7 +366,7 @@ fn test_crop_scale_restores_dimensions() {
             "origH": 240,
         }),
     );
-    let args = build_crop_filter(&op).expect("build filter");
+    let args = build_crop_filter(&op, None).expect("build filter");
     let vf_args = vec![args[1].clone()];
 
     let ok = run_filter_on_test_video(
@@ -652,7 +652,7 @@ fn test_multiple_phase7_filters_chained() {
     let vs_op = make_test_op(OperationType::VideoSpeed, serde_json::json!({"speedFactor": 1.02}));
 
     let fd_vf = build_frame_drop_filter(&fd_op).expect("FrameDrop");
-    let crop_vf = build_crop_filter(&crop_op).expect("Crop");
+    let crop_vf = build_crop_filter(&crop_op, None).expect("Crop");
     let vs_args = build_video_speed_filter(&vs_op).expect("VideoSpeed");
 
     // Collect video filter expressions (without -vf prefix) and comma-join

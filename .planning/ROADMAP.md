@@ -213,7 +213,7 @@ Plans:
 **Goal:** Extend fingerprint modification across 4 dimensions: (1) 5 new audio operation types (Resample, Volume, Pitch, EQ, Channel) replacing AudioTweak; (2) asymmetric crop (0.5-3.5% per edge) as default operation with scale-back; (3) metadata write + selective erase alongside existing full erase; (4) video speed change + trim edges for duration modification. FrameDrop upgraded to true frame decimation (select filter) as default operation alongside crop. 10 new OperationType variants total, AudioTweak kept for backward compat. Migration splits old AudioTweak operations and re-parameterizes FrameDrop.
 **Requirements**: D-01 through D-19 (19 locked decisions from CONTEXT.md)
 **Depends on:** Phase 6
-**Plans:** 8/8 plans complete
+**Plans:** 8/8 plans complete (4 gap closure pending)
 
 Plans:
 **Wave 1**
@@ -230,3 +230,15 @@ Plans:
 
 - [x] 07-05-PLAN.md — Executor multi-FilterKind loop + -vsync vfr + probe_global_metadata + MetadataContext wiring
 - [x] 07-06-PLAN.md — Migration v3 (AudioTweak split, FrameDrop re-parameterize) + lib.rs/mod.rs registration + import migration
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [x] 07-07-PLAN.md — Frontend: UI-SPEC implementation (SeedCard operation display, i18n)
+- [x] 07-08-PLAN.md — Integration test suite + UAT verification
+
+**Wave 5 — Gap Closure** *(UAT fixes, parallel)*
+
+- [ ] 07-09-PLAN.md — Fix AudioChannel filter for mono/stereo input (Gap 1)
+- [ ] 07-10-PLAN.md — Fix MetadataWrite to inject global metadata (Gap 2)
+- [ ] 07-11-PLAN.md — Fix FrameDrop frame count parsing N/A (Gap 3)
+- [ ] 07-12-PLAN.md — GPU-accelerated video filters (Crop) for NVENC (Gap 4)

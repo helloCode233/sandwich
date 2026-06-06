@@ -143,7 +143,7 @@ pub fn execute_single_file(
             op_ref = op;
         }
 
-        let results = build_filter_args_separated(op_ref, metadata_ctx.as_ref())?;
+        let results = build_filter_args_separated(op_ref, metadata_ctx.as_ref(), gpu_encoder)?;
         for (kind, _args) in results {
             match kind {
                 FilterKind::VideoFilter(expr) => vf_exprs.push(expr),

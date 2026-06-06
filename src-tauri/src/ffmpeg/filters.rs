@@ -795,6 +795,7 @@ pub enum FilterKind {
 pub fn build_filter_args_separated(
     op: &Operation,
     metadata_ctx: Option<&MetadataContext>,
+    gpu_encoder: Option<&GpuEncoder>,
 ) -> Result<Vec<(FilterKind, Vec<String>)>, String> {
     match op.op_type {
         OperationType::MathOverlay => {
@@ -915,7 +916,7 @@ pub fn build_filter_args_separated(
         }
         // Phase 7: Crop (1) — VideoFilter
         OperationType::Crop => {
-            let args = build_crop_filter(op, None)?;
+            let args = build_crop_filter(op, gpu_encoder)?;
             let expr = args.get(1).cloned().unwrap_or_default();
             Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
@@ -1279,7 +1280,7 @@ mod tests {
             OperationType::HueRotate,
             serde_json::json!({"hueAngle": 30.0, "saturation": 1.0}),
         );
-        let result = build_filter_args_separated(&op, None).unwrap();
+        let result = build_filter_args_separated(&op, None, None).unwrap();
         let (kind, _args) = &result[0];
         match kind {
             FilterKind::VideoFilter(expr) => assert!(expr.contains("hue=h=30")),
@@ -1290,7 +1291,7 @@ mod tests {
     #[test]
     fn test_separated_gop_modify_returns_other() {
         let op = make_op(OperationType::GopModify, serde_json::json!({"gopSize": 60}));
-        let result = build_filter_args_separated(&op, None).unwrap();
+        let result = build_filter_args_separated(&op, None, None).unwrap();
         let (kind, _args) = &result[0];
         match kind {
             FilterKind::Other(_) => {} // expected
@@ -1391,7 +1392,7 @@ mod tests {
                     "type": "linear",
                 }),
             );
-            let result = build_filter_args_separated(&op, None);
+            let result = build_filter_args_separated(&op, None, None);
             assert!(result.is_ok(), "Failed for {:?}: {:?}", t, result.err());
         }
     }

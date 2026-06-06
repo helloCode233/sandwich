@@ -19,6 +19,57 @@ use rand::Rng;
 use crate::models::seed::OperationType;
 use crate::state::AppState;
 
+/// Apply Phase 7 migration transformations to a list of operations.
+/// Pure function — no Tauri dependencies. Testable in unit tests.
+/// Mirrors the transformation logic in migrate_seeds (lines 46-101).
+#[allow(dead_code)]
+pub fn transform_operations(operations: &mut Vec<crate::models::seed::Operation>) -> usize {
+    let mut count = 0usize;
+    let mut rng = rand::rng();
+
+    for op in operations.iter_mut() {
+        match op.op_type {
+            OperationType::AudioTweak => {
+                let effect = op.params["effect"].as_str().unwrap_or("volume");
+                match effect {
+                    "volume" => {
+                        let db = op.params["db"].as_f64().unwrap_or(0.5);
+                        op.op_type = OperationType::AudioVolume;
+                        op.params = serde_json::json!({ "db": db });
+                        count += 1;
+                    }
+                    "tempo" => {
+                        op.op_type = OperationType::AudioPitch;
+                        op.params = serde_json::json!({
+                            "pitchFactor": 1.0,
+                            "originalRate": 48000,
+                        });
+                        count += 1;
+                    }
+                    "echo" => {
+                        op.params = serde_json::json!({ "__drop": true });
+                        count += 1;
+                    }
+                    _ => {}
+                }
+            }
+            OperationType::FrameDrop
+                if op.params.get("offset").is_some() || op.params.get("period").is_some() =>
+            {
+                let interval = rng.random_range(30u32..=50u32);
+                op.params = serde_json::json!({ "interval": interval });
+                count += 1;
+            }
+            _ => {}
+        }
+    }
+
+    // Remove echo operations
+    operations.retain(|op| !op.params.get("__drop").and_then(|v| v.as_bool()).unwrap_or(false));
+
+    count
+}
+
 /// Run the v3 seed migration. Returns number of operations migrated (not seeds).
 /// Safe to call multiple times — checks marker before mutating.
 pub fn migrate_seeds(app: &AppHandle) -> Result<usize, String> {
@@ -112,32 +163,132 @@ pub fn migrate_seeds(app: &AppHandle) -> Result<usize, String> {
 
 #[cfg(test)]
 mod tests {
-    /// migrate_seeds with migration_v3_applied marker present should return Ok(0).
-    #[test]
-    fn migrate_seeds_marker_present_returns_zero() {
-        let expected: Result<usize, String> = Ok(0);
-        assert_eq!(expected.unwrap(), 0);
+    use super::*;
+    use crate::models::seed::{Operation, OperationType};
+    use serde_json::json;
+
+    fn make_op(op_type: OperationType, params: serde_json::Value) -> Operation {
+        Operation { op_type, start_frame: 0, duration_frames: 300, params }
     }
 
-    /// migration_v3_applied key identifies the migration.
+    /// AudioTweak volume -> AudioVolume: db value preserved.
     #[test]
-    fn migration_uses_correct_marker_key() {
-        let marker_key = "migration_v3_applied";
-        assert!(marker_key.starts_with("migration_v3"));
-        assert!(marker_key.contains("applied"));
+    fn migrate_audio_tweak_volume_to_audio_volume() {
+        let mut ops =
+            vec![make_op(OperationType::AudioTweak, json!({"effect": "volume", "db": 1.2}))];
+        let count = transform_operations(&mut ops);
+        assert_eq!(count, 1, "One operation should be transformed");
+        assert_eq!(ops.len(), 1, "Operation should not be dropped");
+        assert_eq!(
+            ops[0].op_type,
+            OperationType::AudioVolume,
+            "AudioTweak(volume) should become AudioVolume"
+        );
+        assert!(
+            (ops[0].params["db"].as_f64().unwrap() - 1.2).abs() < 0.001,
+            "db value should be preserved"
+        );
+        assert!(ops[0].params.get("effect").is_none(), "effect field should be removed");
     }
 
-    /// AudioTweak volume should map to AudioVolume with db preserved.
+    /// AudioTweak tempo -> AudioPitch: pitchFactor=1.0, originalRate=48000.
     #[test]
-    fn audio_tweak_volume_maps_to_audio_volume() {
-        use crate::models::seed::OperationType;
-        assert_ne!(OperationType::AudioTweak, OperationType::AudioVolume);
+    fn migrate_audio_tweak_tempo_to_audio_pitch() {
+        let mut ops =
+            vec![make_op(OperationType::AudioTweak, json!({"effect": "tempo", "factor": 1.01}))];
+        let count = transform_operations(&mut ops);
+        assert_eq!(count, 1);
+        assert_eq!(ops.len(), 1);
+        assert_eq!(
+            ops[0].op_type,
+            OperationType::AudioPitch,
+            "AudioTweak(tempo) should become AudioPitch"
+        );
+        assert!(
+            (ops[0].params["pitchFactor"].as_f64().unwrap() - 1.0).abs() < 0.001,
+            "pitchFactor should be 1.0 (tempo-only, no pitch change)"
+        );
+        assert_eq!(ops[0].params["originalRate"].as_u64().unwrap(), 48000);
     }
 
-    /// FrameDrop offset param presence triggers migration.
+    /// AudioTweak echo -> dropped (no Phase 7 equivalent).
     #[test]
-    fn frame_drop_offset_detection() {
-        let has_offset = serde_json::json!({"offset": 0.003, "period": 45}).get("offset").is_some();
-        assert!(has_offset, "Old FrameDrop operations have offset param");
+    fn migrate_audio_tweak_echo_dropped() {
+        let mut ops = vec![make_op(OperationType::AudioTweak, json!({"effect": "echo"}))];
+        let count = transform_operations(&mut ops);
+        assert_eq!(count, 1, "Echo op should count as migrated (dropped)");
+        assert!(ops.is_empty(), "Echo operation should be removed entirely");
+    }
+
+    /// FrameDrop setpts (offset/period) -> select-based interval.
+    #[test]
+    fn migrate_frame_drop_setpts_to_select_interval() {
+        let mut ops =
+            vec![make_op(OperationType::FrameDrop, json!({"offset": 0.003, "period": 45}))];
+        let count = transform_operations(&mut ops);
+        assert_eq!(count, 1);
+        assert_eq!(ops.len(), 1);
+        assert_eq!(
+            ops[0].op_type,
+            OperationType::FrameDrop,
+            "FrameDrop should remain FrameDrop after re-parameterize"
+        );
+        let interval = ops[0].params["interval"].as_u64().unwrap();
+        assert!(
+            interval >= 30 && interval <= 50,
+            "Interval should be in D-18 range 30..50, got {}",
+            interval
+        );
+        assert!(ops[0].params.get("offset").is_none(), "offset param should be removed");
+        assert!(ops[0].params.get("period").is_none(), "period param should be removed");
+    }
+
+    /// New FrameDrop (already has interval) -> NOT re-migrated.
+    #[test]
+    fn migrate_frame_drop_already_select_based_not_remigrated() {
+        let mut ops = vec![make_op(OperationType::FrameDrop, json!({"interval": 40}))];
+        let count = transform_operations(&mut ops);
+        assert_eq!(count, 0, "Already-migrated FrameDrop should not be touched");
+        assert_eq!(
+            ops[0].params["interval"].as_u64().unwrap(),
+            40,
+            "Existing interval should be preserved"
+        );
+    }
+
+    /// Mixed batch: volume + tempo + echo + old FrameDrop + new FrameDrop.
+    #[test]
+    fn migrate_mixed_phase6_operations() {
+        let mut ops = vec![
+            make_op(OperationType::AudioTweak, json!({"effect": "volume", "db": 1.5})),
+            make_op(OperationType::AudioTweak, json!({"effect": "tempo", "factor": 1.02})),
+            make_op(OperationType::AudioTweak, json!({"effect": "echo"})),
+            make_op(OperationType::FrameDrop, json!({"offset": 0.002, "period": 40})),
+            make_op(OperationType::FrameDrop, json!({"interval": 35})),
+            make_op(
+                OperationType::Crop,
+                json!({"leftPct": 1.0, "rightPct": 1.5, "topPct": 0.8, "bottomPct": 1.2}),
+            ),
+        ];
+        let count = transform_operations(&mut ops);
+        // volume(1) + tempo(1) + echo(1) + old FrameDrop(1) = 4 transformed
+        // new FrameDrop(0) + Crop(0) = 0 transformed
+        assert_eq!(
+            count, 4,
+            "Should transform 4 operations (volume + tempo + echo + old FrameDrop)"
+        );
+        // echo dropped → 6 - 1 = 5 remaining
+        assert_eq!(ops.len(), 5, "5 operations remain after echo drop (6 - 1)");
+
+        // Verify each operation's final type
+        assert_eq!(ops[0].op_type, OperationType::AudioVolume, "Op 0: volume → AudioVolume");
+        assert_eq!(ops[1].op_type, OperationType::AudioPitch, "Op 1: tempo → AudioPitch");
+        assert_eq!(ops[2].op_type, OperationType::FrameDrop, "Op 2: old FrameDrop → FrameDrop");
+        assert_eq!(ops[3].op_type, OperationType::FrameDrop, "Op 3: new FrameDrop unchanged");
+        assert_eq!(ops[4].op_type, OperationType::Crop, "Op 4: Crop unchanged");
+
+        // Verify old FrameDrop got re-parameterized
+        assert!(ops[2].params.get("interval").is_some());
+        assert!(ops[2].params.get("offset").is_none());
     }
 }

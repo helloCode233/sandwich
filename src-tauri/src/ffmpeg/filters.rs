@@ -222,8 +222,10 @@ pub fn build_audio_channel_filter(op: &Operation) -> Result<Vec<String>, String>
     let filter = match mode {
         "swap" => "aformat=channel_layouts=stereo,channelmap=map=FL-FR|FR-FL".to_string(),
         "mono" => "aformat=channel_layouts=mono".to_string(),
-        "stereo" => "aformat=channel_layouts=stereo,channelmap=map=FL-FC|FR-FC:channel_layout=2.1"
-            .to_string(),
+        "stereo" => {
+            "aformat=channel_layouts=stereo,channelmap=map=FL-FL|FR-FR|FL-LFE:channel_layout=2.1"
+                .to_string()
+        }
         _ => return Err(format!("Unknown channel mode: {}", mode)),
     };
 

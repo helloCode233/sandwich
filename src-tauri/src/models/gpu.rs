@@ -118,4 +118,12 @@ impl GpuEncoder {
             ],
         }
     }
+
+    /// Returns true if this GPU backend has FFmpeg filter equivalents
+    /// that can replace CPU filters in the processing pipeline.
+    /// Currently only NVENC supports GPU-side filters (crop_cuda, scale_cuda).
+    /// Other backends still benefit from GPU encoding but use CPU filters.
+    pub fn supports_gpu_filters(&self) -> bool {
+        matches!(self, GpuEncoder::Nvenc(_))
+    }
 }

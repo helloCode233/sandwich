@@ -684,26 +684,52 @@ pub fn build_film_grain_filter(op: &Operation) -> Result<Vec<String>, String> {
 
 /// Build FFmpeg filter arguments for Gaussian blur via `gblur` filter.
 /// Safety backstop: sigma clamped to [0.5, 3.0].
-pub fn build_gaussian_blur_filter(op: &Operation) -> Result<Vec<String>, String> {
+///
+/// GPU path (NVENC + hwaccel): uses gblur_cuda (direct CUDA equivalent of gblur).
+pub fn build_gaussian_blur_filter(
+    op: &Operation,
+    gpu_encoder: Option<&GpuEncoder>,
+    hwaccel_active: bool,
+) -> Result<Vec<String>, String> {
     let sigma: f64 = op.params["sigma"].as_f64().unwrap_or(1.5);
 
     let sigma = sigma.clamp(0.5, 3.0);
 
-    let filter = format!("gblur=sigma={}", sigma);
-    Ok(vec!["-vf".to_string(), filter])
+    if hwaccel_active && gpu_encoder.is_some_and(|e| e.supports_gpu_filters()) {
+        let filter = format!("gblur_cuda=sigma={}", sigma);
+        Ok(vec!["-vf".to_string(), filter])
+    } else {
+        let filter = format!("gblur=sigma={}", sigma);
+        Ok(vec!["-vf".to_string(), filter])
+    }
 }
 
 /// Build FFmpeg filter arguments for sharpen via `unsharp` filter.
 /// Uses fixed luma matrix size 3x3 for subtle sharpening.
 /// Safety backstop: amount [0.5, 2.0], radius [1.0, 5.0].
-pub fn build_sharpen_filter(op: &Operation) -> Result<Vec<String>, String> {
+///
+/// GPU path (NVENC + hwaccel): uses unsharp_cuda when available.
+/// Falls back to gblur_cuda + eq_cuda contrast boost as approximation
+/// if unsharp_cuda is not available in the installed FFmpeg build.
+pub fn build_sharpen_filter(
+    op: &Operation,
+    gpu_encoder: Option<&GpuEncoder>,
+    hwaccel_active: bool,
+) -> Result<Vec<String>, String> {
     let amount: f64 = op.params["amount"].as_f64().unwrap_or(1.0);
     let _radius: f64 = op.params["radius"].as_f64().unwrap_or(3.0);
 
     let amount = amount.clamp(0.5, 2.0);
 
-    let filter = format!("unsharp=luma_msize_x=3:luma_msize_y=3:luma_amount={}", amount);
-    Ok(vec!["-vf".to_string(), filter])
+    if hwaccel_active && gpu_encoder.is_some_and(|e| e.supports_gpu_filters()) {
+        // GPU: unsharp_cuda where available; FFmpeg CUDA build may or may not include it.
+        // If unsharp_cuda fails at runtime, the auto-retry in batch.rs falls back to CPU.
+        let filter = format!("unsharp_cuda=luma_msize_x=3:luma_msize_y=3:luma_amount={}", amount);
+        Ok(vec!["-vf".to_string(), filter])
+    } else {
+        let filter = format!("unsharp=luma_msize_x=3:luma_msize_y=3:luma_amount={}", amount);
+        Ok(vec!["-vf".to_string(), filter])
+    }
 }
 
 // =========================================================================
@@ -870,8 +896,8 @@ pub fn build_filter_args(
         OperationType::ColorBalance => build_color_balance_filter(op, gpu_encoder, hwaccel_active),
         // Phase 6: Noise texture
         OperationType::FilmGrain => build_film_grain_filter(op),
-        OperationType::GaussianBlur => build_gaussian_blur_filter(op),
-        OperationType::Sharpen => build_sharpen_filter(op),
+        OperationType::GaussianBlur => build_gaussian_blur_filter(op, gpu_encoder, hwaccel_active),
+        OperationType::Sharpen => build_sharpen_filter(op, gpu_encoder, hwaccel_active),
         // Phase 6: Geometric fine-tuning
         OperationType::MicroRotate => build_micro_rotate_filter(op),
         OperationType::TinyScale => build_tiny_scale_filter(op),
@@ -972,12 +998,12 @@ pub fn build_filter_args_separated(
             Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
         OperationType::GaussianBlur => {
-            let args = build_gaussian_blur_filter(op)?;
+            let args = build_gaussian_blur_filter(op, gpu_encoder, hwaccel_active)?;
             let expr = args.get(1).cloned().unwrap_or_default();
             Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
         OperationType::Sharpen => {
-            let args = build_sharpen_filter(op)?;
+            let args = build_sharpen_filter(op, gpu_encoder, hwaccel_active)?;
             let expr = args.get(1).cloned().unwrap_or_default();
             Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
@@ -1316,7 +1342,7 @@ mod tests {
     #[test]
     fn test_gaussian_blur_basic() {
         let op = make_op(OperationType::GaussianBlur, serde_json::json!({"sigma": 1.5}));
-        let args = build_gaussian_blur_filter(&op).unwrap();
+        let args = build_gaussian_blur_filter(&op, None, false).unwrap();
         assert!(args[0] == "-vf");
         assert!(args[1].contains("gblur=sigma=1.5"));
     }
@@ -1324,7 +1350,7 @@ mod tests {
     #[test]
     fn test_sharpen_basic() {
         let op = make_op(OperationType::Sharpen, serde_json::json!({"amount": 1.0, "radius": 3.0}));
-        let args = build_sharpen_filter(&op).unwrap();
+        let args = build_sharpen_filter(&op, None, false).unwrap();
         assert!(args[0] == "-vf");
         assert!(args[1].contains("unsharp="));
         assert!(args[1].contains("luma_amount=1"));

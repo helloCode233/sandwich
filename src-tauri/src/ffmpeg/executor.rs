@@ -161,9 +161,11 @@ pub fn execute_single_file(
             hwaccel_active,
         )?;
 
-        // Plan 18: route to GPU or CPU group based on operation type
-        let is_gpu_op = has_gpu_ops && is_gpu_capable(op.op_type);
-        let target = if is_gpu_op { &mut gpu_args } else { &mut cpu_args };
+        // Only ops producing actual GPU-native filters (_cuda) go to GPU pass.
+        // CPU-only ops go to CPU pass regardless of is_gpu_capable flag.
+        let produces_gpu =
+            has_gpu_ops && results.iter().any(|(_, args)| args.iter().any(|a| a.contains("_cuda")));
+        let target = if produces_gpu { &mut gpu_args } else { &mut cpu_args };
 
         for (kind, _args) in results {
             match kind {

@@ -354,7 +354,7 @@ pub async fn generate_seed(
         operations,
         created_at: chrono::Utc::now().to_rfc3339(),
         strength_tier,
-        schema_version: 3,
+        schema_version: 4,
     };
 
     // Persist to managed state
@@ -929,7 +929,7 @@ pub async fn copy_seed(
             operations: new_operations,
             created_at: chrono::Utc::now().to_rfc3339(),
             strength_tier: tier,
-            schema_version: 3,
+            schema_version: 4,
         };
 
         (seed, source.alias.clone())

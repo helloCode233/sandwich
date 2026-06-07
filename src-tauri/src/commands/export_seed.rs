@@ -87,7 +87,7 @@ fn migrate_imported_seed(mut seed: Seed) -> Result<Seed, String> {
         ));
     }
 
-    seed.schema_version = 3;
+    seed.schema_version = 4;
     Ok(seed)
 }
 
@@ -109,7 +109,7 @@ pub async fn import_seed(
 
     // Phase 7: Migrate imported seeds that lack schema_version (old export format).
     // This handles seed JSON files exported from Phase 6 or earlier.
-    if seed.schema_version < 3 {
+    if seed.schema_version < 4 {
         seed = migrate_imported_seed(seed)?;
     }
 
@@ -148,7 +148,7 @@ mod tests {
             }],
             created_at: "2026-01-01T00:00:00Z".to_string(),
             strength_tier: StrengthTier::Standard,
-            schema_version: 3,
+            schema_version: 4,
         }
     }
 
@@ -169,7 +169,7 @@ mod tests {
             operations: ops,
             created_at: "2026-01-01T00:00:00Z".to_string(),
             strength_tier: StrengthTier::Standard,
-            schema_version: 3,
+            schema_version: 4,
         }
     }
 

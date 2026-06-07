@@ -61,8 +61,8 @@ fn pick_operation_type(rng: &mut impl Rng) -> OperationType {
 /// Returns true if the operation type can be accelerated by GPU-side FFmpeg filters.
 /// Ops with real FFmpeg CUDA filters (scale_cuda, pad_cuda, bilateral_cuda, transpose_cuda,
 /// colorspace_cuda, yadif_cuda) or ops that benefit significantly from hwaccel decode + NVENC encode.
-#[allow(dead_code)]
-fn is_gpu_capable(op_type: OperationType) -> bool {
+/// Public for use by executor's two-pass pipeline (Plan 18).
+pub fn is_gpu_capable(op_type: OperationType) -> bool {
     matches!(
         op_type,
         OperationType::Crop

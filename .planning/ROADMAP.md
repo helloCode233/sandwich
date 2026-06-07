@@ -213,7 +213,7 @@ Plans:
 **Goal:** Extend fingerprint modification across 4 dimensions: (1) 5 new audio operation types (Resample, Volume, Pitch, EQ, Channel) replacing AudioTweak; (2) asymmetric crop (0.5-3.5% per edge) as default operation with scale-back; (3) metadata write + selective erase alongside existing full erase; (4) video speed change + trim edges for duration modification. FrameDrop upgraded to true frame decimation (select filter) as default operation alongside crop. 10 new OperationType variants total, AudioTweak kept for backward compat. Migration splits old AudioTweak operations and re-parameterizes FrameDrop.
 **Requirements**: D-01 through D-19 (19 locked decisions from CONTEXT.md)
 **Depends on:** Phase 6
-**Plans:** 18/17 plans complete
+**Plans:** 19/17 plans complete
 
 Plans:
 **Wave 1**

@@ -506,7 +506,7 @@ fn test_video_speed_produces_valid_output() {
     let out = src.with_file_name("test_speed_out.mp4");
 
     let op = make_test_op(OperationType::VideoSpeed, serde_json::json!({"speedFactor": 1.03}));
-    let args = build_video_speed_filter(&op, None, false).expect("build filter");
+    let args = build_video_speed_filter(&op).expect("build filter");
     // args = ["-vf", "setpts=...", "-af", "atempo=..."]
     let vf_args = vec![args[1].clone()];
     let af_args = vec![args[3].clone()];
@@ -582,7 +582,7 @@ fn test_frame_drop_reduces_frame_count() {
     // FrameDrop with aggressive interval=25 (drop 1 frame every 25)
     // Expected: ~60/25 ≈ 2-3 frames dropped → ~57-58 output frames
     let op = make_test_op(OperationType::FrameDrop, serde_json::json!({"interval": 25}));
-    let args = build_frame_drop_filter(&op, None, false).expect("build FrameDrop filter");
+    let args = build_frame_drop_filter(&op).expect("build FrameDrop filter");
     let vf_args = vec![args[1].clone()];
 
     // CRITICAL: -vsync vfr is required. The executor injects this automatically
@@ -651,9 +651,9 @@ fn test_multiple_phase7_filters_chained() {
     );
     let vs_op = make_test_op(OperationType::VideoSpeed, serde_json::json!({"speedFactor": 1.02}));
 
-    let fd_vf = build_frame_drop_filter(&fd_op, None, false).expect("FrameDrop");
+    let fd_vf = build_frame_drop_filter(&fd_op).expect("FrameDrop");
     let crop_vf = build_crop_filter(&crop_op, None, false).expect("Crop");
-    let vs_args = build_video_speed_filter(&vs_op, None, false).expect("VideoSpeed");
+    let vs_args = build_video_speed_filter(&vs_op).expect("VideoSpeed");
 
     // Collect video filter expressions (without -vf prefix) and comma-join
     let vf_exprs: Vec<String> = vec![

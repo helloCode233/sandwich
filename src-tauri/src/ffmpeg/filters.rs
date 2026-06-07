@@ -85,29 +85,17 @@ pub fn build_pixel_shift_filter(op: &Operation) -> Result<Vec<String>, String> {
 /// Requires -vsync vfr to prevent ffmpeg from inserting duplicate frames.
 /// Safety: interval clamped to [15, 100].
 ///
-/// GPU path (NVENC + hwaccel): uses fps_cuda to approximate frame dropping by reducing
-/// the output frame rate. fps = 30.0 * (interval-1) / interval drops ~1 frame per interval
-/// while keeping all processing on the GPU.
-pub fn build_frame_drop_filter(
-    op: &Operation,
-    gpu_encoder: Option<&GpuEncoder>,
-    hwaccel_active: bool,
-) -> Result<Vec<String>, String> {
+/// fps_cuda does NOT exist in FFmpeg — FrameDrop always uses CPU select filter.
+/// When hwaccel is active, the executor handles GPU↔CPU transfer automatically.
+pub fn build_frame_drop_filter(op: &Operation) -> Result<Vec<String>, String> {
     let interval: u32 = op.params["interval"].as_u64().unwrap_or(40) as u32;
     let interval = interval.clamp(15, 100);
 
-    if hwaccel_active && gpu_encoder.is_some_and(|e| e.supports_gpu_filters()) {
-        // GPU: fps_cuda to reduce frame rate, setpts to reset timestamps
-        let fps = 30.0 * (interval as f64 - 1.0) / interval as f64;
-        let filter = format!("fps_cuda=fps={:.2},setpts=N/FRAME_RATE/TB", fps);
-        Ok(vec!["-vf".to_string(), filter])
-    } else {
-        // CPU: select='mod(n+1,N)': drops frame when mod(n+1, N) == 0
-        // Example N=40: frame 39 -> mod(40,40)=0 -> dropped; frame 40 -> mod(41,40)=1 -> kept
-        // setpts=N/FRAME_RATE/TB resets PTS to maintain smooth playback after frame removal
-        let filter = format!("select='mod(n+1,{})',setpts=N/FRAME_RATE/TB", interval);
-        Ok(vec!["-vf".to_string(), filter])
-    }
+    // CPU: select='mod(n+1,N)': drops frame when mod(n+1, N) == 0
+    // Example N=40: frame 39 -> mod(40,40)=0 -> dropped; frame 40 -> mod(41,40)=1 -> kept
+    // setpts=N/FRAME_RATE/TB resets PTS to maintain smooth playback after frame removal
+    let filter = format!("select='mod(n+1,{})',setpts=N/FRAME_RATE/TB", interval);
+    Ok(vec!["-vf".to_string(), filter])
 }
 
 /// Build FFmpeg arguments for GOP modification.
@@ -257,9 +245,10 @@ pub fn build_audio_channel_filter(op: &Operation) -> Result<Vec<String>, String>
 /// Each side percentage is independently random: leftPct, rightPct, topPct, bottomPct.
 /// Safety: each percentage clamped to [0.5, 3.5]. Expressions use iw/ih for resolution independence.
 ///
-/// When `hwaccel_active` is true (NVENC + hardware decode), input frames are already in GPU
-/// memory. The GPU filter path omits hwupload_cuda/hwdownload wrapping — frames stay on GPU
-/// and feed directly into NVENC encoding without a round-trip to CPU memory.
+/// crop_cuda does NOT exist in FFmpeg — crop always runs CPU-side.
+/// When NVENC+hwaccel is active, scale_cuda runs GPU-side; the executor's hwdownload
+/// prefix brings frames to CPU for crop, then scale_cuda pushes back to GPU for NVENC encoding.
+/// Without hwaccel: full CPU crop+scale with lanczos resampling.
 pub fn build_crop_filter(
     op: &Operation,
     gpu_encoder: Option<&GpuEncoder>,
@@ -290,72 +279,49 @@ pub fn build_crop_filter(
     // When origW/origH are provided (injected by executor), use explicit scale
     // targets to survive FFmpeg's rounding.
 
-    // Determine if GPU filters should be used (NVENC only)
-    let use_gpu_filters = gpu_encoder.map_or(false, |e| e.supports_gpu_filters());
-    let (crop_name, scale_name) =
-        if use_gpu_filters { ("crop_cuda", "scale_cuda") } else { ("crop", "scale") };
+    // Determine if GPU scale_cuda should be used (NVENC + hwaccel only).
+    // crop_cuda does NOT exist in FFmpeg — crop always runs CPU-side.
+    // When hwaccel is active, the executor prepends hwdownload to bring
+    // frames to CPU for crop, then scale_cuda pushes them back to GPU for NVENC.
+    let use_gpu_scale = hwaccel_active && gpu_encoder.is_some_and(|e| e.supports_gpu_filters());
 
     let has_orig_dims = op.params["origW"].is_number() && op.params["origH"].is_number();
 
-    // Build scale expression — GPU path uses simpler syntax without flags=lanczos
-    let scale_expr = if !use_gpu_filters {
-        // CPU path: use flags=lanczos
-        if has_orig_dims {
-            let orig_w = op.params["origW"].as_u64().unwrap_or(544);
-            let orig_h = op.params["origH"].as_u64().unwrap_or(960);
-            format!("{}={}:{}:flags=lanczos", scale_name, orig_w, orig_h)
-        } else {
-            let inv_w = 1.0 / (1.0 - left_pct / 100.0 - right_pct / 100.0);
-            let inv_h = 1.0 / (1.0 - top_pct / 100.0 - bottom_pct / 100.0);
-            format!("{}=iw*{:.6}:ih*{:.6}:flags=lanczos", scale_name, inv_w, inv_h)
-        }
-    } else {
-        // GPU path: scale_cuda doesn't support flags=lanczos — omit them
-        if has_orig_dims {
-            let orig_w = op.params["origW"].as_u64().unwrap_or(544);
-            let orig_h = op.params["origH"].as_u64().unwrap_or(960);
-            format!("{}={}:{}", scale_name, orig_w, orig_h)
-        } else {
-            let inv_w = 1.0 / (1.0 - left_pct / 100.0 - right_pct / 100.0);
-            let inv_h = 1.0 / (1.0 - top_pct / 100.0 - bottom_pct / 100.0);
-            format!("{}=iw*{:.6}:ih*{:.6}", scale_name, inv_w, inv_h)
-        }
-    };
-
-    // Build the crop arg expressions (common to all paths)
-    let crop_args = format!(
-        "iw*(1-{lp}/100-{rp}/100):ih*(1-{tp}/100-{bp}/100):2*floor(iw*{lp}/200):2*floor(ih*{tp}/200)",
+    // Build the crop arg expression (CPU crop — crop_cuda doesn't exist)
+    let crop_str = format!(
+        "crop=iw*(1-{lp}/100-{rp}/100):ih*(1-{tp}/100-{bp}/100):2*floor(iw*{lp}/200):2*floor(ih*{tp}/200)",
         lp = left_pct,
         rp = right_pct,
         tp = top_pct,
         bp = bottom_pct,
     );
 
-    let filter = if use_gpu_filters && !hwaccel_active {
-        // GPU path without hwaccel: upload CPU→GPU, GPU filters, download GPU→CPU
-        format!(
-            "hwupload_cuda,{crop}={crop_args},{scale},hwdownload,format=nv12",
-            crop = crop_name,
-            crop_args = crop_args,
-            scale = scale_expr,
-        )
-    } else if use_gpu_filters && hwaccel_active {
-        // GPU path with hwaccel: frames already on GPU from NVDec, stay on GPU for NVENC
-        format!(
-            "{crop}={crop_args},{scale}",
-            crop = crop_name,
-            crop_args = crop_args,
-            scale = scale_expr,
-        )
+    // Build scale expression
+    let scale_str = if use_gpu_scale {
+        // scale_cuda doesn't support flags=lanczos — omit them
+        if has_orig_dims {
+            let orig_w = op.params["origW"].as_u64().unwrap_or(544);
+            let orig_h = op.params["origH"].as_u64().unwrap_or(960);
+            format!("scale_cuda={}:{}", orig_w, orig_h)
+        } else {
+            let inv_w = 1.0 / (1.0 - left_pct / 100.0 - right_pct / 100.0);
+            let inv_h = 1.0 / (1.0 - top_pct / 100.0 - bottom_pct / 100.0);
+            format!("scale_cuda=iw*{:.6}:ih*{:.6}", inv_w, inv_h)
+        }
     } else {
-        // CPU path: standard crop+scale with lanczos
-        format!(
-            "{crop}={crop_args},{scale}",
-            crop = crop_name,
-            crop_args = crop_args,
-            scale = scale_expr,
-        )
+        // CPU path: use flags=lanczos
+        if has_orig_dims {
+            let orig_w = op.params["origW"].as_u64().unwrap_or(544);
+            let orig_h = op.params["origH"].as_u64().unwrap_or(960);
+            format!("scale={}:{}:flags=lanczos", orig_w, orig_h)
+        } else {
+            let inv_w = 1.0 / (1.0 - left_pct / 100.0 - right_pct / 100.0);
+            let inv_h = 1.0 / (1.0 - top_pct / 100.0 - bottom_pct / 100.0);
+            format!("scale=iw*{:.6}:ih*{:.6}:flags=lanczos", inv_w, inv_h)
+        }
     };
+
+    let filter = format!("{},{}", crop_str, scale_str);
     Ok(vec!["-vf".to_string(), filter])
 }
 
@@ -364,23 +330,14 @@ pub fn build_crop_filter(
 /// This is a multi-filter operation: returns BOTH video and audio filter expressions.
 /// Safety: speedFactor clamped to [0.95, 1.05].
 ///
-/// GPU path (NVENC + hwaccel): uses fps_cuda to change effective frame rate for speed
-/// change effect, keeping video processing entirely on GPU. Audio stays CPU atempo.
-pub fn build_video_speed_filter(
-    op: &Operation,
-    gpu_encoder: Option<&GpuEncoder>,
-    hwaccel_active: bool,
-) -> Result<Vec<String>, String> {
+/// fps_cuda does NOT exist in FFmpeg — VideoSpeed always uses CPU setpts.
+/// When hwaccel is active, the executor handles GPU↔CPU transfer automatically.
+pub fn build_video_speed_filter(op: &Operation) -> Result<Vec<String>, String> {
     let speed_factor: f64 = op.params["speedFactor"].as_f64().unwrap_or(1.0);
     let speed_factor = speed_factor.clamp(0.95, 1.05);
 
-    let vf_expr = if hwaccel_active && gpu_encoder.is_some_and(|e| e.supports_gpu_filters()) {
-        // GPU: fps_cuda changes effective frame rate to create speed change effect
-        format!("fps_cuda=fps={:.4},setpts=N/FRAME_RATE/TB", 30.0 / speed_factor)
-    } else {
-        // CPU: setpts speeds up/slows down video by inverse factor
-        format!("setpts={:.4}*PTS", 1.0 / speed_factor)
-    };
+    // CPU: setpts speeds up/slows down video by inverse factor
+    let vf_expr = format!("setpts={:.4}*PTS", 1.0 / speed_factor);
 
     // atempo: speed up audio to match — FFmpeg requires 0.5-2.0, our range is safe
     let af_expr = format!("atempo={:.4}", speed_factor);
@@ -913,7 +870,7 @@ pub fn build_filter_args(
     match op.op_type {
         OperationType::MathOverlay => build_math_overlay_filter(op),
         OperationType::PixelShift => build_pixel_shift_filter(op),
-        OperationType::FrameDrop => build_frame_drop_filter(op, gpu_encoder, hwaccel_active),
+        OperationType::FrameDrop => build_frame_drop_filter(op),
         OperationType::GopModify => build_gop_modify_filter(op),
         OperationType::MetadataErase => build_metadata_erase_filter(op),
         OperationType::AudioTweak => build_audio_tweak_filter(op),
@@ -952,12 +909,12 @@ pub fn build_filter_args(
         OperationType::AudioEQ => build_audio_eq_filter(op),
         OperationType::AudioChannel => build_audio_channel_filter(op),
         // Phase 7: Crop (1)
-        OperationType::Crop => build_crop_filter(op, None, false),
+        OperationType::Crop => build_crop_filter(op, gpu_encoder, hwaccel_active),
         // Phase 7: Metadata (2)
         OperationType::MetadataWrite => build_metadata_write_filter(op),
         OperationType::MetadataSelectiveErase => build_metadata_selective_erase_filter(op, None),
         // Phase 7: Duration (2)
-        OperationType::VideoSpeed => build_video_speed_filter(op, gpu_encoder, hwaccel_active),
+        OperationType::VideoSpeed => build_video_speed_filter(op),
         OperationType::TrimEdges => build_trim_edges_filter(op),
     }
 }
@@ -999,7 +956,7 @@ pub fn build_filter_args_separated(
             Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
         OperationType::FrameDrop => {
-            let args = build_frame_drop_filter(op, gpu_encoder, hwaccel_active)?;
+            let args = build_frame_drop_filter(op)?;
             // args = ["-vf", "fps_cuda=fps=..." or "select='mod(n+1,N)',setpts=..."]
             let expr = args.get(1).cloned().unwrap_or_default();
             Ok(vec![(FilterKind::VideoFilter(expr), args)])
@@ -1119,7 +1076,7 @@ pub fn build_filter_args_separated(
         }
         // Phase 7: Duration (2) — VideoSpeed returns BOTH VideoFilter and AudioFilter
         OperationType::VideoSpeed => {
-            let args = build_video_speed_filter(op, gpu_encoder, hwaccel_active)?;
+            let args = build_video_speed_filter(op)?;
             // args = ["-vf", "fps_cuda=..." or "setpts=N*PTS", "-af", "atempo=N"]
             let vf_expr = args.get(1).cloned().unwrap_or_default();
             let af_expr = args.get(3).cloned().unwrap_or_default();
@@ -1210,7 +1167,7 @@ mod tests {
                 "interval": 45
             }),
         );
-        let args = build_frame_drop_filter(&op, None, false).unwrap();
+        let args = build_frame_drop_filter(&op).unwrap();
         assert!(args[1].contains("select='mod(n+1"), "Should use select filter, got: {}", args[1]);
         assert!(
             args[1].contains("setpts=N/FRAME_RATE/TB"),
@@ -1222,17 +1179,16 @@ mod tests {
 
     #[test]
     fn test_frame_drop_select_based_gpu() {
-        // GPU path: verify fps_cuda is used when NVENC + hwaccel is active
+        // fps_cuda doesn't exist — FrameDrop always uses CPU select filter.
+        // GPU acceleration comes from hwaccel decode + NVENC encode, not from GPU filters.
         let op = make_op(
             OperationType::FrameDrop,
             serde_json::json!({
                 "interval": 40
             }),
         );
-        let caps = NvencCaps::baseline();
-        let gpu = GpuEncoder::Nvenc(caps);
-        let args = build_frame_drop_filter(&op, Some(&gpu), true).unwrap();
-        assert!(args[1].contains("fps_cuda"), "GPU path should use fps_cuda, got: {}", args[1]);
+        let args = build_frame_drop_filter(&op).unwrap();
+        assert!(args[1].contains("select='mod(n+1"), "Should use select filter, got: {}", args[1]);
         assert!(
             args[1].contains("setpts=N/FRAME_RATE/TB"),
             "Should include setpts for PTS reset, got: {}",
@@ -1249,7 +1205,7 @@ mod tests {
                 "interval": 2
             }),
         );
-        let args = build_frame_drop_filter(&op, None, false).unwrap();
+        let args = build_frame_drop_filter(&op).unwrap();
         assert!(args[1].contains("15"), "Should clamp interval to >=15, got: {}", args[1]);
     }
 

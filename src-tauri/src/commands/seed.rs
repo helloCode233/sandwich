@@ -210,11 +210,12 @@ pub async fn generate_seed(
         StrengthTier::Aggressive => (8, 12),
     };
     let step_count = rng.random_range(min_steps..=max_steps);
-    // +2 capacity for default operations (Crop + FrameDrop) per D-04, D-19
-    let mut operations = Vec::with_capacity(step_count + 2);
+    // +8 capacity for default operations (2 GPU + 6 CPU) per D-19, Plan 18
+    let mut operations = Vec::with_capacity(step_count + 8);
 
     // --- Phase 7: Pre-inject default operations (D-04, D-19) ---
-    // Crop and FrameDrop are guaranteed in every seed. They do NOT count toward step_count.
+    // GPU defaults (main tier) — guaranteed in every seed.
+    // Crop and FrameDrop are always present. They do NOT count toward step_count.
     // They can also be randomly picked in the pool for a second instance (dual-guarantee per D-04).
     operations.push(generate_operation(&mut rng, OperationType::Crop, strength_tier, total_frames));
     operations.push(generate_operation(
@@ -223,6 +224,52 @@ pub async fn generate_seed(
         strength_tier,
         total_frames,
     ));
+
+    // --- Phase 7 Plan 18: Pre-inject CPU-only defaults (conservative tier — 控制力度) ---
+    // All 5 CPU-only operations are guaranteed in every seed using Conservative strength
+    // regardless of the seed's main tier. This ensures every seed has fingerprint-diverse
+    // CPU-side processing even when GPU ops dominate the random pool.
+    // They do NOT count toward step_count.
+    let conservative = StrengthTier::Conservative;
+    operations.push(generate_operation(
+        &mut rng,
+        OperationType::Sharpen,
+        conservative,
+        total_frames,
+    ));
+    operations.push(generate_operation(
+        &mut rng,
+        OperationType::MicroRotate,
+        conservative,
+        total_frames,
+    ));
+    operations.push(generate_operation(
+        &mut rng,
+        OperationType::TrimEdges,
+        conservative,
+        total_frames,
+    ));
+    operations.push(generate_operation(
+        &mut rng,
+        OperationType::MathOverlay,
+        conservative,
+        total_frames,
+    ));
+    operations.push(generate_operation(
+        &mut rng,
+        OperationType::PixelShift,
+        conservative,
+        total_frames,
+    ));
+
+    // Pick exactly 1 of the 3 overlay types to avoid too many overlays
+    let overlay_type = match rng.random_range(0..3) {
+        0 => OperationType::SolidColorOverlay,
+        1 => OperationType::GradientOverlay,
+        _ => OperationType::WatermarkBlend,
+    };
+    operations.push(generate_operation(&mut rng, overlay_type, conservative, total_frames));
+    // --- End CPU-only defaults ---
 
     // Detect GPU encoder availability for seed generation bias.
     // When a GPU encoder is detected (any type: NVENC, AMF, etc.),
@@ -1154,15 +1201,18 @@ mod tests {
 
     // ─── Phase 7: Pre-injection behavioral verification (UAT Gap 2) ───────────
 
-    /// Phase 7: Every seed MUST contain Crop and FrameDrop as pre-injected defaults.
-    /// Generates 100 seeds using generate_operation (the same function generate_seed uses)
-    /// and verifies Crop + FrameDrop produce correct operation structures.
-    /// This tests the guarantee without needing a full Tauri runtime.
+    /// Phase 7 Plan 18: Every seed MUST contain all 8 pre-injected defaults:
+    /// Crop, FrameDrop (GPU), Sharpen, MicroRotate, TrimEdges, MathOverlay, PixelShift,
+    /// and one overlay type (CPU, conservative tier).
+    /// Generates 100 seeds-worth of pre-injected operations using generate_operation
+    /// (the same function generate_seed uses) and verifies all produce correct
+    /// operation structures with valid params.
     #[test]
     fn generate_100_seeds_verify_pre_injected_structure() {
         let mut rng = rand::rng();
-        // Generate 100 seeds-worth of pre-injected Crop + FrameDrop operations
-        // using the same generate_operation function and tier ranges as generate_seed.
+        let conservative = StrengthTier::Conservative;
+        // Generate 100 seeds-worth of pre-injected operations using the same
+        // generate_operation function and tier ranges as generate_seed.
         for _ in 0..100 {
             let crop_op = generate_operation(
                 &mut rng,
@@ -1201,43 +1251,151 @@ mod tests {
                 fd_op.params.get("period").is_none(),
                 "FrameDrop must NOT have period (old setpts)"
             );
+
+            // --- Plan 18: Verify CPU-only defaults (conservative tier) ---
+            let sharpen_op =
+                generate_operation(&mut rng, OperationType::Sharpen, conservative, Some(5000));
+            let amount = sharpen_op.params["amount"].as_f64().unwrap_or(0.0);
+            assert!(amount > 0.0, "Sharpen must have amount > 0");
+            assert!(amount <= 0.5, "Conservative Sharpen amount must be <= 0.5, got {}", amount);
+
+            let rotate_op =
+                generate_operation(&mut rng, OperationType::MicroRotate, conservative, Some(5000));
+            let angle = rotate_op.params["angle"].as_f64().unwrap_or(0.0);
+            assert!(
+                (angle).abs() <= 0.3,
+                "Conservative MicroRotate angle must be within [-0.3, 0.3], got {}",
+                angle
+            );
+
+            let trim_op =
+                generate_operation(&mut rng, OperationType::TrimEdges, conservative, Some(5000));
+            let trim_frames = trim_op.params["trimFrames"].as_u64().unwrap_or(0);
+            assert!(
+                trim_frames >= 1 && trim_frames <= 10,
+                "Conservative TrimEdges trimFrames must be 1..10, got {}",
+                trim_frames
+            );
+
+            let math_op =
+                generate_operation(&mut rng, OperationType::MathOverlay, conservative, Some(5000));
+            let opacity = math_op.params["opacity"].as_f64().unwrap_or(0.0);
+            assert!(
+                opacity >= 0.03 && opacity <= 0.08,
+                "Conservative MathOverlay opacity must be 0.03..0.08, got {}",
+                opacity
+            );
+
+            let ps_op =
+                generate_operation(&mut rng, OperationType::PixelShift, conservative, Some(5000));
+            let dx: i32 = ps_op.params["dx"].as_i64().unwrap_or(0) as i32;
+            let dy: i32 = ps_op.params["dy"].as_i64().unwrap_or(0) as i32;
+            assert!(dx >= -1 && dx <= 1, "Conservative PixelShift dx must be -1..1, got {}", dx);
+            assert!(dy >= -1 && dy <= 1, "Conservative PixelShift dy must be -1..1, got {}", dy);
+
+            // Overlay (one of three, pick randomly — test SolidColorOverlay)
+            let overlay_op = generate_operation(
+                &mut rng,
+                OperationType::SolidColorOverlay,
+                conservative,
+                Some(5000),
+            );
+            let mix = overlay_op.params["mix"].as_f64().unwrap_or(0.0);
+            assert!(mix > 0.0, "SolidColorOverlay must have mix > 0");
+            assert!(mix <= 0.05, "Conservative SolidColorOverlay mix must be <= 0.05, got {}", mix);
+            assert!(overlay_op.params.get("hue").is_some(), "SolidColorOverlay must have hue");
+            assert!(
+                overlay_op.params.get("saturation").is_some(),
+                "SolidColorOverlay must have saturation"
+            );
+            assert!(
+                overlay_op.params.get("lightness").is_some(),
+                "SolidColorOverlay must have lightness"
+            );
         }
     }
 
-    /// Verify that when pre-injection logic runs (Crop + FrameDrop before random loop),
-    /// both default ops exist and have the expected OperationType.
-    /// This mirrors the Vec::with_capacity(step_count + 2) and .push() order in generate_seed.
+    /// Verify that when pre-injection logic runs (Crop + FrameDrop + 6 CPU-only ops before random loop),
+    /// all 8 default ops exist and have the expected OperationType and order.
+    /// This mirrors the Vec::with_capacity(step_count + 8) and .push() order in generate_seed.
     #[test]
     fn pre_injected_ops_have_correct_types_and_order() {
         let mut rng = rand::rng();
         let mut ops = Vec::new();
-        // Mirror exactly what generate_seed does (lines 128-137)
+        // Mirror exactly what generate_seed does (Plan 18: 2 GPU + 6 CPU defaults)
+        let conservative = StrengthTier::Conservative;
+        // GPU defaults (main tier — simulated with Conservative for test)
+        ops.push(generate_operation(&mut rng, OperationType::Crop, conservative, Some(3000)));
+        ops.push(generate_operation(&mut rng, OperationType::FrameDrop, conservative, Some(3000)));
+        // CPU-only defaults (conservative tier)
+        ops.push(generate_operation(&mut rng, OperationType::Sharpen, conservative, Some(3000)));
         ops.push(generate_operation(
             &mut rng,
-            OperationType::Crop,
-            StrengthTier::Conservative,
+            OperationType::MicroRotate,
+            conservative,
             Some(3000),
         ));
+        ops.push(generate_operation(&mut rng, OperationType::TrimEdges, conservative, Some(3000)));
         ops.push(generate_operation(
             &mut rng,
-            OperationType::FrameDrop,
-            StrengthTier::Conservative,
+            OperationType::MathOverlay,
+            conservative,
+            Some(3000),
+        ));
+        ops.push(generate_operation(&mut rng, OperationType::PixelShift, conservative, Some(3000)));
+        // Random overlay (test with WatermarkBlend)
+        ops.push(generate_operation(
+            &mut rng,
+            OperationType::WatermarkBlend,
+            conservative,
             Some(3000),
         ));
 
-        assert_eq!(ops.len(), 2, "Pre-injection adds exactly 2 default ops");
+        assert_eq!(ops.len(), 8, "Pre-injection adds exactly 8 default ops");
         assert_eq!(ops[0].op_type, OperationType::Crop, "First pre-injected op must be Crop");
         assert_eq!(
             ops[1].op_type,
             OperationType::FrameDrop,
             "Second pre-injected op must be FrameDrop"
         );
-
-        // Verify both ops have valid params (not empty)
-        assert!(!ops[0].params.as_object().unwrap().is_empty(), "Crop params must not be empty");
-        assert!(
-            !ops[1].params.as_object().unwrap().is_empty(),
-            "FrameDrop params must not be empty"
+        assert_eq!(ops[2].op_type, OperationType::Sharpen, "Third pre-injected op must be Sharpen");
+        assert_eq!(
+            ops[3].op_type,
+            OperationType::MicroRotate,
+            "Fourth pre-injected op must be MicroRotate"
         );
+        assert_eq!(
+            ops[4].op_type,
+            OperationType::TrimEdges,
+            "Fifth pre-injected op must be TrimEdges"
+        );
+        assert_eq!(
+            ops[5].op_type,
+            OperationType::MathOverlay,
+            "Sixth pre-injected op must be MathOverlay"
+        );
+        assert_eq!(
+            ops[6].op_type,
+            OperationType::PixelShift,
+            "Seventh pre-injected op must be PixelShift"
+        );
+        assert!(
+            matches!(
+                ops[7].op_type,
+                OperationType::SolidColorOverlay
+                    | OperationType::GradientOverlay
+                    | OperationType::WatermarkBlend
+            ),
+            "Eighth pre-injected op must be an overlay type"
+        );
+
+        // Verify all ops have valid params (not empty)
+        for op in &ops {
+            assert!(
+                !op.params.as_object().unwrap().is_empty(),
+                "{:?} params must not be empty",
+                op.op_type
+            );
+        }
     }
 }

@@ -58,6 +58,85 @@ fn pick_operation_type(rng: &mut impl Rng) -> OperationType {
     }
 }
 
+/// Returns true if the operation type can be accelerated by GPU-side FFmpeg filters.
+/// GPU-capable ops: crop, frame-drop, video-speed, color processing (4), noise/blur (3).
+#[allow(dead_code)]
+fn is_gpu_capable(op_type: OperationType) -> bool {
+    matches!(
+        op_type,
+        OperationType::Crop
+            | OperationType::FrameDrop
+            | OperationType::VideoSpeed
+            | OperationType::HueRotate
+            | OperationType::SaturationAdjust
+            | OperationType::BrightnessContrast
+            | OperationType::ColorBalance
+            | OperationType::GaussianBlur
+            | OperationType::Sharpen
+            | OperationType::TinyScale
+    )
+}
+
+/// GPU-preferred weighted random selection (D-15 variant).
+/// When an NVENC GPU is available, strongly prefer GPU-capable operations:
+///   GPU-capable ops: ~70% of total weight (700/1000)
+///   CPU-only ops:    ~30% of total weight (300/1000)
+/// Within each group, weights maintain proportional distribution.
+fn pick_operation_type_gpu_preferred(rng: &mut impl Rng) -> OperationType {
+    let roll: u32 = rng.random_range(1..=1000);
+    match roll {
+        // ── GPU-capable zone (1..=700) ─────────────────────────────────
+        // Color processing (4): 90 each = 360
+        1..=90 => OperationType::HueRotate,
+        91..=180 => OperationType::SaturationAdjust,
+        181..=270 => OperationType::BrightnessContrast,
+        271..=360 => OperationType::ColorBalance,
+        // Noise/blur (3): 90 each = 270
+        361..=450 => OperationType::GaussianBlur,
+        451..=540 => OperationType::Sharpen,
+        541..=630 => OperationType::TinyScale,
+        // Duration (1): 40
+        631..=670 => OperationType::VideoSpeed,
+        // Default ops (2): 15 each = 30
+        671..=685 => OperationType::Crop,
+        686..=700 => OperationType::FrameDrop,
+
+        // ── CPU-only zone (701..=1000) ─────────────────────────────────
+        // Math overlay (3): 20 each = 60
+        701..=720 => OperationType::MathOverlay,
+        721..=740 => OperationType::MathOverlay,
+        741..=760 => OperationType::MathOverlay,
+        // Pixel shift: 15
+        761..=775 => OperationType::PixelShift,
+        // Film grain: 15
+        776..=790 => OperationType::FilmGrain,
+        // Micro rotate: 15
+        791..=805 => OperationType::MicroRotate,
+        // Blend overlay (3): 20 each = 60
+        806..=825 => OperationType::SolidColorOverlay,
+        826..=845 => OperationType::GradientOverlay,
+        846..=865 => OperationType::WatermarkBlend,
+        // Audio (5): 10 each = 50
+        866..=875 => OperationType::AudioResample,
+        876..=885 => OperationType::AudioVolume,
+        886..=895 => OperationType::AudioPitch,
+        896..=905 => OperationType::AudioEQ,
+        906..=915 => OperationType::AudioChannel,
+        // Metadata new (2): 10 each = 20
+        916..=925 => OperationType::MetadataWrite,
+        926..=935 => OperationType::MetadataSelectiveErase,
+        // Trim edges: 25
+        936..=960 => OperationType::TrimEdges,
+        // Gop modify: 15
+        961..=975 => OperationType::GopModify,
+        // Metadata erase: 15
+        976..=990 => OperationType::MetadataErase,
+        // Remux: 10
+        991..=1000 => OperationType::Remux,
+        _ => unreachable!("roll is 1..=1000"),
+    }
+}
+
 /// Validate that operations collectively cover >=70% of video frames (D-09).
 /// For short videos (<50 frames), a relaxed 50% threshold is used.
 /// Returns true if coverage is adequate.
@@ -136,9 +215,21 @@ pub async fn generate_seed(
         total_frames,
     ));
 
+    // Detect GPU encoder availability for seed generation bias.
+    // When a GPU encoder is detected (any type: NVENC, AMF, etc.),
+    // seed generation strongly prefers GPU-capable operations.
+    let gpu_available = {
+        let app_state = state.lock().map_err(|e| format!("Lock error: {}", e))?;
+        app_state.gpu_encoder.is_some()
+    };
+
     // Random loop: step_count operations from weighted pool
     for _ in 0..step_count {
-        let op_type = pick_operation_type(&mut rng);
+        let op_type = if gpu_available {
+            pick_operation_type_gpu_preferred(&mut rng)
+        } else {
+            pick_operation_type(&mut rng)
+        };
         let op = generate_operation(&mut rng, op_type, strength_tier, total_frames);
         operations.push(op);
     }
@@ -889,6 +980,22 @@ mod tests {
         assert_eq!(
             seen_count, 28,
             "pick_operation_type must produce all 28 active OperationType variants (AudioTweak + Flip excluded)"
+        );
+    }
+
+    // ─── TEST 4b: pick_operation_type_gpu_preferred distribution ────────────
+    #[test]
+    fn pick_operation_type_gpu_preferred_covers_all_active_types() {
+        let mut rng = rand::rng();
+        let mut seen_flags: [bool; 30] = [false; 30];
+        for _ in 0..10_000 {
+            let t = pick_operation_type_gpu_preferred(&mut rng);
+            seen_flags[variant_index(t)] = true;
+        }
+        let seen_count = seen_flags.iter().filter(|&&f| f).count();
+        assert_eq!(
+            seen_count, 28,
+            "pick_operation_type_gpu_preferred must produce all 28 active OperationType variants (AudioTweak + Flip excluded)"
         );
     }
 

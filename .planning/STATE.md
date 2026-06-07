@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2
 milestone_name: milestone
 status: executing
-stopped_at: Phase 07 UI-SPEC approved
-last_updated: "2026-06-06T15:16:46.174Z"
-last_activity: 2026-06-06
+stopped_at: Completed 07-16-PLAN.md
+last_updated: "2026-06-07T07:17:52.406Z"
+last_activity: 2026-06-07
 progress:
   total_phases: 7
   completed_phases: 5
-  total_plans: 50
-  completed_plans: 47
+  total_plans: 51
+  completed_plans: 49
   percent: 71
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-12)
 ## Current Position
 
 Phase: 07 — COMPLETE
-Plan: 4 of 8
+Plan: 5 of 8
 Status: Ready to execute
-Last activity: 2026-06-06
+Last activity: 2026-06-07
 
-Progress: [█████████░] 94%
+Progress: [██████████] 96%
 
 ## Accumulated Context
 
@@ -47,6 +47,8 @@ Recent decisions affecting current work:
 - Phase 01 locked decisions (D-01 through D-39) remain binding: Naive UI dark theme (D-32), frontend infrastructure (D-33), i18n bilingual (D-13), Pinia (D-33), UnoCSS (D-06), eslint/prettier (D-36), window config 1200x800 (D-12).
 - Phase 05 CONTEXT.md contains 15 locked decisions (D-01 through D-15) covering cross-platform packaging, GPU auto-detection, multi-seed batch, MD5 verification, and pipeline optimization.
 - Phase 06 CONTEXT.md contains 20 locked decisions (D-01 through D-20) covering operation types, strength tiers, seed generation, export/import, and deferred v2 features.
+- [Phase ?]: Remove all nonexistent FFmpeg CUDA filter names: crop_cuda, fps_cuda, hue_cuda, eq_cuda, gblur_cuda, unsharp_cuda, hflip_cuda
+- [Phase ?]: Use bilateral_cuda (real GPU filter) as approximate GPU substitute for gblur_cuda
 
 ### Pending Todos
 
@@ -67,8 +69,8 @@ Items acknowledged and carried forward:
 
 ## Session Continuity
 
-Last session: 2026-06-06T15:16:46.160Z
-Stopped at: Phase 07 UI-SPEC approved
+Last session: 2026-06-07T07:17:52.383Z
+Stopped at: Completed 07-16-PLAN.md
 Resume file: None
 
 ## Performance Metrics
@@ -80,3 +82,4 @@ Resume file: None
 | Phase 4 | 7 plans | — | 18 tasks | 15+ files | 2026-05-14 |
 | Phase 07-audio-crop-meta P07 | 18 min | 2 tasks | 2 files |
 | Phase 07 P08 | 2 min | 2 tasks | 2 files |
+| Phase 07 P16 | 22 min | 10 tasks | 5 files |

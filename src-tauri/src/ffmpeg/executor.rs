@@ -654,3 +654,181 @@ fn make_output_path(
 
     Ok(candidate)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::gpu::NvencCaps;
+    use crate::models::seed::Operation;
+    use serde_json::json;
+
+    fn make_op(op_type: OperationType) -> Operation {
+        Operation {
+            op_type,
+            params: json!({}),
+            start_frame: 0,
+            duration_frames: 0,
+        }
+    }
+
+    fn nvenc() -> GpuEncoder {
+        GpuEncoder::Nvenc(NvencCaps::baseline())
+    }
+
+    /// Helper: simulate filter building and grouping for a list of ops.
+    /// Returns (gpu_filter_count, cpu_filter_count, gpu_filter_names).
+    fn classify_ops(
+        ops: &[Operation],
+        gpu_encoder: Option<GpuEncoder>,
+    ) -> (usize, usize, Vec<String>) {
+        let has_gpu = gpu_encoder.is_some();
+        let hwaccel = has_gpu;
+        let mut gpu_exprs: Vec<String> = Vec::new();
+        let mut cpu_exprs: Vec<String> = Vec::new();
+
+        for op in ops {
+            let results =
+                build_filter_args_separated(op, None, gpu_encoder.as_ref(), hwaccel).unwrap();
+            let produces_gpu = has_gpu
+                && results
+                    .iter()
+                    .any(|(_, args)| args.iter().any(|a| a.contains("_cuda")));
+            for (kind, _args) in results {
+                match kind {
+                    FilterKind::VideoFilter(expr) => {
+                        if produces_gpu {
+                            gpu_exprs.push(expr);
+                        } else {
+                            cpu_exprs.push(expr);
+                        }
+                    }
+                    FilterKind::AudioFilter(expr) => {
+                        cpu_exprs.push(expr);
+                    }
+                    FilterKind::Other(_) => {}
+                }
+            }
+        }
+
+        (gpu_exprs.len(), cpu_exprs.len(), gpu_exprs)
+    }
+
+    #[test]
+    fn crop_produces_cuda_filter_goes_to_gpu_pass() {
+        let ops = vec![make_op(OperationType::Crop)];
+        let (gpu, cpu, names) = classify_ops(&ops, Some(nvenc()));
+        assert!(gpu > 0, "Crop must produce GPU-native filter");
+        assert!(cpu == 0, "Crop must NOT produce CPU filters");
+        assert!(
+            names.iter().any(|n| n.contains("scale_cuda") && n.contains("pad_cuda")),
+            "Crop GPU chain must contain scale_cuda + pad_cuda: {:?}",
+            names
+        );
+    }
+
+    #[test]
+    fn framedrop_no_cuda_stays_cpu_even_if_gpu_capable() {
+        assert!(
+            is_gpu_capable(OperationType::FrameDrop),
+            "FrameDrop must be marked GPU-capable for seed generation"
+        );
+        let ops = vec![make_op(OperationType::FrameDrop)];
+        let (gpu, cpu, _) = classify_ops(&ops, Some(nvenc()));
+        assert!(
+            gpu == 0,
+            "FrameDrop select has no _cuda — must NOT enter GPU pass"
+        );
+        assert!(cpu > 0, "FrameDrop must go to CPU pass");
+    }
+
+    #[test]
+    fn blur_produces_cuda_filter_goes_to_gpu_pass() {
+        let mut op = make_op(OperationType::GaussianBlur);
+        op.params = json!({"sigma": 3.0});
+        let (gpu, _cpu, names) = classify_ops(&[op], Some(nvenc()));
+        assert!(gpu > 0, "GaussianBlur must produce GPU-native filter");
+        assert!(
+            names.iter().any(|n| n.contains("bilateral_cuda")),
+            "Blur GPU chain must contain bilateral_cuda: {:?}",
+            names
+        );
+    }
+
+    #[test]
+    fn filmgrain_produces_cuda_filter_goes_to_gpu_pass() {
+        let ops = vec![make_op(OperationType::FilmGrain)];
+        let (gpu, cpu, names) = classify_ops(&ops, Some(nvenc()));
+        assert!(gpu > 0, "FilmGrain must produce GPU-native filter");
+        assert!(
+            names.iter().any(|n| n.contains("yadif_cuda")),
+            "FilmGrain GPU chain must contain yadif_cuda: {:?}",
+            names
+        );
+    }
+
+    #[test]
+    fn sharpen_no_cuda_stays_cpu_pass() {
+        let ops = vec![make_op(OperationType::Sharpen)];
+        let (gpu, cpu, _) = classify_ops(&ops, Some(nvenc()));
+        assert!(gpu == 0, "Sharpen has no _cuda — must NOT enter GPU pass");
+        assert!(cpu > 0, "Sharpen must go to CPU pass");
+    }
+
+    #[test]
+    fn huerotate_no_cuda_stays_cpu_pass() {
+        let mut op = make_op(OperationType::HueRotate);
+        op.params = json!({"hueAngle": 15.0, "saturation": 1.0});
+        let (gpu, cpu, _) = classify_ops(&[op], Some(nvenc()));
+        assert!(gpu == 0, "HueRotate has no _cuda — must NOT enter GPU pass");
+        assert!(cpu > 0, "HueRotate must go to CPU pass");
+    }
+
+    #[test]
+    fn mixed_ops_split_correctly() {
+        let ops = vec![
+            make_op(OperationType::Crop),
+            make_op(OperationType::FrameDrop),
+            make_op(OperationType::GaussianBlur),
+            make_op(OperationType::Sharpen),
+            make_op(OperationType::HueRotate),
+        ];
+        let (gpu, cpu, names) = classify_ops(&ops, Some(nvenc()));
+        assert!(gpu >= 2, "Crop + Blur must produce GPU filters, got {}", gpu);
+        assert!(cpu >= 3, "FrameDrop + Sharpen + HueRotate must be CPU, got {}", cpu);
+        assert!(
+            names.iter().any(|n| n.contains("scale_cuda")),
+            "GPU pass must contain scale_cuda"
+        );
+        assert!(
+            names.iter().any(|n| n.contains("bilateral_cuda")),
+            "GPU pass must contain bilateral_cuda"
+        );
+    }
+
+    #[test]
+    fn all_cpu_ops_skip_gpu_pass_when_no_cuda() {
+        let ops = vec![
+            make_op(OperationType::FrameDrop),
+            make_op(OperationType::Sharpen),
+            make_op(OperationType::MicroRotate),
+            make_op(OperationType::TrimEdges),
+            make_op(OperationType::MathOverlay),
+            make_op(OperationType::PixelShift),
+            make_op(OperationType::HueRotate),
+        ];
+        let (gpu, cpu, _) = classify_ops(&ops, Some(nvenc()));
+        assert!(gpu == 0, "All-CPU ops must produce zero GPU filters");
+        assert!(cpu > 0, "CPU ops must go to CPU pass");
+    }
+
+    #[test]
+    fn no_gpu_encoder_all_ops_go_cpu() {
+        let ops = vec![
+            make_op(OperationType::Crop),
+            make_op(OperationType::GaussianBlur),
+        ];
+        let (gpu, cpu, _) = classify_ops(&ops, None);
+        assert!(gpu == 0, "Without GPU encoder, nothing goes to GPU pass");
+        assert!(cpu > 0, "Everything goes to CPU pass");
+    }
+}

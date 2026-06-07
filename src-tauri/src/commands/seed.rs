@@ -60,7 +60,7 @@ fn pick_operation_type(rng: &mut impl Rng) -> OperationType {
 
 /// Returns true if the operation type can be accelerated by GPU-side FFmpeg filters.
 /// Ops with real FFmpeg CUDA filters (scale_cuda, pad_cuda, bilateral_cuda, transpose_cuda,
-/// colorspace_cuda, yadif_cuda) or ops that benefit significantly from hwaccel decode + NVENC encode.
+/// yadif_cuda) or ops that benefit significantly from hwaccel decode + NVENC encode.
 /// Public for use by executor's two-pass pipeline (Plan 18).
 pub fn is_gpu_capable(op_type: OperationType) -> bool {
     matches!(
@@ -71,10 +71,6 @@ pub fn is_gpu_capable(op_type: OperationType) -> bool {
             | OperationType::Flip
             | OperationType::GaussianBlur
             | OperationType::TinyScale
-            | OperationType::HueRotate
-            | OperationType::SaturationAdjust
-            | OperationType::BrightnessContrast
-            | OperationType::ColorBalance
             | OperationType::FilmGrain
     )
 }
@@ -87,7 +83,7 @@ pub fn is_gpu_capable(op_type: OperationType) -> bool {
 fn pick_operation_type_gpu_preferred(rng: &mut impl Rng) -> OperationType {
     let roll: u32 = rng.random_range(1..=1000);
     match roll {
-        // ── GPU-capable zone (1..=750) ─────────────────────────────────
+        // ── GPU-capable zone (1..=670) ─────────────────────────────────
         // GaussianBlur: bilateral_cuda exists → 110
         1..=110 => OperationType::GaussianBlur,
         // TinyScale: scale_cuda exists → 110
@@ -100,48 +96,48 @@ fn pick_operation_type_gpu_preferred(rng: &mut impl Rng) -> OperationType {
         441..=540 => OperationType::FrameDrop,
         // VideoSpeed: CPU setpts but hwaccel+NVENC benefit → 100
         541..=640 => OperationType::VideoSpeed,
-        // Color processing (4): colorspace_cuda round-trip → 20 each = 80
-        641..=660 => OperationType::HueRotate,
-        661..=680 => OperationType::SaturationAdjust,
-        681..=700 => OperationType::BrightnessContrast,
-        701..=720 => OperationType::ColorBalance,
         // FilmGrain: yadif_cuda → 30
-        721..=750 => OperationType::FilmGrain,
+        641..=670 => OperationType::FilmGrain,
 
-        // ── CPU-only zone (751..=1000) ─────────────────────────────────
+        // ── CPU-only zone (671..=1000) ─────────────────────────────────
         // Sharpen: unsharp_cuda nonexistent → 15
-        751..=765 => OperationType::Sharpen,
+        671..=685 => OperationType::Sharpen,
         // Math overlay (3): 17 each = 51
-        766..=782 => OperationType::MathOverlay,
-        783..=799 => OperationType::MathOverlay,
-        800..=816 => OperationType::MathOverlay,
+        686..=702 => OperationType::MathOverlay,
+        703..=719 => OperationType::MathOverlay,
+        720..=736 => OperationType::MathOverlay,
         // Pixel shift: 10
-        817..=826 => OperationType::PixelShift,
+        737..=746 => OperationType::PixelShift,
         // Micro rotate: 10
-        827..=836 => OperationType::MicroRotate,
+        747..=756 => OperationType::MicroRotate,
         // Blend overlay (3): 15 each = 45
-        837..=851 => OperationType::SolidColorOverlay,
-        852..=866 => OperationType::GradientOverlay,
-        867..=881 => OperationType::WatermarkBlend,
+        757..=771 => OperationType::SolidColorOverlay,
+        772..=786 => OperationType::GradientOverlay,
+        787..=801 => OperationType::WatermarkBlend,
         // Audio (5): 7 each = 35
-        882..=888 => OperationType::AudioResample,
-        889..=895 => OperationType::AudioVolume,
-        896..=902 => OperationType::AudioPitch,
-        903..=909 => OperationType::AudioEQ,
-        910..=916 => OperationType::AudioChannel,
+        802..=808 => OperationType::AudioResample,
+        809..=815 => OperationType::AudioVolume,
+        816..=822 => OperationType::AudioPitch,
+        823..=829 => OperationType::AudioEQ,
+        830..=836 => OperationType::AudioChannel,
         // Metadata new (2): 7 each = 14
-        917..=923 => OperationType::MetadataWrite,
-        924..=930 => OperationType::MetadataSelectiveErase,
+        837..=843 => OperationType::MetadataWrite,
+        844..=850 => OperationType::MetadataSelectiveErase,
         // Trim edges: 18
-        931..=948 => OperationType::TrimEdges,
+        851..=868 => OperationType::TrimEdges,
         // Gop modify: 12
-        949..=960 => OperationType::GopModify,
+        869..=880 => OperationType::GopModify,
         // Metadata erase: 10
-        961..=970 => OperationType::MetadataErase,
+        881..=890 => OperationType::MetadataErase,
         // Remux: 10
-        971..=980 => OperationType::Remux,
+        891..=900 => OperationType::Remux,
         // Padding: 20
-        981..=1000 => OperationType::Crop,
+        901..=920 => OperationType::Crop,
+        // Color processing (4): CPU-only — 20 each = 80
+        921..=940 => OperationType::HueRotate,
+        941..=960 => OperationType::SaturationAdjust,
+        961..=980 => OperationType::BrightnessContrast,
+        981..=1000 => OperationType::ColorBalance,
         _ => unreachable!("roll is 1..=1000"),
     }
 }

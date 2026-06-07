@@ -403,13 +403,23 @@ fn assemble_pass_args(
     encoder_args: &[String],
     hwaccel_active: bool,
 ) -> Vec<String> {
-    let mut vf: Vec<String> = vf_exprs.to_vec();
+    let raw_vf: Vec<String> = vf_exprs.to_vec();
 
-    // When hwaccel is active, frames start on GPU. CPU-only filters
-    // need hwdownload prefix to bring frames to CPU for processing.
-    if hwaccel_active && !vf.is_empty() {
-        vf.insert(0, "hwdownload,format=nv12".to_string());
-    }
+    // When hwaccel is active, frames start on GPU. GPU-native filters
+    // (containing _cuda) must run BEFORE hwdownload; CPU filters after.
+    let mut vf: Vec<String> = if hwaccel_active && !raw_vf.is_empty() {
+        let (gpu_vf, cpu_vf): (Vec<_>, Vec<_>) = raw_vf
+            .into_iter()
+            .partition(|expr| expr.contains("_cuda") || expr.contains("hwupload"));
+        let mut ordered = gpu_vf;
+        if !cpu_vf.is_empty() {
+            ordered.push("hwdownload,format=nv12".to_string());
+            ordered.extend(cpu_vf);
+        }
+        ordered
+    } else {
+        raw_vf
+    };
 
     let mut all_args: Vec<String> = Vec::new();
 

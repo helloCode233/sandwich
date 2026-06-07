@@ -240,15 +240,16 @@ pub fn build_audio_channel_filter(op: &Operation) -> Result<Vec<String>, String>
 // Phase 7: Crop + Duration Operations (D-04~D-08, D-14~D-16) — 3 filter builders
 // =========================================================================
 
-/// Build crop+scale filter chain (D-05: asymmetric per-side, D-06: scale back, D-07: tier-driven).
-/// crop=W:H:X:Y extracts a sub-rectangle, then scale=OW:OH scales back with lanczos resampling.
+/// Build crop filter chain (D-05: asymmetric per-side, D-06: scale back, D-07: tier-driven).
 /// Each side percentage is independently random: leftPct, rightPct, topPct, bottomPct.
-/// Safety: each percentage clamped to [0.5, 3.5]. Expressions use iw/ih for resolution independence.
+/// Safety: each percentage clamped to [0.5, 3.5].
 ///
-/// crop_cuda does NOT exist in FFmpeg — crop always runs CPU-side.
-/// When NVENC+hwaccel is active, scale_cuda runs GPU-side; the executor's hwdownload
-/// prefix brings frames to CPU for crop, then scale_cuda pushes back to GPU for NVENC encoding.
-/// Without hwaccel: full CPU crop+scale with lanczos resampling.
+/// CPU path (no GPU): crop=W:H:X:Y extracts sub-rectangle, then scale=OW:OH scales back.
+///
+/// GPU path (NVENC+hwaccel): scale_cuda shrinks by average crop percentage, then
+/// pad_cuda pads back to original dimensions. This avoids CPU crop entirely —
+/// crop_cuda does NOT exist in FFmpeg, but scale_cuda+pad_cuda achieves
+/// fingerprint-equivalent geometry perturbation entirely on GPU.
 pub fn build_crop_filter(
     op: &Operation,
     gpu_encoder: Option<&GpuEncoder>,
@@ -265,52 +266,47 @@ pub fn build_crop_filter(
     let top_pct = top_pct.clamp(0.5, 3.5);
     let bottom_pct = bottom_pct.clamp(0.5, 3.5);
 
-    // crop=out_w:out_h:x:y using iw/ih expressions
-    // After crop, iw/ih refer to the cropped dimensions — scale=iw:ih would be a no-op.
-    // Use inverse factor so scale restores original dimensions (D-06: scale-back).
-    //
-    // CRITICAL: YUV 4:2:0 chroma subsampling requires even crop offsets.
-    // Odd X/Y offsets shift chroma by 1 luma-pixel relative to luma, producing
-    // black-white ghosting artifacts on sharp edges (subtitles, UI elements).
-    // 2*floor(iw*PCT/200) rounds the offset down to the nearest even integer.
-    //
-    // CRITICAL: FFmpeg truncates crop dimensions (927.12 → 926 even), then
-    // scale=iw*inv:ih*inv compounds the error (926*1.035=958 instead of 960).
-    // When origW/origH are provided (injected by executor), use explicit scale
-    // targets to survive FFmpeg's rounding.
-
-    // Determine if GPU scale_cuda should be used (NVENC + hwaccel only).
-    // crop_cuda does NOT exist in FFmpeg — crop always runs CPU-side.
-    // When hwaccel is active, the executor prepends hwdownload to bring
-    // frames to CPU for crop, then scale_cuda pushes them back to GPU for NVENC.
-    let use_gpu_scale = hwaccel_active && gpu_encoder.is_some_and(|e| e.supports_gpu_filters());
-
     let has_orig_dims = op.params["origW"].is_number() && op.params["origH"].is_number();
 
-    // Build the crop arg expression (CPU crop — crop_cuda doesn't exist)
-    let crop_str = format!(
-        "crop=iw*(1-{lp}/100-{rp}/100):ih*(1-{tp}/100-{bp}/100):2*floor(iw*{lp}/200):2*floor(ih*{tp}/200)",
-        lp = left_pct,
-        rp = right_pct,
-        tp = top_pct,
-        bp = bottom_pct,
-    );
+    if hwaccel_active && gpu_encoder.is_some_and(|e| e.supports_gpu_filters()) {
+        // GPU path: scale_cuda + pad_cuda — entirely on GPU, no hwdownload needed.
+        // Average crop percentage drives scale-down; pad restores original size.
+        let avg_pct = (left_pct + right_pct + top_pct + bottom_pct) / 4.0;
+        let scale_factor = 1.0 - avg_pct / 100.0;
 
-    // Build scale expression
-    let scale_str = if use_gpu_scale {
-        // scale_cuda doesn't support flags=lanczos — omit them
         if has_orig_dims {
             let orig_w = op.params["origW"].as_u64().unwrap_or(544);
             let orig_h = op.params["origH"].as_u64().unwrap_or(960);
-            format!("scale_cuda={}:{}", orig_w, orig_h)
+            // scale_cuda shrinks by avg_pct; pad_cuda pads back to original dimensions
+            // (origW-iw)/2 and (origH-ih)/2 center the shrunken frame in the padded output
+            let filter = format!(
+                "scale_cuda=iw*{:.6}:ih*{:.6},pad_cuda={}:{}:({}-iw)/2:({}-ih)/2",
+                scale_factor, scale_factor, orig_w, orig_h, orig_w, orig_h
+            );
+            Ok(vec!["-vf".to_string(), filter])
         } else {
+            // Fallback: derive original dimensions from per-side crop percentages
             let inv_w = 1.0 / (1.0 - left_pct / 100.0 - right_pct / 100.0);
             let inv_h = 1.0 / (1.0 - top_pct / 100.0 - bottom_pct / 100.0);
-            format!("scale_cuda=iw*{:.6}:ih*{:.6}", inv_w, inv_h)
+            let filter = format!(
+                "scale_cuda=iw*{:.6}:ih*{:.6},pad_cuda=iw*{:.6}:ih*{:.6}:(iw*{:.6}-iw)/2:(ih*{:.6}-ih)/2",
+                scale_factor, scale_factor, inv_w, inv_h, inv_w, inv_h
+            );
+            Ok(vec!["-vf".to_string(), filter])
         }
     } else {
-        // CPU path: use flags=lanczos
-        if has_orig_dims {
+        // CPU path: crop + lanczos scale-back
+        // CRITICAL: YUV 4:2:0 chroma subsampling requires even crop offsets.
+        // 2*floor(iw*PCT/200) rounds the offset down to the nearest even integer.
+        let crop_str = format!(
+            "crop=iw*(1-{lp}/100-{rp}/100):ih*(1-{tp}/100-{bp}/100):2*floor(iw*{lp}/200):2*floor(ih*{tp}/200)",
+            lp = left_pct,
+            rp = right_pct,
+            tp = top_pct,
+            bp = bottom_pct,
+        );
+
+        let scale_str = if has_orig_dims {
             let orig_w = op.params["origW"].as_u64().unwrap_or(544);
             let orig_h = op.params["origH"].as_u64().unwrap_or(960);
             format!("scale={}:{}:flags=lanczos", orig_w, orig_h)
@@ -318,11 +314,11 @@ pub fn build_crop_filter(
             let inv_w = 1.0 / (1.0 - left_pct / 100.0 - right_pct / 100.0);
             let inv_h = 1.0 / (1.0 - top_pct / 100.0 - bottom_pct / 100.0);
             format!("scale=iw*{:.6}:ih*{:.6}:flags=lanczos", inv_w, inv_h)
-        }
-    };
+        };
 
-    let filter = format!("{},{}", crop_str, scale_str);
-    Ok(vec!["-vf".to_string(), filter])
+        let filter = format!("{},{}", crop_str, scale_str);
+        Ok(vec!["-vf".to_string(), filter])
+    }
 }
 
 /// Build VideoSpeed filter (D-14, D-15): synchronized setpts (video) + atempo (audio).

@@ -59,7 +59,9 @@ fn pick_operation_type(rng: &mut impl Rng) -> OperationType {
 }
 
 /// Returns true if the operation type can be accelerated by GPU-side FFmpeg filters.
-/// GPU-capable ops: crop, frame-drop, video-speed, color processing (4), noise/blur (3).
+/// Only ops with real FFmpeg CUDA filters (scale_cuda, bilateral_cuda, transpose_cuda)
+/// or ops that benefit significantly from hwaccel decode + NVENC encode.
+/// crop_cuda, fps_cuda, hue_cuda, eq_cuda, gblur_cuda, unsharp_cuda, hflip_cuda do NOT exist.
 #[allow(dead_code)]
 fn is_gpu_capable(op_type: OperationType) -> bool {
     matches!(
@@ -67,12 +69,8 @@ fn is_gpu_capable(op_type: OperationType) -> bool {
         OperationType::Crop
             | OperationType::FrameDrop
             | OperationType::VideoSpeed
-            | OperationType::HueRotate
-            | OperationType::SaturationAdjust
-            | OperationType::BrightnessContrast
-            | OperationType::ColorBalance
+            | OperationType::Flip
             | OperationType::GaussianBlur
-            | OperationType::Sharpen
             | OperationType::TinyScale
     )
 }
@@ -81,56 +79,63 @@ fn is_gpu_capable(op_type: OperationType) -> bool {
 /// When an NVENC GPU is available, strongly prefer GPU-capable operations:
 ///   GPU-capable ops: ~70% of total weight (700/1000)
 ///   CPU-only ops:    ~30% of total weight (300/1000)
-/// Within each group, weights maintain proportional distribution.
+/// Only ops with real FFmpeg CUDA filters (scale_cuda, bilateral_cuda, transpose_cuda)
+/// or significant hwaccel+NVENC benefit. crop_cuda, fps_cuda, hue_cuda, eq_cuda,
+/// gblur_cuda, unsharp_cuda, hflip_cuda do NOT exist in FFmpeg.
 fn pick_operation_type_gpu_preferred(rng: &mut impl Rng) -> OperationType {
     let roll: u32 = rng.random_range(1..=1000);
     match roll {
         // ── GPU-capable zone (1..=700) ─────────────────────────────────
-        // Color processing (4): 90 each = 360
-        1..=90 => OperationType::HueRotate,
-        91..=180 => OperationType::SaturationAdjust,
-        181..=270 => OperationType::BrightnessContrast,
-        271..=360 => OperationType::ColorBalance,
-        // Noise/blur (3): 90 each = 270
-        361..=450 => OperationType::GaussianBlur,
-        451..=540 => OperationType::Sharpen,
-        541..=630 => OperationType::TinyScale,
-        // Duration (1): 40
-        631..=670 => OperationType::VideoSpeed,
-        // Default ops (2): 15 each = 30
-        671..=685 => OperationType::Crop,
-        686..=700 => OperationType::FrameDrop,
+        // GaussianBlur: bilateral_cuda exists → 120
+        1..=120 => OperationType::GaussianBlur,
+        // TinyScale: scale_cuda exists → 120
+        121..=240 => OperationType::TinyScale,
+        // Crop: CPU crop + scale_cuda → 120
+        241..=360 => OperationType::Crop,
+        // Flip: transpose_cuda for vertical/both → 120
+        361..=480 => OperationType::Flip,
+        // FrameDrop: CPU select but hwaccel+NVENC benefit → 110
+        481..=590 => OperationType::FrameDrop,
+        // VideoSpeed: CPU setpts but hwaccel+NVENC benefit → 110
+        591..=700 => OperationType::VideoSpeed,
 
         // ── CPU-only zone (701..=1000) ─────────────────────────────────
-        // Math overlay (3): 20 each = 60
-        701..=720 => OperationType::MathOverlay,
-        721..=740 => OperationType::MathOverlay,
-        741..=760 => OperationType::MathOverlay,
-        // Pixel shift: 15
-        761..=775 => OperationType::PixelShift,
-        // Film grain: 15
-        776..=790 => OperationType::FilmGrain,
-        // Micro rotate: 15
-        791..=805 => OperationType::MicroRotate,
-        // Blend overlay (3): 20 each = 60
-        806..=825 => OperationType::SolidColorOverlay,
-        826..=845 => OperationType::GradientOverlay,
-        846..=865 => OperationType::WatermarkBlend,
-        // Audio (5): 10 each = 50
-        866..=875 => OperationType::AudioResample,
-        876..=885 => OperationType::AudioVolume,
-        886..=895 => OperationType::AudioPitch,
-        896..=905 => OperationType::AudioEQ,
-        906..=915 => OperationType::AudioChannel,
-        // Metadata new (2): 10 each = 20
-        916..=925 => OperationType::MetadataWrite,
-        926..=935 => OperationType::MetadataSelectiveErase,
-        // Trim edges: 25
-        936..=960 => OperationType::TrimEdges,
-        // Gop modify: 15
-        961..=975 => OperationType::GopModify,
-        // Metadata erase: 15
-        976..=990 => OperationType::MetadataErase,
+        // Color processing (4): moved from GPU (no real CUDA filters) → 15 each = 60
+        701..=715 => OperationType::HueRotate,
+        716..=730 => OperationType::SaturationAdjust,
+        731..=745 => OperationType::BrightnessContrast,
+        746..=760 => OperationType::ColorBalance,
+        // Sharpen: moved from GPU (unsharp_cuda nonexistent) → 15
+        761..=775 => OperationType::Sharpen,
+        // Math overlay (3): 17 each = 51
+        776..=792 => OperationType::MathOverlay,
+        793..=809 => OperationType::MathOverlay,
+        810..=826 => OperationType::MathOverlay,
+        // Pixel shift: 10
+        827..=836 => OperationType::PixelShift,
+        // Film grain: 10
+        837..=846 => OperationType::FilmGrain,
+        // Micro rotate: 10
+        847..=856 => OperationType::MicroRotate,
+        // Blend overlay (3): 15 each = 45
+        857..=871 => OperationType::SolidColorOverlay,
+        872..=886 => OperationType::GradientOverlay,
+        887..=901 => OperationType::WatermarkBlend,
+        // Audio (5): 7 each = 35
+        902..=908 => OperationType::AudioResample,
+        909..=915 => OperationType::AudioVolume,
+        916..=922 => OperationType::AudioPitch,
+        923..=929 => OperationType::AudioEQ,
+        930..=936 => OperationType::AudioChannel,
+        // Metadata new (2): 7 each = 14
+        937..=943 => OperationType::MetadataWrite,
+        944..=950 => OperationType::MetadataSelectiveErase,
+        // Trim edges: 18
+        951..=968 => OperationType::TrimEdges,
+        // Gop modify: 12
+        969..=980 => OperationType::GopModify,
+        // Metadata erase: 10
+        981..=990 => OperationType::MetadataErase,
         // Remux: 10
         991..=1000 => OperationType::Remux,
         _ => unreachable!("roll is 1..=1000"),
@@ -994,8 +999,8 @@ mod tests {
         }
         let seen_count = seen_flags.iter().filter(|&&f| f).count();
         assert_eq!(
-            seen_count, 28,
-            "pick_operation_type_gpu_preferred must produce all 28 active OperationType variants (AudioTweak + Flip excluded)"
+            seen_count, 29,
+            "pick_operation_type_gpu_preferred must produce all 29 active OperationType variants (only AudioTweak excluded; Flip now GPU-capable via transpose_cuda)"
         );
     }
 

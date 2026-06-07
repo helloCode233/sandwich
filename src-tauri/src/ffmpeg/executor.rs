@@ -167,12 +167,12 @@ pub fn execute_single_file(
     // Assemble final args: merged -vf, merged -af, then other args
     let mut all_args: Vec<String> = Vec::new();
 
-    // Phase 7 Plan 13: when hardware decode is active and the video filter chain
-    // contains only CPU filters (no crop_cuda/scale_cuda), frames must be downloaded
-    // from GPU memory to CPU memory before the filter chain can process them.
-    // GPU crop filters handle this internally (they stay on GPU end-to-end).
-    let has_gpu_crop = vf_exprs.iter().any(|expr| expr.contains("crop_cuda"));
-    if hwaccel_active && !has_gpu_crop && !vf_exprs.is_empty() {
+    // Phase 7 Plan 16: when hardware decode is active, frames are decoded on GPU.
+    // All filter chains now start with CPU-side filters (crop_cuda, hflip_cuda, fps_cuda,
+    // hue_cuda, eq_cuda, gblur_cuda, unsharp_cuda do NOT exist in FFmpeg).
+    // The hwdownload prefix brings frames to CPU for CPU filter processing;
+    // GPU-native filters (scale_cuda, bilateral_cuda, transpose_cuda) push back to GPU.
+    if hwaccel_active && !vf_exprs.is_empty() {
         vf_exprs.insert(0, "hwdownload,format=nv12".to_string());
     }
 

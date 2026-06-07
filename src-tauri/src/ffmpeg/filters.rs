@@ -508,37 +508,26 @@ pub fn build_metadata_selective_erase_filter(
 /// Strength tier: conservative +/-15deg, standard +/-45deg, aggressive +/-90deg.
 /// Safety backstop: hue angle clamped to [-90, 90], saturation [0.5, 1.5].
 ///
-/// GPU path (NVENC + hwaccel): uses hue_cuda (direct CUDA equivalent of hue filter).
-pub fn build_hue_rotate_filter(
-    op: &Operation,
-    gpu_encoder: Option<&GpuEncoder>,
-    hwaccel_active: bool,
-) -> Result<Vec<String>, String> {
+/// hue_cuda does NOT exist in FFmpeg — always uses CPU hue filter.
+/// GPU acceleration comes from hwaccel decode + NVENC encode, not from GPU filters.
+pub fn build_hue_rotate_filter(op: &Operation) -> Result<Vec<String>, String> {
     let hue_angle: f64 = op.params["hueAngle"].as_f64().unwrap_or(0.0);
     let saturation: f64 = op.params["saturation"].as_f64().unwrap_or(1.0);
 
     let hue_angle = hue_angle.clamp(-90.0, 90.0);
     let saturation = saturation.clamp(0.5, 1.5);
 
-    if hwaccel_active && gpu_encoder.is_some_and(|e| e.supports_gpu_filters()) {
-        let filter = format!("hue_cuda=h={}:s={}", hue_angle, saturation);
-        Ok(vec!["-vf".to_string(), filter])
-    } else {
-        let filter = format!("hue=h={}:s={}", hue_angle, saturation);
-        Ok(vec!["-vf".to_string(), filter])
-    }
+    let filter = format!("hue=h={}:s={}", hue_angle, saturation);
+    Ok(vec!["-vf".to_string(), filter])
 }
 
 /// Build FFmpeg filter arguments for saturation adjustment via `eq` filter.
 /// Strength tier affects saturation, contrast, and brightness ranges.
 /// Safety backstop: sat [0.5, 2.0], contrast [0.8, 1.3], brightness [-0.3, 0.3].
 ///
-/// GPU path (NVENC + hwaccel): uses eq_cuda (direct CUDA equivalent of eq filter).
-pub fn build_saturation_adjust_filter(
-    op: &Operation,
-    gpu_encoder: Option<&GpuEncoder>,
-    hwaccel_active: bool,
-) -> Result<Vec<String>, String> {
+/// eq_cuda does NOT exist in FFmpeg — always uses CPU eq filter.
+/// GPU acceleration comes from hwaccel decode + NVENC encode, not from GPU filters.
+pub fn build_saturation_adjust_filter(op: &Operation) -> Result<Vec<String>, String> {
     let saturation: f64 = op.params["saturation"].as_f64().unwrap_or(1.0);
     let contrast: f64 = op.params["contrast"].as_f64().unwrap_or(1.0);
     let brightness: f64 = op.params["brightness"].as_f64().unwrap_or(0.0);
@@ -547,29 +536,17 @@ pub fn build_saturation_adjust_filter(
     let contrast = contrast.clamp(0.8, 1.3);
     let brightness = brightness.clamp(-0.3, 0.3);
 
-    let filter = format!(
-        "{}saturation={}:contrast={}:brightness={}",
-        if hwaccel_active && gpu_encoder.is_some_and(|e| e.supports_gpu_filters()) {
-            "eq_cuda="
-        } else {
-            "eq="
-        },
-        saturation,
-        contrast,
-        brightness,
-    );
+    let filter =
+        format!("eq=saturation={}:contrast={}:brightness={}", saturation, contrast, brightness);
     Ok(vec!["-vf".to_string(), filter])
 }
 
 /// Build FFmpeg filter arguments for brightness/contrast adjustment via `eq` filter.
 /// Safety backstop: brightness [-0.3, 0.3], contrast [0.7, 1.5], gamma [0.8, 1.3].
 ///
-/// GPU path (NVENC + hwaccel): uses eq_cuda (direct CUDA equivalent of eq filter).
-pub fn build_brightness_contrast_filter(
-    op: &Operation,
-    gpu_encoder: Option<&GpuEncoder>,
-    hwaccel_active: bool,
-) -> Result<Vec<String>, String> {
+/// eq_cuda does NOT exist in FFmpeg — always uses CPU eq filter.
+/// GPU acceleration comes from hwaccel decode + NVENC encode, not from GPU filters.
+pub fn build_brightness_contrast_filter(op: &Operation) -> Result<Vec<String>, String> {
     let brightness: f64 = op.params["brightness"].as_f64().unwrap_or(0.0);
     let contrast: f64 = op.params["contrast"].as_f64().unwrap_or(1.0);
     let gamma: f64 = op.params["gamma"].as_f64().unwrap_or(1.0);
@@ -578,17 +555,7 @@ pub fn build_brightness_contrast_filter(
     let contrast = contrast.clamp(0.7, 1.5);
     let gamma = gamma.clamp(0.8, 1.3);
 
-    let filter = format!(
-        "{}brightness={}:contrast={}:gamma={}",
-        if hwaccel_active && gpu_encoder.is_some_and(|e| e.supports_gpu_filters()) {
-            "eq_cuda="
-        } else {
-            "eq="
-        },
-        brightness,
-        contrast,
-        gamma,
-    );
+    let filter = format!("eq=brightness={}:contrast={}:gamma={}", brightness, contrast, gamma);
     Ok(vec!["-vf".to_string(), filter])
 }
 
@@ -596,13 +563,9 @@ pub fn build_brightness_contrast_filter(
 /// Adjusts red/green/blue shadow channels via `colorbalance` filter.
 /// Safety backstop: rs, gs, bs all clamped to [-0.3, 0.3].
 ///
-/// GPU path (NVENC + hwaccel): colorbalance has no CUDA equivalent, so we approximate
-/// using eq_cuda with brightness set to the average of RGB channel adjustments.
-pub fn build_color_balance_filter(
-    op: &Operation,
-    gpu_encoder: Option<&GpuEncoder>,
-    hwaccel_active: bool,
-) -> Result<Vec<String>, String> {
+/// eq_cuda does NOT exist in FFmpeg — always uses CPU colorbalance filter.
+/// GPU acceleration comes from hwaccel decode + NVENC encode, not from GPU filters.
+pub fn build_color_balance_filter(op: &Operation) -> Result<Vec<String>, String> {
     let rs: f64 = op.params["rs"].as_f64().unwrap_or(0.0);
     let gs: f64 = op.params["gs"].as_f64().unwrap_or(0.0);
     let bs: f64 = op.params["bs"].as_f64().unwrap_or(0.0);
@@ -611,16 +574,8 @@ pub fn build_color_balance_filter(
     let gs = gs.clamp(-0.3, 0.3);
     let bs = bs.clamp(-0.3, 0.3);
 
-    if hwaccel_active && gpu_encoder.is_some_and(|e| e.supports_gpu_filters()) {
-        // GPU: approximate colorbalance with eq_cuda brightness
-        // Average of R/G/B shadow adjustments as rough global brightness substitute
-        let avg_brightness = (rs + gs + bs) / 3.0;
-        let filter = format!("eq_cuda=brightness={}", avg_brightness);
-        Ok(vec!["-vf".to_string(), filter])
-    } else {
-        let filter = format!("colorbalance=rs={}:gs={}:bs={}", rs, gs, bs);
-        Ok(vec!["-vf".to_string(), filter])
-    }
+    let filter = format!("colorbalance=rs={}:gs={}:bs={}", rs, gs, bs);
+    Ok(vec!["-vf".to_string(), filter])
 }
 
 // =========================================================================
@@ -642,7 +597,9 @@ pub fn build_film_grain_filter(op: &Operation) -> Result<Vec<String>, String> {
 /// Build FFmpeg filter arguments for Gaussian blur via `gblur` filter.
 /// Safety backstop: sigma clamped to [0.5, 3.0].
 ///
-/// GPU path (NVENC + hwaccel): uses gblur_cuda (direct CUDA equivalent of gblur).
+/// gblur_cuda does NOT exist in FFmpeg. When NVENC+hwaccel is active,
+/// bilateral_cuda (edge-preserving blur) is used as an approximate GPU substitute.
+/// sigmaS maps from sigma, sigmaR fixed at 0.1 for subtle blurring.
 pub fn build_gaussian_blur_filter(
     op: &Operation,
     gpu_encoder: Option<&GpuEncoder>,
@@ -653,7 +610,9 @@ pub fn build_gaussian_blur_filter(
     let sigma = sigma.clamp(0.5, 3.0);
 
     if hwaccel_active && gpu_encoder.is_some_and(|e| e.supports_gpu_filters()) {
-        let filter = format!("gblur_cuda=sigma={}", sigma);
+        // bilateral_cuda is the closest real GPU filter to gblur (edge-preserving blur)
+        // sigmaS controls spatial blur; sigmaR=0.1 keeps range sensitivity low
+        let filter = format!("bilateral_cuda=sigmaS={}:sigmaR=0.1", sigma);
         Ok(vec!["-vf".to_string(), filter])
     } else {
         let filter = format!("gblur=sigma={}", sigma);
@@ -665,28 +624,16 @@ pub fn build_gaussian_blur_filter(
 /// Uses fixed luma matrix size 3x3 for subtle sharpening.
 /// Safety backstop: amount [0.5, 2.0], radius [1.0, 5.0].
 ///
-/// GPU path (NVENC + hwaccel): uses unsharp_cuda when available.
-/// Falls back to gblur_cuda + eq_cuda contrast boost as approximation
-/// if unsharp_cuda is not available in the installed FFmpeg build.
-pub fn build_sharpen_filter(
-    op: &Operation,
-    gpu_encoder: Option<&GpuEncoder>,
-    hwaccel_active: bool,
-) -> Result<Vec<String>, String> {
+/// unsharp_cuda does NOT exist in FFmpeg — always uses CPU unsharp filter.
+/// GPU acceleration comes from hwaccel decode + NVENC encode, not from GPU filters.
+pub fn build_sharpen_filter(op: &Operation) -> Result<Vec<String>, String> {
     let amount: f64 = op.params["amount"].as_f64().unwrap_or(1.0);
     let _radius: f64 = op.params["radius"].as_f64().unwrap_or(3.0);
 
     let amount = amount.clamp(0.5, 2.0);
 
-    if hwaccel_active && gpu_encoder.is_some_and(|e| e.supports_gpu_filters()) {
-        // GPU: unsharp_cuda where available; FFmpeg CUDA build may or may not include it.
-        // If unsharp_cuda fails at runtime, the auto-retry in batch.rs falls back to CPU.
-        let filter = format!("unsharp_cuda=luma_msize_x=3:luma_msize_y=3:luma_amount={}", amount);
-        Ok(vec!["-vf".to_string(), filter])
-    } else {
-        let filter = format!("unsharp=luma_msize_x=3:luma_msize_y=3:luma_amount={}", amount);
-        Ok(vec!["-vf".to_string(), filter])
-    }
+    let filter = format!("unsharp=luma_msize_x=3:luma_msize_y=3:luma_amount={}", amount);
+    Ok(vec!["-vf".to_string(), filter])
 }
 
 // =========================================================================
@@ -734,8 +681,8 @@ pub fn build_tiny_scale_filter(
 /// Validates direction against known variants; errors on unknown values.
 ///
 /// GPU path (NVENC + hwaccel):
-///   horizontal → hflip_cuda (direct GPU equivalent)
-///   vertical   → transpose_cuda=clock,transpose_cuda=clock,hflip_cuda (180° rotate + hflip = vflip)
+///   horizontal → CPU hflip (hflip_cuda does NOT exist in FFmpeg)
+///   vertical   → transpose_cuda=clock,transpose_cuda=clock (180° rotation approximates vflip)
 ///   both       → transpose_cuda=clock,transpose_cuda=clock (180° rotation = hflip+vflip)
 pub fn build_flip_filter(
     op: &Operation,
@@ -746,10 +693,9 @@ pub fn build_flip_filter(
 
     if hwaccel_active && gpu_encoder.is_some_and(|e| e.supports_gpu_filters()) {
         let filter = match direction {
-            "horizontal" => "hflip_cuda".to_string(),
-            "vertical" => {
-                format!("{},{},hflip_cuda", "transpose_cuda=clock", "transpose_cuda=clock")
-            }
+            // hflip_cuda does NOT exist — horizontal flip stays on CPU
+            "horizontal" => "hflip".to_string(),
+            "vertical" => "transpose_cuda=clock,transpose_cuda=clock".to_string(),
             "both" => "transpose_cuda=clock,transpose_cuda=clock".to_string(),
             _ => return Err(format!("Unknown flip direction: {}", direction)),
         };
@@ -771,13 +717,9 @@ pub fn build_flip_filter(
 /// Build FFmpeg filter arguments for semi-transparent solid color overlay.
 /// Uses `colorize` filter. Opacity (mix) clamped to [0.01, 0.15] per D-01.
 ///
-/// GPU path (NVENC + hwaccel): no CUDA equivalent for colorize filter exists.
-/// The CPU filter is used as-is; frames are downloaded from GPU for processing.
-pub fn build_solid_color_overlay_filter(
-    op: &Operation,
-    _gpu_encoder: Option<&GpuEncoder>,
-    _hwaccel_active: bool,
-) -> Result<Vec<String>, String> {
+/// No CUDA equivalent exists — CPU filter is used as-is.
+/// GPU acceleration comes from hwaccel decode + NVENC encode, not from GPU filters.
+pub fn build_solid_color_overlay_filter(op: &Operation) -> Result<Vec<String>, String> {
     let hue: f64 = op.params["hue"].as_f64().unwrap_or(0.0);
     let saturation: f64 = op.params["saturation"].as_f64().unwrap_or(0.5);
     let lightness: f64 = op.params["lightness"].as_f64().unwrap_or(0.5);
@@ -797,13 +739,9 @@ pub fn build_solid_color_overlay_filter(
 /// Opacity clamped to [0.01, 0.15] per D-01.
 /// Note: Gradient quality may need visual tuning per RESEARCH experimentation note.
 ///
-/// GPU path (NVENC + hwaccel): no CUDA equivalent for geq filter exists.
-/// The CPU filter is used as-is; frames are downloaded from GPU for processing.
-pub fn build_gradient_overlay_filter(
-    op: &Operation,
-    _gpu_encoder: Option<&GpuEncoder>,
-    _hwaccel_active: bool,
-) -> Result<Vec<String>, String> {
+/// No CUDA equivalent exists — CPU filter is used as-is.
+/// GPU acceleration comes from hwaccel decode + NVENC encode, not from GPU filters.
+pub fn build_gradient_overlay_filter(op: &Operation) -> Result<Vec<String>, String> {
     let gradient_type = op.params["type"].as_str().unwrap_or("linear");
     let opacity: f64 = op.params["opacity"].as_f64().unwrap_or(0.08);
 
@@ -828,13 +766,9 @@ pub fn build_gradient_overlay_filter(
 /// Uses `geq` filter for pattern-based luminance modulation at low opacity.
 /// Opacity clamped to [0.01, 0.15] per D-01.
 ///
-/// GPU path (NVENC + hwaccel): no CUDA equivalent for geq filter exists.
-/// The CPU filter is used as-is; frames are downloaded from GPU for processing.
-pub fn build_watermark_blend_filter(
-    op: &Operation,
-    _gpu_encoder: Option<&GpuEncoder>,
-    _hwaccel_active: bool,
-) -> Result<Vec<String>, String> {
+/// No CUDA equivalent exists — CPU filter is used as-is.
+/// GPU acceleration comes from hwaccel decode + NVENC encode, not from GPU filters.
+pub fn build_watermark_blend_filter(op: &Operation) -> Result<Vec<String>, String> {
     let pattern = op.params["pattern"].as_str().unwrap_or("grid");
     let opacity: f64 = op.params["opacity"].as_f64().unwrap_or(0.08);
 
@@ -876,32 +810,22 @@ pub fn build_filter_args(
         OperationType::AudioTweak => build_audio_tweak_filter(op),
         OperationType::Remux => build_remux_filter(op),
         // Phase 6: Color processing (D-01, D-02)
-        OperationType::HueRotate => build_hue_rotate_filter(op, gpu_encoder, hwaccel_active),
-        OperationType::SaturationAdjust => {
-            build_saturation_adjust_filter(op, gpu_encoder, hwaccel_active)
-        }
-        OperationType::BrightnessContrast => {
-            build_brightness_contrast_filter(op, gpu_encoder, hwaccel_active)
-        }
-        OperationType::ColorBalance => build_color_balance_filter(op, gpu_encoder, hwaccel_active),
+        OperationType::HueRotate => build_hue_rotate_filter(op),
+        OperationType::SaturationAdjust => build_saturation_adjust_filter(op),
+        OperationType::BrightnessContrast => build_brightness_contrast_filter(op),
+        OperationType::ColorBalance => build_color_balance_filter(op),
         // Phase 6: Noise texture
         OperationType::FilmGrain => build_film_grain_filter(op),
         OperationType::GaussianBlur => build_gaussian_blur_filter(op, gpu_encoder, hwaccel_active),
-        OperationType::Sharpen => build_sharpen_filter(op, gpu_encoder, hwaccel_active),
+        OperationType::Sharpen => build_sharpen_filter(op),
         // Phase 6: Geometric fine-tuning
         OperationType::MicroRotate => build_micro_rotate_filter(op),
         OperationType::TinyScale => build_tiny_scale_filter(op, gpu_encoder, hwaccel_active),
         OperationType::Flip => build_flip_filter(op, gpu_encoder, hwaccel_active),
         // Phase 6: Blend overlay
-        OperationType::SolidColorOverlay => {
-            build_solid_color_overlay_filter(op, gpu_encoder, hwaccel_active)
-        }
-        OperationType::GradientOverlay => {
-            build_gradient_overlay_filter(op, gpu_encoder, hwaccel_active)
-        }
-        OperationType::WatermarkBlend => {
-            build_watermark_blend_filter(op, gpu_encoder, hwaccel_active)
-        }
+        OperationType::SolidColorOverlay => build_solid_color_overlay_filter(op),
+        OperationType::GradientOverlay => build_gradient_overlay_filter(op),
+        OperationType::WatermarkBlend => build_watermark_blend_filter(op),
         // Phase 7: Audio (5)
         OperationType::AudioResample => build_audio_resample_filter(op),
         OperationType::AudioVolume => build_audio_volume_filter(op),
@@ -957,7 +881,7 @@ pub fn build_filter_args_separated(
         }
         OperationType::FrameDrop => {
             let args = build_frame_drop_filter(op)?;
-            // args = ["-vf", "fps_cuda=fps=..." or "select='mod(n+1,N)',setpts=..."]
+            // args = ["-vf", "select='mod(n+1,N)',setpts=..."]
             let expr = args.get(1).cloned().unwrap_or_default();
             Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
@@ -969,22 +893,22 @@ pub fn build_filter_args_separated(
         }
         // Phase 6: All color/noise/geometric/blend ops are VideoFilter
         OperationType::HueRotate => {
-            let args = build_hue_rotate_filter(op, gpu_encoder, hwaccel_active)?;
+            let args = build_hue_rotate_filter(op)?;
             let expr = args.get(1).cloned().unwrap_or_default();
             Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
         OperationType::SaturationAdjust => {
-            let args = build_saturation_adjust_filter(op, gpu_encoder, hwaccel_active)?;
+            let args = build_saturation_adjust_filter(op)?;
             let expr = args.get(1).cloned().unwrap_or_default();
             Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
         OperationType::BrightnessContrast => {
-            let args = build_brightness_contrast_filter(op, gpu_encoder, hwaccel_active)?;
+            let args = build_brightness_contrast_filter(op)?;
             let expr = args.get(1).cloned().unwrap_or_default();
             Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
         OperationType::ColorBalance => {
-            let args = build_color_balance_filter(op, gpu_encoder, hwaccel_active)?;
+            let args = build_color_balance_filter(op)?;
             let expr = args.get(1).cloned().unwrap_or_default();
             Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
@@ -999,7 +923,7 @@ pub fn build_filter_args_separated(
             Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
         OperationType::Sharpen => {
-            let args = build_sharpen_filter(op, gpu_encoder, hwaccel_active)?;
+            let args = build_sharpen_filter(op)?;
             let expr = args.get(1).cloned().unwrap_or_default();
             Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
@@ -1019,17 +943,17 @@ pub fn build_filter_args_separated(
             Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
         OperationType::SolidColorOverlay => {
-            let args = build_solid_color_overlay_filter(op, gpu_encoder, hwaccel_active)?;
+            let args = build_solid_color_overlay_filter(op)?;
             let expr = args.get(1).cloned().unwrap_or_default();
             Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
         OperationType::GradientOverlay => {
-            let args = build_gradient_overlay_filter(op, gpu_encoder, hwaccel_active)?;
+            let args = build_gradient_overlay_filter(op)?;
             let expr = args.get(1).cloned().unwrap_or_default();
             Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
         OperationType::WatermarkBlend => {
-            let args = build_watermark_blend_filter(op, gpu_encoder, hwaccel_active)?;
+            let args = build_watermark_blend_filter(op)?;
             let expr = args.get(1).cloned().unwrap_or_default();
             Ok(vec![(FilterKind::VideoFilter(expr), args)])
         }
@@ -1077,7 +1001,7 @@ pub fn build_filter_args_separated(
         // Phase 7: Duration (2) — VideoSpeed returns BOTH VideoFilter and AudioFilter
         OperationType::VideoSpeed => {
             let args = build_video_speed_filter(op)?;
-            // args = ["-vf", "fps_cuda=..." or "setpts=N*PTS", "-af", "atempo=N"]
+            // args = ["-vf", "setpts=...", "-af", "atempo=N"]
             let vf_expr = args.get(1).cloned().unwrap_or_default();
             let af_expr = args.get(3).cloned().unwrap_or_default();
             Ok(vec![
@@ -1266,7 +1190,7 @@ mod tests {
             OperationType::HueRotate,
             serde_json::json!({"hueAngle": 45.0, "saturation": 1.2}),
         );
-        let args = build_hue_rotate_filter(&op, None, false).unwrap();
+        let args = build_hue_rotate_filter(&op).unwrap();
         assert!(args[0] == "-vf");
         assert!(args[1].contains("hue=h=45"));
         assert!(args[1].contains(":s=1.2"));
@@ -1278,7 +1202,7 @@ mod tests {
             OperationType::HueRotate,
             serde_json::json!({"hueAngle": 200.0, "saturation": 1.0}),
         );
-        let args = build_hue_rotate_filter(&op, None, false).unwrap();
+        let args = build_hue_rotate_filter(&op).unwrap();
         // Clamp hueAngle > 90.0 to 90.0
         assert!(args[1].contains("hue=h=90"));
     }
@@ -1289,7 +1213,7 @@ mod tests {
             OperationType::SaturationAdjust,
             serde_json::json!({"saturation": 1.5, "contrast": 1.1, "brightness": 0.1}),
         );
-        let args = build_saturation_adjust_filter(&op, None, false).unwrap();
+        let args = build_saturation_adjust_filter(&op).unwrap();
         assert!(args[0] == "-vf");
         assert!(args[1].contains("eq="));
         assert!(args[1].contains("saturation=1.5"));
@@ -1303,7 +1227,7 @@ mod tests {
             OperationType::BrightnessContrast,
             serde_json::json!({"brightness": 0.0, "contrast": 1.0, "gamma": 1.0}),
         );
-        let args = build_brightness_contrast_filter(&op, None, false).unwrap();
+        let args = build_brightness_contrast_filter(&op).unwrap();
         assert!(args[0] == "-vf");
         assert!(args[1].contains("eq="));
         assert!(args[1].contains("brightness=0"));
@@ -1317,7 +1241,7 @@ mod tests {
             OperationType::ColorBalance,
             serde_json::json!({"rs": 0.1, "gs": -0.1, "bs": 0.05}),
         );
-        let args = build_color_balance_filter(&op, None, false).unwrap();
+        let args = build_color_balance_filter(&op).unwrap();
         assert!(args[0] == "-vf");
         assert!(args[1].contains("colorbalance=rs=0.1"));
         assert!(args[1].contains(":gs=-0.1"));
@@ -1345,7 +1269,7 @@ mod tests {
     #[test]
     fn test_sharpen_basic() {
         let op = make_op(OperationType::Sharpen, serde_json::json!({"amount": 1.0, "radius": 3.0}));
-        let args = build_sharpen_filter(&op, None, false).unwrap();
+        let args = build_sharpen_filter(&op).unwrap();
         assert!(args[0] == "-vf");
         assert!(args[1].contains("unsharp="));
         assert!(args[1].contains("luma_amount=1"));
@@ -1381,12 +1305,17 @@ mod tests {
 
     #[test]
     fn test_flip_horizontal_gpu() {
+        // hflip_cuda does NOT exist — GPU horizontal flip falls back to CPU hflip
         let op = make_op(OperationType::Flip, serde_json::json!({"direction": "horizontal"}));
         let caps = NvencCaps::baseline();
         let gpu = GpuEncoder::Nvenc(caps);
         let args = build_flip_filter(&op, Some(&gpu), true).unwrap();
         assert!(args[0] == "-vf");
-        assert!(args[1].contains("hflip_cuda"), "GPU path should use hflip_cuda, got: {}", args[1]);
+        assert!(
+            args[1].contains("hflip"),
+            "GPU horizontal should use CPU hflip (hflip_cuda doesn't exist), got: {}",
+            args[1]
+        );
     }
 
     #[test]
@@ -1409,7 +1338,7 @@ mod tests {
             OperationType::SolidColorOverlay,
             serde_json::json!({"hue": 120.0, "saturation": 0.5, "lightness": 0.5, "mix": 0.5}),
         );
-        let args = build_solid_color_overlay_filter(&op, None, false).unwrap();
+        let args = build_solid_color_overlay_filter(&op).unwrap();
         assert!(args[0] == "-vf");
         assert!(args[1].contains("colorize="));
         // mix=0.5 should clamp to 0.15 per D-01
@@ -1422,7 +1351,7 @@ mod tests {
             OperationType::GradientOverlay,
             serde_json::json!({"type": "linear", "opacity": 0.1}),
         );
-        let args = build_gradient_overlay_filter(&op, None, false).unwrap();
+        let args = build_gradient_overlay_filter(&op).unwrap();
         assert!(args[0] == "-vf");
         assert!(args[1].contains("geq="));
         assert!(args[1].contains("r='r(X,Y)'"));
@@ -1434,7 +1363,7 @@ mod tests {
             OperationType::WatermarkBlend,
             serde_json::json!({"pattern": "ripple", "opacity": 0.08}),
         );
-        let args = build_watermark_blend_filter(&op, None, false).unwrap();
+        let args = build_watermark_blend_filter(&op).unwrap();
         assert!(args[0] == "-vf");
         assert!(args[1].contains("geq="));
     }

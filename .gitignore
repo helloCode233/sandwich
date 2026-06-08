@@ -3,6 +3,8 @@ node_modules/
 
 # Rust build
 src-tauri/target/
+CLAUDE.md
+
 
 # Frontend build
 dist/
@@ -21,6 +23,8 @@ vite.config.d.ts
 # IDE
 .vscode/
 .idea/
+.husky/
+.planning/
 
 # OS
 .DS_Store
